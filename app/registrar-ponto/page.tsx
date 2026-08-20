@@ -212,12 +212,12 @@ function Screensaver({ onTap }: { onTap: () => void }) {
       .catch(() => {})
   }, [])
 
-  // Rotação de nomes a cada 3 segundos
+  // Rotação de nomes a cada 5 segundos (mantém o prefixo "Excelente tarde," estático e anima apenas o nome)
   useEffect(() => {
     if (nomes.length <= 1) return
     const id = setInterval(() => {
       setNomeIndex((prev) => (prev + 1) % nomes.length)
-    }, 3000)
+    }, 5000)
     return () => clearInterval(id)
   }, [nomes])
 
@@ -235,11 +235,10 @@ function Screensaver({ onTap }: { onTap: () => void }) {
   }, [])
 
   const nomeAtual = nomes.length > 0 ? nomes[nomeIndex] : ""
-  const saudacaoCompleta = nomeAtual ? `${periodo}, ${nomeAtual}!` : `${periodo}!`
 
   return (
     <div
-      className="absolute inset-0 z-30 flex flex-col items-center justify-between p-6 cursor-pointer select-none overflow-hidden backdrop-blur-xl"
+      className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden backdrop-blur-xl"
       style={{
         background: "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
         backdropFilter: "blur(20px)",
@@ -249,34 +248,34 @@ function Screensaver({ onTap }: { onTap: () => void }) {
     >
       <style>{`
         @keyframes fadeUp{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
-        @keyframes nameFade{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
-        @keyframes pulseSlow{0%,100%{opacity:0.9}50%{opacity:0.55}}
+        @keyframes nameSlideFade{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
         .ss-fade{animation:fadeUp .6s ease-out both}
-        .ss-fade-d1{animation-delay:.1s}
-        .ss-name-rot{animation:nameFade .45s ease-out both}
-        .ss-pulse{animation:pulseSlow 3s ease-in-out infinite}
+        .ss-name-rot{animation:nameSlideFade .4s ease-out both}
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      {/* Espaçador superior */}
-      <div className="h-4" />
-
-      {/* Centro: Horário e Saudação Personalizada com Rotação de Nomes a cada 3s */}
-      <div className="text-center text-white my-auto">
-        <p className="ss-fade text-7xl sm:text-8xl md:text-9xl font-light tracking-widest mb-4" style={{ fontVariantNumeric: "tabular-nums" }}>
+      {/* Canto Superior Esquerdo: Relógio Menor e Discreto */}
+      <div className="absolute top-6 left-6 sm:top-8 sm:left-8 z-30 pointer-events-none ss-fade">
+        <p className="text-3xl sm:text-4xl font-light text-white/90 tracking-wider" style={{ fontVariantNumeric: "tabular-nums" }}>
           {time}
         </p>
-        <div key={nomeAtual || "padrao"} className="ss-name-rot">
-          <p className="text-3xl sm:text-4xl md:text-5xl font-light opacity-95 tracking-tight">
-            {saudacaoCompleta}
-          </p>
-        </div>
       </div>
 
-      {/* Parte de Baixo: Instrução de Toque posicionada na base */}
-      <div className={`text-center z-30 transition-all ${funcionariosEmAlmoco.length > 0 ? "mb-28 sm:mb-24" : "mb-6"}`}>
-        <p className="ss-pulse text-xs sm:text-sm text-white/90 font-semibold tracking-wider uppercase bg-black/25 backdrop-blur-md px-6 py-2.5 rounded-full border border-white/15 shadow-lg inline-block">
+      {/* Centro: Saudação com Nome Rotativo a cada 5s (prefixo fixo) + Instrução de Toque */}
+      <div className="text-center text-white px-6 ss-fade">
+        <h2 className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight flex items-center justify-center flex-wrap">
+          <span>{periodo},</span>
+          {nomeAtual ? (
+            <span key={nomeAtual} className="ss-name-rot font-normal ml-2 sm:ml-3">
+              {nomeAtual}!
+            </span>
+          ) : (
+            <span className="font-normal ml-2">!</span>
+          )}
+        </h2>
+
+        <p className="text-base sm:text-lg text-white/70 font-light mt-4 sm:mt-5 tracking-wide">
           Toque na tela para registrar o ponto
         </p>
       </div>
