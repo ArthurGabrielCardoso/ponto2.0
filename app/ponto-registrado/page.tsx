@@ -16,7 +16,7 @@ export default function PontoRegistradoPage() {
   const mensagem = (() => {
     const t = tipo.toLowerCase().trim()
     if (t.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
-    if (t.includes("saída") && t.includes("almoço")) return `Excelente almoço, ${primeiroNome}! Aproveite seu almoço e bom descanso!`
+    if (t.includes("saída") && t.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
     if (t.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
     if (t.includes("saída") || t.includes("saida")) return `Excelente noite, ${primeiroNome}!`
     return `Excelente trabalho, ${primeiroNome}!`

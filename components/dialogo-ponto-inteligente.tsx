@@ -100,7 +100,7 @@ export function DialogoPontoInteligente({
         onConfirmar(
           [{ tipo: "Entrada", dataHoraIso: agora }],
           "Entrada",
-          `Excelente dia e um ótimo trabalho, ${primeiroNome}! Seu ponto foi registrado com sucesso.`
+          `Excelente dia, ${primeiroNome}!`
         )
       }, 650)
     } else {
@@ -121,7 +121,7 @@ export function DialogoPontoInteligente({
             { tipo: "Saída Almoço", dataHoraIso: agora },
           ],
           "Saída Almoço",
-          `Excelente almoço e bom apetite, ${primeiroNome}! Aproveite seu descanso.`
+          `Excelente almoço, ${primeiroNome}!`
         )
       } else if (opcaoSelecionada === "retorno_almoco") {
         const isoChegada = criarIsoHoje(horaChegada)
@@ -133,7 +133,7 @@ export function DialogoPontoInteligente({
             { tipo: "Retorno Almoço", dataHoraIso: agora },
           ],
           "Retorno Almoço",
-          `Excelente retorno ao trabalho, ${primeiroNome}! Bom foco no seu turno da tarde.`
+          `Excelente retorno ao trabalho, ${primeiroNome}!`
         )
       } else if (opcaoSelecionada === "encerrando_expediente") {
         const isoChegada = criarIsoHoje(horaChegada)
@@ -147,7 +147,7 @@ export function DialogoPontoInteligente({
             { tipo: "Saída", dataHoraIso: agora },
           ],
           "Saída",
-          `Excelente noite e bom descanso, ${primeiroNome}! Dever cumprido, até amanhã!`
+          `Excelente noite, ${primeiroNome}!`
         )
       }
     }, 650)
