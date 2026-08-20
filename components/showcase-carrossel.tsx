@@ -32,7 +32,7 @@ const SLIDES: SlideItem[] = [
     id: "entrada",
     titulo: "Ponto Batido: Entrada",
     categoria: "Design Ponto Registrado",
-    vozTexto: "Excelente dia, Arthur! Tenha um ótimo e produtivo dia de trabalho!",
+    vozTexto: "Excelente dia e um ótimo trabalho, Arthur! Seu ponto foi registrado com sucesso.",
     tipo: "ponto_batido",
     dadosPonto: {
       nome: "Arthur Gabriel",
@@ -46,7 +46,7 @@ const SLIDES: SlideItem[] = [
     id: "saida_almoco",
     titulo: "Ponto Batido: Saída Almoço",
     categoria: "Design Ponto Registrado",
-    vozTexto: "Excelente almoço, Arthur! Aproveite seu almoço e bom descanso!",
+    vozTexto: "Excelente almoço e bom apetite, Arthur! Aproveite seu descanso.",
     tipo: "ponto_batido",
     dadosPonto: {
       nome: "Arthur Gabriel",
@@ -60,7 +60,7 @@ const SLIDES: SlideItem[] = [
     id: "retorno_almoco",
     titulo: "Ponto Batido: Retorno Almoço",
     categoria: "Design Ponto Registrado",
-    vozTexto: "Excelente retorno ao trabalho, Arthur! Bom trabalho nesta tarde!",
+    vozTexto: "Excelente retorno ao trabalho, Arthur! Bom foco no seu turno da tarde.",
     tipo: "ponto_batido",
     dadosPonto: {
       nome: "Arthur Gabriel",
