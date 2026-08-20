@@ -182,9 +182,7 @@ export function TelaPontoSucesso({
           conteudoVisivel ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        <div className="p-2 rounded-xl bg-white/20 backdrop-blur-md border border-white/25 shadow-md inline-block">
-          <Image src="/logo.png" alt="Logo" width={140} height={70} priority style={{ height: "auto" }} />
-        </div>
+<Image src="/logo.png" alt="Logo" width={150} height={75} priority style={{ height: "auto" }} />
         <span className={`text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-md shadow-sm flex items-center gap-1.5 backdrop-blur-md ${cenario.statusBadge}`}>
           <span className={`w-2 h-2 rounded-full animate-pulse ${cenario.statusDot}`} />
           Ponto Registrado
