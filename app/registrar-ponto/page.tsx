@@ -368,12 +368,13 @@ export default function RegistrarPonto() {
   } | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const showSuccessRef = useRef(false)
+  const lastFaceSeenRef = useRef<number>(0)
   const isRegisteringRef = useRef(false)
   const isProcessingRef = useRef(false)
   const pendingTipoRef = useRef<string | null>(null)
   const pendingTipoPromiseRef = useRef<Promise<string> | null>(null)
 
-  const SMILE_FRAMES_REQUIRED = 2 // 2 frames consecutivos sorrindo para confirmar
+  const SMILE_FRAMES_REQUIRED = 1 // 1 frame sorrindo já registra instantaneamente
 
   // Prefetch da página de sucesso
   useEffect(() => {
@@ -480,59 +481,51 @@ export default function RegistrarPonto() {
         const current = recognizedPersonRef.current
         resetInactivityTimer()
 
-        // === ESTÁGIO 1: Reconhecer (back-to-back até identificar) ===
-        if (!current) {
-          isProcessingRef.current = true
-          try {
-            const result = await recognizeFace(video, 0.5)
-            if (result) {
-              console.log(`✅ Identificado: ${result.nome} (${result.similarity.toFixed(0)}%)`)
-
-              pendingTipoRef.current = null
-              pendingTipoPromiseRef.current = null
-
-              const person: RecognizedPerson = {
-                id: result.id,
-                nome: result.nome,
-                similarity: result.similarity,
-                isSmiling: result.isSmiling,
-                smileFrames: result.isSmiling ? 1 : 0,
-                registroCompleto: false,
-              }
-              setRecognizedPerson(person)
-
-              if (person.smileFrames >= SMILE_FRAMES_REQUIRED) {
-                await handleRegistro(person)
-              }
-            }
-          } finally {
-            isProcessingRef.current = false
-          }
-          return
-        }
-
-        // === ESTÁGIO 2: Esperar sorriso ===
         isProcessingRef.current = true
         try {
-          const smile = await detectSmileOnly(video, 0.5)
-          if (smile) {
-            const newSmileFrames = smile.isSmiling ? current.smileFrames + 1 : 0
-            const updated: RecognizedPerson = {
-              ...current,
-              isSmiling: smile.isSmiling,
-              smileFrames: newSmileFrames,
-            }
-            setRecognizedPerson(updated)
+          // Reconhecimento contínuo e detecção de sorriso em 1 único passe no Web Worker
+          const result = await recognizeFace(video, 0.40)
+          if (result) {
+            lastFaceSeenRef.current = Date.now()
 
-            if (newSmileFrames >= SMILE_FRAMES_REQUIRED) {
+            const isDifferentPerson = !current || current.id !== result.id
+            const isSmiling = result.isSmiling
+            const smileFrames = isSmiling ? (isDifferentPerson ? 1 : current.smileFrames + 1) : 0
+
+            const updated: RecognizedPerson = {
+              id: result.id,
+              nome: result.nome,
+              similarity: result.similarity,
+              isSmiling,
+              smileFrames,
+              registroCompleto: false,
+            }
+
+            // Atualiza imediatamente se mudou de pessoa ou se mudou o estado de sorriso
+            if (isDifferentPerson || current.isSmiling !== isSmiling) {
+              if (isDifferentPerson) {
+                pendingTipoRef.current = null
+                pendingTipoPromiseRef.current = null
+                console.log(`✅ Pessoa identificada / trocada: ${result.nome} (${result.similarity.toFixed(0)}%)`)
+              }
+              setRecognizedPerson(updated)
+            }
+
+            // Registra ponto instantaneamente no 1º frame com sorriso
+            if (isSmiling && smileFrames >= SMILE_FRAMES_REQUIRED) {
               await handleRegistro(updated)
+            }
+          } else {
+            // Se ninguém estiver na frente da câmera por mais de 1.2s, reseta para o estado inicial
+            if (current && Date.now() - lastFaceSeenRef.current > 1200) {
+              setRecognizedPerson(null)
             }
           }
         } finally {
           isProcessingRef.current = false
         }
       } catch (e) {
-        console.error("Erro no loop:", e)
+        console.error("Erro no loop de reconhecimento:", e)
         isProcessingRef.current = false
       }
     }

@@ -250,7 +250,7 @@ export async function detectFaceOnly(video: HTMLVideoElement): Promise<boolean> 
  */
 export async function recognizeFace(
   video: HTMLVideoElement,
-  smileThreshold = 0.5
+  smileThreshold = 0.40
 ): Promise<RecognitionResult | null> {
   if (!modelsLoaded) return null
   try {
@@ -267,7 +267,7 @@ export async function recognizeFace(
  */
 export async function detectSmileOnly(
   video: HTMLVideoElement,
-  smileThreshold = 0.5
+  smileThreshold = 0.40
 ): Promise<{ isSmiling: boolean; confidence: number } | null> {
   if (!modelsLoaded) return null
   try {
