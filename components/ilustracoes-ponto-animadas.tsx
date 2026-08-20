@@ -268,9 +268,7 @@ export function IlustracaoPontoAnimada({ tipo, className = "w-48 h-48 sm:w-64 sm
 
             {/* Fecho Dourado Signature */}
             <rect x="90" y="102" width="20" height="14" rx="3.5" fill="url(#goldLockGradient)" />
-
-            {/* Símbolo de Raio/Foco */}
-            <polygon points="100,84 95,94 102,94 99,102 107,91 101,91" fill="#ffffff" opacity="0.95" />
+            <circle cx="100" cy="109" r="2.5" fill="#78350f" opacity="0.7" />
           </g>
 
           <defs>
