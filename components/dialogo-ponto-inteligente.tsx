@@ -137,30 +137,36 @@ export function DialogoPontoInteligente({
     }, 650)
   }
 
-  // Fundo atmosférico dinâmico com base na opção selecionada
+  // Fundo atmosférico dinâmico com Glassmorphism de Tela Inteira
   const getFundoDinamico = () => {
     switch (opcaoSelecionada) {
       case "entrada_agora":
         return {
-          background: "radial-gradient(circle at 75% 45%, #c69e6b 0%, #a67c4e 45%, #4a3418 100%)",
-          glow: "radial-gradient(circle, rgba(254, 240, 138, 0.25) 0%, rgba(245, 158, 11, 0.12) 50%, transparent 70%)",
+          baseBg: "bg-[#140e07]",
+          orb1: "bg-[#c69e6b]",
+          orb2: "bg-[#d97706]",
+          orb3: "bg-[#fde047]",
+          glassTint: "bg-amber-950/40",
           badgeColor: "text-amber-100 bg-white/15 border-white/25",
-          dotColor: "bg-amber-300",
         }
       case "saida_almoco":
         return {
-          background: "radial-gradient(circle at 75% 45%, #f97316 0%, #c2410c 45%, #431407 100%)",
-          glow: "radial-gradient(circle, rgba(254, 215, 170, 0.25) 0%, rgba(249, 115, 22, 0.12) 50%, transparent 70%)",
+          baseBg: "bg-[#1c0c05]",
+          orb1: "bg-[#f97316]",
+          orb2: "bg-[#ea580c]",
+          orb3: "bg-[#fb923c]",
+          glassTint: "bg-orange-950/40",
           badgeColor: "text-orange-100 bg-white/15 border-white/25",
-          dotColor: "bg-orange-300",
         }
       case "encerrando_expediente":
       default:
         return {
-          background: "radial-gradient(circle at 75% 45%, #1e293b 0%, #0f172a 50%, #050811 100%)",
-          glow: "radial-gradient(circle, rgba(198, 158, 107, 0.2) 0%, rgba(99, 102, 241, 0.12) 50%, transparent 70%)",
+          baseBg: "bg-[#030712]",
+          orb1: "bg-[#1e293b]",
+          orb2: "bg-[#3b82f6]",
+          orb3: "bg-[#c69e6b]",
+          glassTint: "bg-slate-950/50",
           badgeColor: "text-amber-300 bg-amber-400/15 border-amber-400/30",
-          dotColor: "bg-amber-400",
         }
     }
   }
@@ -168,271 +174,277 @@ export function DialogoPontoInteligente({
   const fundo = getFundoDinamico()
 
   return (
-    <div
-      className="fixed inset-0 z-50 h-screen w-screen flex flex-col justify-between p-4 sm:p-8 lg:p-10 select-none overflow-hidden transition-all duration-500"
-      style={{ background: fundo.background }}
-    >
-      {/* Halo Dinâmico */}
-      <div className="absolute inset-0 pointer-events-none transition-all duration-500" style={{ background: fundo.glow }} />
-
-      {/* TOPO: Logo limpa sem caixa extra e Badge */}
-      <div className="relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0">
-        <div className="flex items-center gap-3">
-          <Image src="/logo.png" alt="Logo" width={140} height={70} priority style={{ height: "auto" }} />
-          <div className="hidden sm:block h-6 w-px bg-white/20" />
-          <div className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-md backdrop-blur-md border ${fundo.badgeColor}`}>
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Verificação Inteligente</span>
-          </div>
-        </div>
-        <span className="text-xs text-white/60 font-medium">Tempo: {tempoRestante}s</span>
+    <div className={`fixed inset-0 z-50 h-screen w-screen select-none overflow-hidden transition-all duration-700 ${fundo.baseBg}`}>
+      {/* 1. CAMADA DE LUZES / ESFERAS AMBIENTES NO FUNDO */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className={`absolute -top-24 right-0 w-[550px] h-[550px] rounded-full ${fundo.orb1} blur-[120px] opacity-70 animate-pulse`} />
+        <div className={`absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full ${fundo.orb2} blur-[110px] opacity-60`} />
+        <div className={`absolute top-1/3 left-1/3 w-[380px] h-[380px] rounded-full ${fundo.orb3} blur-[100px] opacity-40`} />
       </div>
 
-      {/* ÁREA CENTRAL: 100% Tela sem Scroll */}
-      <div className="relative z-10 flex-1 flex flex-col justify-center max-w-5xl mx-auto w-full px-2 my-auto">
-        {/* Saudação */}
-        <div className="space-y-1 text-center md:text-left mb-6">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white drop-shadow-sm">
-            Olá, <span style={{ color: "#c69e6b" }}>{primeiroNome}</span>!
-          </h2>
-          <p className="text-sm text-white/80 font-medium">
-            {etapa === "selecao" && "Identificamos inconsistências nos registros de hoje. Selecione o que você está fazendo agora:"}
-            {etapa === "ajuste" && "Ajuste os horários da sua jornada para regularizarmos tudo com precisão:"}
-            {etapa === "processando" && "Processando e validando seus registros de ponto..."}
-          </p>
-        </div>
-
-        {/* ======================= ETAPA 1: OS 3 BOTÕES LADO A LADO ======================= */}
-        {etapa === "selecao" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Opção 1: Chegando Agora */}
-              <button
-                type="button"
-                onClick={() => setOpcaoSelecionada("entrada_agora")}
-                className={`p-6 rounded-2xl text-left transition-all duration-300 flex flex-col justify-between h-48 relative backdrop-blur-xl ${
-                  opcaoSelecionada === "entrada_agora"
-                    ? "bg-black/35 border-2 border-amber-300 text-white shadow-[0_12px_40px_-5px_rgba(245,158,11,0.4)] ring-2 ring-amber-300/40 scale-[1.02]"
-                    : "bg-black/15 border border-white/15 text-white/80 hover:bg-black/25"
-                }`}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-4xl">🌤️</span>
-                  {opcaoSelecionada === "entrada_agora" && (
-                    <div className="w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-md">
-                      <Check className="w-4 h-4 stroke-[3]" />
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <div className="font-bold text-lg text-white leading-tight">Chegando Agora</div>
-                  <p className="text-xs text-white/70">Registrar Entrada às {horaAtualStr}</p>
-                </div>
-              </button>
-
-              {/* Opção 2: Saindo para o Almoço */}
-              <button
-                type="button"
-                onClick={() => setOpcaoSelecionada("saida_almoco")}
-                className={`p-6 rounded-2xl text-left transition-all duration-300 flex flex-col justify-between h-48 relative backdrop-blur-xl ${
-                  opcaoSelecionada === "saida_almoco"
-                    ? "bg-black/35 border-2 border-orange-300 text-white shadow-[0_12px_40px_-5px_rgba(249,115,22,0.4)] ring-2 ring-orange-300/40 scale-[1.02]"
-                    : "bg-black/15 border border-white/15 text-white/80 hover:bg-black/25"
-                }`}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-4xl">🍽️</span>
-                  {opcaoSelecionada === "saida_almoco" && (
-                    <div className="w-7 h-7 rounded-full bg-orange-400 text-white flex items-center justify-center shadow-md">
-                      <Check className="w-4 h-4 stroke-[3]" />
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <div className="font-bold text-lg text-white leading-tight">Saindo p/ Almoço</div>
-                  <p className="text-xs text-white/70">Esqueci a entrada da manhã e quero ajustar</p>
-                </div>
-              </button>
-
-              {/* Opção 3: Encerrando Expediente */}
-              <button
-                type="button"
-                onClick={() => setOpcaoSelecionada("encerrando_expediente")}
-                className={`p-6 rounded-2xl text-left transition-all duration-300 flex flex-col justify-between h-48 relative backdrop-blur-xl ${
-                  opcaoSelecionada === "encerrando_expediente"
-                    ? "bg-black/35 border-2 border-amber-300 text-white shadow-[0_12px_40px_-5px_rgba(253,224,71,0.4)] ring-2 ring-amber-300/40 scale-[1.02]"
-                    : "bg-black/15 border border-white/15 text-white/80 hover:bg-black/25"
-                }`}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-4xl">🌙</span>
-                  {opcaoSelecionada === "encerrando_expediente" && (
-                    <div className="w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-md">
-                      <Check className="w-4 h-4 stroke-[3]" />
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <div className="font-bold text-lg text-white leading-tight">Indo Embora</div>
-                  <p className="text-xs text-white/70">Não bati ponto hoje e vou preencher tudo</p>
-                </div>
-              </button>
-            </div>
-
-            {/* Ações da Etapa 1 */}
-            <div className="flex items-center justify-end gap-4 pt-2">
-              <button
-                onClick={onCancelar}
-                className="px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-white/60 hover:text-white transition-colors"
-              >
-                Cancelar
-              </button>
-              <Button
-                onClick={handleAvancarSelecao}
-                className="px-8 py-3 h-12 rounded-xl text-white font-bold shadow-lg hover:shadow-xl transition-all flex items-center gap-2 text-sm"
-                style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
-              >
-                <span>Avançar</span>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
+      {/* 2. SUPERFÍCIE DE GLASSMORPHISM DE TELA INTEIRA (100% LARGURA/ALTURA, SEM BORDAS) */}
+      <div
+        className={`absolute inset-0 w-full h-full backdrop-blur-[60px] backdrop-saturate-[180%] ${fundo.glassTint} border-none flex flex-col justify-between p-4 sm:p-8 lg:p-10 transition-all duration-700`}
+      >
+        {/* TOPO: Logo limpa e Badge */}
+        <div className="relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0">
+          <div className="flex items-center gap-3">
+            <Image src="/logo.png" alt="Logo" width={140} height={70} priority style={{ height: "auto" }} />
+            <div className="hidden sm:block h-6 w-px bg-white/20" />
+            <div className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-md backdrop-blur-md border ${fundo.badgeColor}`}>
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Verificação Inteligente</span>
             </div>
           </div>
-        )}
+          <span className="text-xs text-white/60 font-medium">Tempo: {tempoRestante}s</span>
+        </div>
 
-        {/* ======================= ETAPA 2: AJUSTE DE HORÁRIOS ======================= */}
-        {etapa === "ajuste" && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-black/20 p-4 sm:p-5 rounded-2xl border border-white/15 backdrop-blur-2xl">
-              {/* Entrada */}
-              <div className="bg-black/30 p-4 rounded-xl border border-white/10 shadow-sm flex items-center justify-between gap-3">
-                <div>
-                  <span className="text-xs uppercase font-bold text-amber-300 tracking-wider flex items-center gap-1.5">
-                    <span>🌤️</span> Entrada Manhã
-                  </span>
-                  <p className="text-[11px] text-white/70 mt-0.5">Horário de chegada</p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setHoraChegada(ajustarMinutos(horaChegada, -15))}
-                    className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
-                  >
-                    -15m
-                  </button>
-                  <input
-                    type="time"
-                    value={horaChegada}
-                    onChange={(e) => setHoraChegada(e.target.value)}
-                    className="w-24 text-center text-lg font-bold font-mono py-1 px-1.5 rounded bg-white/20 text-white border border-white/25 outline-none"
-                  />
-                  <button
-                    onClick={() => setHoraChegada(ajustarMinutos(horaChegada, +15))}
-                    className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
-                  >
-                    +15m
-                  </button>
-                </div>
+        {/* ÁREA CENTRAL: 100% Tela sem Scroll */}
+        <div className="relative z-10 flex-1 flex flex-col justify-center max-w-5xl mx-auto w-full px-2 my-auto">
+          {/* Saudação */}
+          <div className="space-y-1 text-center md:text-left mb-6">
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white drop-shadow-sm">
+              Olá, <span style={{ color: "#c69e6b" }}>{primeiroNome}</span>!
+            </h2>
+            <p className="text-sm text-white/80 font-medium">
+              {etapa === "selecao" && "Identificamos inconsistências nos registros de hoje. Selecione o que você está fazendo agora:"}
+              {etapa === "ajuste" && "Ajuste os horários da sua jornada para regularizarmos tudo com precisão:"}
+              {etapa === "processando" && "Processando e validando seus registros de ponto..."}
+            </p>
+          </div>
+
+          {/* ======================= ETAPA 1: OS 3 BOTÕES LADO A LADO ======================= */}
+          {etapa === "selecao" && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Opção 1: Chegando Agora */}
+                <button
+                  type="button"
+                  onClick={() => setOpcaoSelecionada("entrada_agora")}
+                  className={`p-6 rounded-2xl text-left transition-all duration-300 flex flex-col justify-between h-48 relative backdrop-blur-2xl ${
+                    opcaoSelecionada === "entrada_agora"
+                      ? "bg-white/[0.18] border-2 border-amber-300 text-white shadow-[0_12px_40px_-5px_rgba(245,158,11,0.4)] ring-2 ring-amber-300/40 scale-[1.02]"
+                      : "bg-white/[0.07] border border-white/15 text-white/80 hover:bg-white/[0.12]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-4xl">🌤️</span>
+                    {opcaoSelecionada === "entrada_agora" && (
+                      <div className="w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-md">
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-bold text-lg text-white leading-tight">Chegando Agora</div>
+                    <p className="text-xs text-white/70">Registrar Entrada às {horaAtualStr}</p>
+                  </div>
+                </button>
+
+                {/* Opção 2: Saindo para o Almoço */}
+                <button
+                  type="button"
+                  onClick={() => setOpcaoSelecionada("saida_almoco")}
+                  className={`p-6 rounded-2xl text-left transition-all duration-300 flex flex-col justify-between h-48 relative backdrop-blur-2xl ${
+                    opcaoSelecionada === "saida_almoco"
+                      ? "bg-white/[0.18] border-2 border-orange-300 text-white shadow-[0_12px_40px_-5px_rgba(249,115,22,0.4)] ring-2 ring-orange-300/40 scale-[1.02]"
+                      : "bg-white/[0.07] border border-white/15 text-white/80 hover:bg-white/[0.12]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-4xl">🍽️</span>
+                    {opcaoSelecionada === "saida_almoco" && (
+                      <div className="w-7 h-7 rounded-full bg-orange-400 text-white flex items-center justify-center shadow-md">
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-bold text-lg text-white leading-tight">Saindo p/ Almoço</div>
+                    <p className="text-xs text-white/70">Esqueci a entrada da manhã e quero ajustar</p>
+                  </div>
+                </button>
+
+                {/* Opção 3: Encerrando Expediente */}
+                <button
+                  type="button"
+                  onClick={() => setOpcaoSelecionada("encerrando_expediente")}
+                  className={`p-6 rounded-2xl text-left transition-all duration-300 flex flex-col justify-between h-48 relative backdrop-blur-2xl ${
+                    opcaoSelecionada === "encerrando_expediente"
+                      ? "bg-white/[0.18] border-2 border-amber-300 text-white shadow-[0_12px_40px_-5px_rgba(253,224,71,0.4)] ring-2 ring-amber-300/40 scale-[1.02]"
+                      : "bg-white/[0.07] border border-white/15 text-white/80 hover:bg-white/[0.12]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-4xl">🌙</span>
+                    {opcaoSelecionada === "encerrando_expediente" && (
+                      <div className="w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-md">
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-bold text-lg text-white leading-tight">Indo Embora</div>
+                    <p className="text-xs text-white/70">Não bati ponto hoje e vou preencher tudo</p>
+                  </div>
+                </button>
               </div>
 
-              {/* Campos adicionais para encerrar dia completo */}
-              {opcaoSelecionada === "encerrando_expediente" && (
-                <>
-                  <div className="bg-black/30 p-4 rounded-xl border border-white/10 shadow-sm flex items-center justify-between gap-3">
-                    <div>
-                      <span className="text-xs uppercase font-bold text-orange-300 tracking-wider flex items-center gap-1.5">
-                        <span>🍽️</span> Saída Almoço
-                      </span>
-                      <p className="text-[11px] text-white/70 mt-0.5">Horário que almoçou</p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setHoraSaidaAlmoco(ajustarMinutos(horaSaidaAlmoco, -15))}
-                        className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
-                      >
-                        -15m
-                      </button>
-                      <input
-                        type="time"
-                        value={horaSaidaAlmoco}
-                        onChange={(e) => setHoraSaidaAlmoco(e.target.value)}
-                        className="w-24 text-center text-lg font-bold font-mono py-1 px-1.5 rounded bg-white/20 text-white border border-white/25 outline-none"
-                      />
-                      <button
-                        onClick={() => setHoraSaidaAlmoco(ajustarMinutos(horaSaidaAlmoco, +15))}
-                        className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
-                      >
-                        +15m
-                      </button>
-                    </div>
+              {/* Ações da Etapa 1 */}
+              <div className="flex items-center justify-end gap-4 pt-2">
+                <button
+                  onClick={onCancelar}
+                  className="px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-white/60 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+                <Button
+                  onClick={handleAvancarSelecao}
+                  className="px-8 py-3 h-12 rounded-xl text-white font-bold shadow-lg hover:shadow-xl transition-all flex items-center gap-2 text-sm"
+                  style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
+                >
+                  <span>Avançar</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ======================= ETAPA 2: AJUSTE DE HORÁRIOS ======================= */}
+          {etapa === "ajuste" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white/[0.06] p-4 sm:p-5 rounded-2xl border border-white/15 backdrop-blur-2xl">
+                {/* Entrada */}
+                <div className="bg-black/30 p-4 rounded-xl border border-white/10 shadow-sm flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs uppercase font-bold text-amber-300 tracking-wider flex items-center gap-1.5">
+                      <span>🌤️</span> Entrada Manhã
+                    </span>
+                    <p className="text-[11px] text-white/70 mt-0.5">Horário de chegada</p>
                   </div>
-
-                  <div className="bg-black/30 p-4 rounded-xl border border-white/10 shadow-sm flex items-center justify-between gap-3 sm:col-span-2">
-                    <div>
-                      <span className="text-xs uppercase font-bold text-teal-300 tracking-wider flex items-center gap-1.5">
-                        <span>💼</span> Retorno do Almoço
-                      </span>
-                      <p className="text-[11px] text-white/70 mt-0.5">Horário que voltou do almoço</p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setHoraRetornoAlmoco(ajustarMinutos(horaRetornoAlmoco, -15))}
-                        className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
-                      >
-                        -15m
-                      </button>
-                      <input
-                        type="time"
-                        value={horaRetornoAlmoco}
-                        onChange={(e) => setHoraRetornoAlmoco(e.target.value)}
-                        className="w-24 text-center text-lg font-bold font-mono py-1 px-1.5 rounded bg-white/20 text-white border border-white/25 outline-none"
-                      />
-                      <button
-                        onClick={() => setHoraRetornoAlmoco(ajustarMinutos(horaRetornoAlmoco, +15))}
-                        className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
-                      >
-                        +15m
-                      </button>
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setHoraChegada(ajustarMinutos(horaChegada, -15))}
+                      className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
+                    >
+                      -15m
+                    </button>
+                    <input
+                      type="time"
+                      value={horaChegada}
+                      onChange={(e) => setHoraChegada(e.target.value)}
+                      className="w-24 text-center text-lg font-bold font-mono py-1 px-1.5 rounded bg-white/20 text-white border border-white/25 outline-none"
+                    />
+                    <button
+                      onClick={() => setHoraChegada(ajustarMinutos(horaChegada, +15))}
+                      className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
+                    >
+                      +15m
+                    </button>
                   </div>
-                </>
-              )}
-            </div>
+                </div>
 
-            {/* Ações da Etapa 2 */}
-            <div className="flex items-center justify-between pt-2">
-              <button
-                onClick={() => setEtapa("selecao")}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white/70 hover:text-white transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Voltar às Opções</span>
-              </button>
-              <Button
-                onClick={handleConfirmarAjustes}
-                className="px-8 py-3 h-12 rounded-xl text-white font-bold shadow-lg hover:shadow-xl transition-all"
-                style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
-              >
-                Confirmar e Registrar Ponto
-              </Button>
-            </div>
-          </div>
-        )}
+                {/* Campos adicionais para encerrar dia completo */}
+                {opcaoSelecionada === "encerrando_expediente" && (
+                  <>
+                    <div className="bg-black/30 p-4 rounded-xl border border-white/10 shadow-sm flex items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs uppercase font-bold text-orange-300 tracking-wider flex items-center gap-1.5">
+                          <span>🍽️</span> Saída Almoço
+                        </span>
+                        <p className="text-[11px] text-white/70 mt-0.5">Horário que almoçou</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setHoraSaidaAlmoco(ajustarMinutos(horaSaidaAlmoco, -15))}
+                          className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
+                        >
+                          -15m
+                        </button>
+                        <input
+                          type="time"
+                          value={horaSaidaAlmoco}
+                          onChange={(e) => setHoraSaidaAlmoco(e.target.value)}
+                          className="w-24 text-center text-lg font-bold font-mono py-1 px-1.5 rounded bg-white/20 text-white border border-white/25 outline-none"
+                        />
+                        <button
+                          onClick={() => setHoraSaidaAlmoco(ajustarMinutos(horaSaidaAlmoco, +15))}
+                          className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
+                        >
+                          +15m
+                        </button>
+                      </div>
+                    </div>
 
-        {/* ======================= ETAPA 3: PROCESSANDO ======================= */}
-        {etapa === "processando" && (
-          <div className="py-8 flex flex-col items-center justify-center space-y-4 text-center animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 rounded-full bg-white/20 text-white border-2 border-white/40 flex items-center justify-center shadow-xl backdrop-blur-md">
-              <CheckCircle2 className="w-10 h-10 animate-pulse stroke-[2.5]" />
+                    <div className="bg-black/30 p-4 rounded-xl border border-white/10 shadow-sm flex items-center justify-between gap-3 sm:col-span-2">
+                      <div>
+                        <span className="text-xs uppercase font-bold text-teal-300 tracking-wider flex items-center gap-1.5">
+                          <span>💼</span> Retorno do Almoço
+                        </span>
+                        <p className="text-[11px] text-white/70 mt-0.5">Horário que voltou do almoço</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setHoraRetornoAlmoco(ajustarMinutos(horaRetornoAlmoco, -15))}
+                          className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
+                        >
+                          -15m
+                        </button>
+                        <input
+                          type="time"
+                          value={horaRetornoAlmoco}
+                          onChange={(e) => setHoraRetornoAlmoco(e.target.value)}
+                          className="w-24 text-center text-lg font-bold font-mono py-1 px-1.5 rounded bg-white/20 text-white border border-white/25 outline-none"
+                        />
+                        <button
+                          onClick={() => setHoraRetornoAlmoco(ajustarMinutos(horaRetornoAlmoco, +15))}
+                          className="px-2 py-1 bg-white/15 hover:bg-white/25 text-white rounded text-xs font-bold"
+                        >
+                          +15m
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Ações da Etapa 2 */}
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  onClick={() => setEtapa("selecao")}
+                  className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white/70 hover:text-white transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Voltar às Opções</span>
+                </button>
+                <Button
+                  onClick={handleConfirmarAjustes}
+                  className="px-8 py-3 h-12 rounded-xl text-white font-bold shadow-lg hover:shadow-xl transition-all"
+                  style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
+                >
+                  Confirmar e Registrar Ponto
+                </Button>
+              </div>
             </div>
-            <div className="space-y-1">
-              <h3 className="text-2xl font-bold text-white">Registrando Ponto...</h3>
-              <p className="text-xs text-white/80 font-medium">Validando jornada e direcionando para confirmação</p>
+          )}
+
+          {/* ======================= ETAPA 3: PROCESSANDO ======================= */}
+          {etapa === "processando" && (
+            <div className="py-8 flex flex-col items-center justify-center space-y-4 text-center animate-in zoom-in-95 duration-300">
+              <div className="w-20 h-20 rounded-full bg-white/20 text-white border-2 border-white/40 flex items-center justify-center shadow-xl backdrop-blur-md">
+                <CheckCircle2 className="w-10 h-10 animate-pulse stroke-[2.5]" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-2xl font-bold text-white">Registrando Ponto...</h3>
+                <p className="text-xs text-white/80 font-medium">Validando jornada e direcionando para confirmação</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* RODAPÉ */}
+        <div className="h-4 shrink-0" />
       </div>
-
-      {/* RODAPÉ */}
-      <div className="h-4 shrink-0" />
     </div>
   )
 }
