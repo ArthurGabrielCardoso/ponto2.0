@@ -1,6 +1,6 @@
 import { format, parseISO, differenceInMinutes, isWeekend, eachDayOfInterval } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import type { RegistroPonto, ResumoHoras, RelatorioPonto, ParPontos } from "./types"
+import type { RegistroPonto, ResumoHoras, RelatorioPonto, ParPontos, HorariosSemana, HorarioDia } from "./types"
 
 // Constantes
 const HORAS_NORMAIS_DIA = 8 * 60 // 8 horas em minutos por padrão
@@ -393,19 +393,89 @@ export function calcularCargaHorariaPorDia(data: Date): number {
   }
 }
 
-// Calcular saldo de horas trabalhadas no dia (versão corrigida)
-export function calcularSaldoDia(registrosDoDia: RegistroPonto[], data: Date): {
+// Calcula a carga horária em minutos de um HorarioDia configurado
+export function calcularCargaHorariaDiaHorario(horario?: HorarioDia | null): number {
+  if (!horario || !horario.ativo) return 0
+  try {
+    const [horaEntrada, minEntrada] = (horario.entrada || "08:00").split(":").map(Number)
+    const [horaSaidaAlmoco, minSaidaAlmoco] = (horario.saida_almoco || "12:00").split(":").map(Number)
+    const [horaRetornoAlmoco, minRetornoAlmoco] = (horario.retorno_almoco || "13:00").split(":").map(Number)
+    const [horaSaida, minSaida] = (horario.saida || "17:00").split(":").map(Number)
+
+    const entradaMinutos = horaEntrada * 60 + minEntrada
+    const saidaAlmocoMinutos = horaSaidaAlmoco * 60 + minSaidaAlmoco
+    const retornoAlmocoMinutos = horaRetornoAlmoco * 60 + minRetornoAlmoco
+    const saidaMinutos = horaSaida * 60 + minSaida
+
+    return Math.max(0, (saidaMinutos - entradaMinutos) - (retornoAlmocoMinutos - saidaAlmocoMinutos))
+  } catch {
+    return 0
+  }
+}
+
+// Obtém as horas esperadas (em minutos) para uma data, respeitando os horários ou carga cadastrados
+export function obterHorasEsperadasParaData(
+  data: Date,
+  horarios?: HorariosSemana | null,
+  cargaPadraoMinutos?: number | null
+): number {
+  const diaSemana = data.getDay() // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+
+  if (horarios) {
+    const mapaDias: Record<number, keyof HorariosSemana> = {
+      0: "domingo",
+      1: "segunda",
+      2: "terca",
+      3: "quarta",
+      4: "quinta",
+      5: "sexta",
+      6: "sabado",
+    }
+    const chave = mapaDias[diaSemana]
+    const horarioDia = chave ? horarios[chave] : null
+    if (horarioDia) {
+      if (!horarioDia.ativo) return 0
+      return calcularCargaHorariaDiaHorario(horarioDia)
+    }
+  }
+
+  if (typeof cargaPadraoMinutos === "number" && Number.isFinite(cargaPadraoMinutos) && cargaPadraoMinutos > 0) {
+    // Dias úteis (Segunda a Sexta) usam a carga horária padrão
+    if (diaSemana >= 1 && diaSemana <= 5) {
+      return cargaPadraoMinutos
+    }
+    return 0
+  }
+
+  // Fallback padrão se não houver horário nem carga configurada
+  return calcularCargaHorariaPorDia(data)
+}
+
+// Calcular saldo de horas trabalhadas no dia (sem logs excessivos e com suporte a horários customizados)
+export function calcularSaldoDia(
+  registrosDoDia: RegistroPonto[],
+  data: Date,
+  horariosOuCarga?: HorariosSemana | number | null
+): {
   horasTrabalhadas: number
   horasEsperadas: number
   saldoDia: number
   paresPontos: ParPontos[]
 } {
+  let horarios: HorariosSemana | null = null
+  let cargaPadrao: number | null = null
+
+  if (typeof horariosOuCarga === "number") {
+    cargaPadrao = horariosOuCarga
+  } else if (horariosOuCarga && typeof horariosOuCarga === "object") {
+    horarios = horariosOuCarga
+  }
+
+  const horasEsperadas = obterHorasEsperadasParaData(data, horarios, cargaPadrao)
+
   try {
-    console.log("Calculando saldo para:", format(data, "dd/MM/yyyy"), "registros:", registrosDoDia.length)
-    
     // Verificar se há registros
     if (!registrosDoDia || registrosDoDia.length === 0) {
-      const horasEsperadas = calcularCargaHorariaPorDia(data)
       return {
         horasTrabalhadas: 0,
         horasEsperadas,
@@ -419,19 +489,14 @@ export function calcularSaldoDia(registrosDoDia: RegistroPonto[], data: Date): {
       try {
         const dataA = parseISO(a.data_hora)
         const dataB = parseISO(b.data_hora)
-        
-        // Zerar segundos e milissegundos para comparação
         dataA.setSeconds(0, 0)
         dataB.setSeconds(0, 0)
-        
         return dataA.getTime() - dataB.getTime()
       } catch (error) {
         console.error("Erro ao ordenar registros:", error)
         return 0
       }
     })
-
-    console.log("Registros ordenados:", registrosOrdenados.map(r => `${formatarHora(r.data_hora)} (${r.tipo})`))
 
     // Calcular horas trabalhadas agrupando em pares entrada/saída
     let totalMinutosTrabalhados = 0
@@ -445,13 +510,10 @@ export function calcularSaldoDia(registrosDoDia: RegistroPonto[], data: Date): {
       if (entrada && saida) {
         const entradaDate = parseISO(entrada.data_hora)
         const saidaDate = parseISO(saida.data_hora)
-        
-        // Zerar segundos para cálculo preciso
         entradaDate.setSeconds(0, 0)
         saidaDate.setSeconds(0, 0)
 
         const minutosTrabalhados = differenceInMinutes(saidaDate, entradaDate)
-        
         if (minutosTrabalhados > 0) {
           totalMinutosTrabalhados += minutosTrabalhados
         }
@@ -461,26 +523,17 @@ export function calcularSaldoDia(registrosDoDia: RegistroPonto[], data: Date): {
           saida: formatarHora(saida.data_hora),
           minutos: minutosTrabalhados > 0 ? minutosTrabalhados : 0,
         })
-
-        console.log(`Par ${i/2 + 1}: ${formatarHora(entrada.data_hora)} → ${formatarHora(saida.data_hora)} = ${minutosTrabalhados} minutos`)
       } else if (entrada) {
-        // Entrada sem saída correspondente
         pares.push({
           entrada: formatarHora(entrada.data_hora),
           saida: null,
           minutos: 0,
         })
-        console.log(`Entrada sem saída: ${formatarHora(entrada.data_hora)}`)
       }
     }
 
-    // Calcular horas esperadas baseado no dia da semana
-    const horasEsperadas = calcularCargaHorariaPorDia(data)
-    
     // Calcular saldo (diferença entre trabalhado e esperado)
     const saldoDia = totalMinutosTrabalhados - horasEsperadas
-
-    console.log(`Resultado: Trabalhado=${totalMinutosTrabalhados}min (${minutosParaHoras(totalMinutosTrabalhados)}), Esperado=${horasEsperadas}min (${minutosParaHoras(horasEsperadas)}), Saldo=${saldoDia}min (${minutosParaHoras(saldoDia)})`)
 
     return {
       horasTrabalhadas: totalMinutosTrabalhados,
@@ -488,10 +541,8 @@ export function calcularSaldoDia(registrosDoDia: RegistroPonto[], data: Date): {
       saldoDia,
       paresPontos: pares
     }
-
   } catch (error) {
     console.error("Erro ao calcular saldo do dia:", error)
-    const horasEsperadas = calcularCargaHorariaPorDia(data)
     return {
       horasTrabalhadas: 0,
       horasEsperadas,
@@ -500,3 +551,6 @@ export function calcularSaldoDia(registrosDoDia: RegistroPonto[], data: Date): {
     }
   }
 }
+
+
+

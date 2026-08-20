@@ -2,6 +2,7 @@
 
 import {
   extractDescriptorFromBase64,
+  getBackend,
   initModels,
 } from "@/lib/face-recognition-client"
 
@@ -17,56 +18,99 @@ import {
  * código diferente (e ambos com log falso).
  */
 
+export type EstadoFoto = "pendente" | "processando" | "ok" | "falhou"
+
+export interface ProgressoFoto {
+  estado: EstadoFoto
+  confianca?: number
+  erro?: string
+}
+
+export type FaseCadastro =
+  | "modelos"
+  | "fotos"
+  | "salvando"
+  | "concluido"
+  | "erro"
+
+export interface ProgressoCadastro {
+  fase: FaseCadastro
+  fotos: ProgressoFoto[]
+  /** Backend de inferência em uso: webgl, wasm ou cpu. */
+  backend: string
+  /** Preenchido quando fase === "erro". */
+  mensagem?: string
+}
+
+export type ReportarProgresso = (p: ProgressoCadastro) => void
+
 /**
- * Extrai o descritor de cada foto, reportando progresso real via `onLog`.
+ * Extrai o descritor de cada foto, reportando progresso estruturado.
  *
- * Fotos sem rosto são puladas com aviso no log, não abortam o lote — numa
- * captura de 5 poses é comum uma sair borrada. Só lança se nenhuma prestar.
+ * Fotos sem rosto são puladas com aviso, não abortam o lote — numa captura de
+ * 5 poses é comum uma sair borrada. Só lança se nenhuma prestar.
  */
 export async function extrairDescritores(
   fotos: string[],
-  onLog: (logs: string[]) => void,
+  reportar: ReportarProgresso,
 ): Promise<number[][]> {
-  const logs: string[] = ["🧠 Carregando modelos de reconhecimento facial..."]
-  onLog([...logs])
+  const progresso: ProgressoFoto[] = fotos.map(() => ({ estado: "pendente" }))
 
+  const emitir = (fase: FaseCadastro, mensagem?: string) =>
+    reportar({
+      fase,
+      fotos: progresso.map((f) => ({ ...f })),
+      backend: getBackend(),
+      mensagem,
+    })
+
+  emitir("modelos")
   await initModels()
 
-  logs.push("✅ Modelos carregados com sucesso!")
-  onLog([...logs])
+  emitir("fotos")
 
   const descritores: number[][] = []
 
   for (let i = 0; i < fotos.length; i++) {
-    logs.push(`📸 Processando foto ${i + 1}/${fotos.length}...`)
-    onLog([...logs])
+    progresso[i].estado = "processando"
+    emitir("fotos")
 
     try {
       const resultado = await extractDescriptorFromBase64(fotos[i])
       if (resultado) {
         descritores.push(resultado.descriptor)
-        const confianca = Math.round(resultado.confidence * 10) / 10
-        logs.push(`✅ Foto ${i + 1} processada! Confiança: ${confianca}%`)
+        progresso[i] = {
+          estado: "ok",
+          confianca: Math.round(resultado.confidence * 10) / 10,
+        }
       } else {
-        logs.push(`❌ Foto ${i + 1}: nenhum rosto detectado`)
+        progresso[i] = { estado: "falhou", erro: "nenhum rosto detectado" }
       }
     } catch (erro) {
-      logs.push(
-        `❌ Foto ${i + 1}: ${erro instanceof Error ? erro.message : String(erro)}`,
-      )
+      progresso[i] = {
+        estado: "falhou",
+        erro: erro instanceof Error ? erro.message : String(erro),
+      }
     }
-    onLog([...logs])
+
+    emitir("fotos")
   }
 
   if (descritores.length === 0) {
+    // Se todas falharam pelo mesmo motivo técnico, mostra esse motivo em vez
+    // do texto genérico — "nenhum rosto" seria mentira se a GPU é que caiu.
+    const errosTecnicos = progresso
+      .map((f) => f.erro)
+      .filter((e): e is string => !!e && e !== "nenhum rosto detectado")
+
     throw new Error(
-      "Nenhum rosto foi detectado nas fotos. Refaça a captura com o rosto centralizado, olhando para a câmera e com boa iluminação.",
+      errosTecnicos.length > 0
+        ? `Falha no reconhecimento facial: ${errosTecnicos[0]}`
+        : "Nenhum rosto foi detectado nas fotos. Refaça a captura com o rosto centralizado, olhando para a câmera e com boa iluminação.",
     )
   }
 
-  logs.push(`📊 ${descritores.length}/${fotos.length} foto(s) aproveitada(s)`)
-  onLog([...logs])
-
+  emitir("salvando")
   return descritores
 }
 

@@ -9,6 +9,8 @@ import { Progress } from "@/components/ui/progress"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { buscarFuncionarios } from "@/lib/supabase"
 import { extrairDescritores, lerResposta } from "@/lib/cadastro-cliente"
+import type { ProgressoCadastro as EstadoProgresso } from "@/lib/cadastro-cliente"
+import { ProgressoCadastro } from "@/components/progresso-cadastro"
 import { UserPlus, Camera, AlertCircle } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import Image from "next/image"
@@ -34,6 +36,7 @@ export default function AtualizarFuncionario() {
   const fotosBase64Ref = useRef<string[]>([])
   const [funcionariosExistentes, setFuncionariosExistentes] = useState<{ id: string; nome: string }[]>([])
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<string>("")
+  const [progressoCadastro, setProgressoCadastro] = useState<EstadoProgresso | null>(null)
   const [logProcessamento, setLogProcessamento] = useState<string[]>([])
 
   // Inicializar câmera
@@ -162,21 +165,12 @@ export default function AtualizarFuncionario() {
   // Atualizar fotos
   const atualizarFotos = async () => {
     if (!funcionarioSelecionado) return
-
     try {
       setIsLoading(true)
-      setLogProcessamento([])
-      setStatus("Processando fotos para reconhecimento facial...")
+      setStatus("Processando fotos...")
 
       const fotos = fotosBase64Ref.current
-
-      // Extração roda no navegador. O progresso abaixo é real: antes o loop
-      // simulava as etapas e mandava tudo de uma vez na primeira iteração.
-      const descritores = await extrairDescritores(fotos, (logs) => {
-        setLogProcessamento(logs)
-        const feitas = logs.filter((l) => l.startsWith("✅ Foto") || l.startsWith("❌ Foto")).length
-        setProgresso(fotos.length > 0 ? (feitas / fotos.length) * 100 : 0)
-      })
+      const descritores = await extrairDescritores(fotos, setProgressoCadastro)
 
       setStatus("Salvando...")
       const response = await fetch('/api/aws/update-person', {
@@ -190,19 +184,23 @@ export default function AtualizarFuncionario() {
 
       await lerResposta(response)
 
-      setLogProcessamento(prev => [...prev, "✅ Funcionário atualizado com sucesso!"])
-      setProgresso(100)
+      setProgressoCadastro((atual) =>
+        atual ? { ...atual, fase: "concluido" } : atual
+      )
       setStatus(`✅ Fotos atualizadas! ${descritores.length} nova(s) foto(s) processada(s).`)
 
-      // Redirecionar após 4 segundos (mais tempo para ler os logs)
       setTimeout(() => {
         router.push("/dashboard")
-      }, 4000)
+      }, 3000)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      setLogProcessamento(prev => [...prev, `❌ Erro: ${msg}`])
+      setProgressoCadastro((atual) => ({
+        fase: "erro",
+        fotos: atual?.fotos ?? [],
+        backend: atual?.backend ?? "",
+        mensagem: msg,
+      }))
       setStatus(`Erro: ${msg}`)
-    } finally {
       setIsLoading(false)
     }
   }
@@ -385,6 +383,21 @@ export default function AtualizarFuncionario() {
           </CardContent>
         </Card>
       </div>
-    </div>
+          {/* Modal de Progresso em Tempo Real */}
+      {progressoCadastro && (
+        <ProgressoCadastro
+          progresso={progressoCadastro}
+          rotulos={steps.map((s) => s.label)}
+          onCancelar={() => {
+            setProgressoCadastro(null)
+            setIsLoading(false)
+          }}
+          onTentarNovamente={() => {
+            setProgressoCadastro(null)
+            atualizarFotos()
+          }}
+        />
+      )}
+</div>
   )
 }

@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { buscarFuncionarios, deletarFuncionario } from "@/lib/supabase"
 import { extrairDescritores, lerResposta } from "@/lib/cadastro-cliente"
+import type { ProgressoCadastro as EstadoProgresso } from "@/lib/cadastro-cliente"
+import { ProgressoCadastro } from "@/components/progresso-cadastro"
 import { UserPlus, ArrowLeft, Check, Camera, Clock, AlertCircle } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import type { HorariosSemana, HorarioDia } from "@/lib/types"
@@ -44,13 +46,6 @@ function calcularCargaHorariaDiaria(horario: HorarioDia): number {
 
     // Calcular tempo total usando a fórmula: (Saída - Entrada) - (Tempo de Almoço)
     const tempoTotal = saidaMinutos - entradaMinutos - (retornoAlmocoMinutos - saidaAlmocoMinutos)
-
-    console.log(`Cálculo de carga horária para ${JSON.stringify(horario)}:`)
-    console.log(`Tempo total: ${saidaMinutos} - ${entradaMinutos} = ${saidaMinutos - entradaMinutos} minutos`)
-    console.log(
-      `Tempo de almoço: ${retornoAlmocoMinutos} - ${saidaAlmocoMinutos} = ${retornoAlmocoMinutos - saidaAlmocoMinutos} minutos`,
-    )
-    console.log(`Carga horária: ${tempoTotal} minutos (${Math.floor(tempoTotal / 60)}h${tempoTotal % 60}min)`)
 
     return tempoTotal
   } catch (error) {
@@ -181,6 +176,8 @@ export default function Cadastrar() {
   }, [activeTab, isLoading])
   const [error, setError] = useState<string | null>(null)
   const [logProcessamento, setLogProcessamento] = useState<string[]>([])
+  // Estado da tela cheia de progresso. null = tela escondida.
+  const [progressoCadastro, setProgressoCadastro] = useState<EstadoProgresso | null>(null)
   const fotosBase64Ref = useRef<string[]>([]) // Mudado para armazenar fotos em base64
   const [funcionariosExistentes, setFuncionariosExistentes] = useState<{ id: string; nome: string }[]>([])
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<string>("")
@@ -397,19 +394,27 @@ export default function Cadastrar() {
     return Math.round(totalMinutos / diasAtivos)
   }
 
+  // Marca a tela de progresso como erro, preservando o que já apareceu nela.
+  const falharProgresso = (mensagem: string) => {
+    setProgressoCadastro((atual) => ({
+      fase: "erro",
+      fotos: atual?.fotos ?? [],
+      backend: atual?.backend ?? "",
+      mensagem,
+    }))
+  }
+
   // Atualizar fotos de funcionário existente
   const atualizarFotosFuncionario = async () => {
     if (!funcionarioSelecionado) return
     try {
       setIsLoading(true)
       setError(null)
-      setLogProcessamento([])
+      setStatus("Processando fotos...")
 
-      setStatus("Processando fotos para reconhecimento facial...")
       const fotos = fotosBase64Ref.current
-      const descritores = await extrairDescritores(fotos, setLogProcessamento)
+      const descritores = await extrairDescritores(fotos, setProgressoCadastro)
 
-      setStatus("Salvando...")
       const response = await fetch('/api/aws/update-person', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -421,18 +426,20 @@ export default function Cadastrar() {
 
       await lerResposta(response)
 
-      setLogProcessamento(prev => [...prev, "✅ Funcionário atualizado com sucesso!"])
+      setProgressoCadastro((atual) =>
+        atual ? { ...atual, fase: "concluido" } : atual
+      )
       setStatus(`✅ Fotos atualizadas! ${descritores.length} nova(s) foto(s) processada(s).`)
 
-      // Redirecionar após 4 segundos
+      // Redirecionar após 3 segundos
       setTimeout(() => {
         router.push("/dashboard")
-      }, 4000)
+      }, 3000)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      setLogProcessamento(prev => [...prev, `❌ Erro: ${msg}`])
+      falharProgresso(msg)
       setError(`Erro ao atualizar fotos: ${msg}`)
-      setStatus("Erro ao atualizar fotos. Verifique os detalhes acima.")
+      setStatus("Erro ao atualizar fotos.")
       setIsLoading(false)
     }
   }
@@ -441,18 +448,15 @@ export default function Cadastrar() {
   const cadastrarFuncionarioComHorarios = async () => {
     try {
       setError(null)
-      setLogProcessamento([])
       setStatus("Cadastrando funcionário...")
       setIsLoading(true)
 
-      setStatus("Processando fotos para reconhecimento facial...")
       const fotos = fotosBase64Ref.current
-      const descritores = await extrairDescritores(fotos, setLogProcessamento)
+      const descritores = await extrairDescritores(fotos, setProgressoCadastro)
 
       // Calcular a carga horária média diária
       const cargaHorariaMedia = calcularCargaHorariaMedia()
 
-      setStatus("Salvando...")
       const response = await fetch('/api/aws/add-person', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -466,19 +470,21 @@ export default function Cadastrar() {
 
       await lerResposta(response)
 
-      setLogProcessamento(prev => [...prev, "✅ Funcionário cadastrado com sucesso!"])
+      setProgressoCadastro((atual) =>
+        atual ? { ...atual, fase: "concluido" } : atual
+      )
       setStatus(`Funcionário cadastrado com sucesso! ${descritores.length} foto(s) processada(s).`)
 
-      // Redirecionar após 4 segundos (mais tempo para ler os logs)
+      // Redirecionar após 3 segundos
       setTimeout(() => {
         router.push("/dashboard")
-      }, 4000)
+      }, 3000)
     } catch (error) {
       console.error("Erro ao cadastrar funcionário:", error)
       const msg = error instanceof Error ? error.message : String(error)
-      setLogProcessamento(prev => [...prev, `❌ Erro: ${msg}`])
+      falharProgresso(msg)
       setError(`Erro ao cadastrar funcionário: ${msg}`)
-      setStatus("Erro ao cadastrar funcionário. Verifique os detalhes acima.")
+      setStatus("Erro ao cadastrar funcionário.")
       setIsLoading(false)
     }
   }
@@ -950,6 +956,25 @@ export default function Cadastrar() {
           </CardContent>
         </Card>
       </div>
-    </div>
+          {/* Modal de Progresso em Tempo Real */}
+      {progressoCadastro && (
+        <ProgressoCadastro
+          progresso={progressoCadastro}
+          rotulos={steps.map((s) => s.label)}
+          onCancelar={() => {
+            setProgressoCadastro(null)
+            setIsLoading(false)
+          }}
+          onTentarNovamente={() => {
+            setProgressoCadastro(null)
+            if (modoOperacao === "novo") {
+              cadastrarFuncionarioComHorarios()
+            } else {
+              atualizarFotosFuncionario()
+            }
+          }}
+        />
+      )}
+</div>
   )
 }

@@ -56,8 +56,20 @@ export default function PontoRegistradoPage() {
           <Card className="border-none shadow-none bg-transparent">
             <CardContent className="pt-6 px-0">
               <div className="text-center space-y-8 max-w-lg mx-auto px-4 sm:px-6 md:px-0">
+                {/* Saudação dinâmica baseada no tipo de ponto */}
                 <h1 className="text-3xl font-bold" style={{ color: "#c69e6b" }}>
-                  Excelente tarde, {nome}!
+                  {(() => {
+                    const t = tipo.toLowerCase().trim()
+                    const primeiroNome = nome.split(" ")[0]
+                    if (t.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
+                    if (t.includes("saída") && t.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
+                    if (t.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
+                    if (t.includes("saída") || t.includes("saida")) return `Excelente noite e bom descanso, ${primeiroNome}!`
+                    const horaAtual = new Date().getHours()
+                    if (horaAtual < 12) return `Excelente dia, ${primeiroNome}!`
+                    if (horaAtual < 18) return `Excelente tarde, ${primeiroNome}!`
+                    return `Excelente noite, ${primeiroNome}!`
+                  })()}
                 </h1>
 
                 <div className="text-sm text-gray-600 bg-green-50 rounded-lg p-3 border border-green-200">

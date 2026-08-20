@@ -13,6 +13,14 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { DotLottieReact } from "@lottiefiles/dotlottie-react"
+import { registrarPonto, determinarProximoTipo } from "@/lib/supabase"
+import "../ponto-registrado/ponto-batido.css"
+import {
+  initModels,
+  loadDescriptors,
+  recognizeFace,
+  detectSmileOnly,
+} from "@/lib/face-recognition-client"
 
 // Animação temática: emoji por 3.5s → depois Lottie check original
 function SuccessAnimation({ tipo }: { tipo: string }) {
@@ -114,14 +122,7 @@ function ReturnProgress({ durationMs }: { durationMs: number }) {
   )
 }
 
-import { registrarPonto, determinarProximoTipo } from "@/lib/supabase"
-import "../ponto-registrado/ponto-batido.css"
-import {
-  initModels,
-  loadDescriptors,
-  recognizeFace,
-  detectSmileOnly,
-} from "@/lib/face-recognition-client"
+
 
 interface RecognizedPerson {
   id: string
@@ -152,6 +153,7 @@ export default function RegistrarPonto() {
   const recognizedPersonRef = useRef<RecognizedPerson | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const showSuccessRef = useRef(false)
+  const isRegisteringRef = useRef(false)
   const isProcessingRef = useRef(false)
   const pendingTipoRef = useRef<string | null>(null)
   const pendingTipoPromiseRef = useRef<Promise<string> | null>(null)
@@ -249,7 +251,7 @@ export default function RegistrarPonto() {
 
       if (showSuccessRef.current) return
       if (screensaverRef.current) return
-      if (isProcessingRef.current) return
+      if (isProcessingRef.current || isRegisteringRef.current) return
 
       if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
         return
@@ -325,53 +327,64 @@ export default function RegistrarPonto() {
   // Registrar ponto — transição INSTANTÂNEA
   // Mostra tela de sucesso imediatamente com tipo pré-carregado, insert roda em background
   const handleRegistro = async (person: RecognizedPerson) => {
+    if (isRegisteringRef.current) return
+    isRegisteringRef.current = true
+
     console.log(`🎯 REGISTRANDO PONTO: ${person.nome}`)
 
     const now = new Date()
     const primeiroNome = person.nome.split(" ")[0]
-    // Esperar o tipo resolver (max 1.5s para não travar a UI)
-    let tipo = pendingTipoRef.current
-    if (!tipo && pendingTipoPromiseRef.current) {
-      tipo = await Promise.race([
-        pendingTipoPromiseRef.current,
-        new Promise<string>(r => setTimeout(() => r(""), 1500))
-      ])
-    }
-    tipo = tipo || "Entrada"
-    pendingTipoRef.current = null
-    pendingTipoPromiseRef.current = null
 
-    const getMensagem = (t: string) => {
-      const tl = t.toLowerCase().trim()
-      if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
-      if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
-      if (tl.includes("retorno")) return `Excelente trabalho, ${primeiroNome}!`
-      if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite e descanso, ${primeiroNome}!`
-      return `Excelente dia, ${primeiroNome}!`
-    }
+    try {
+      // Registrar no Supabase e obter o tipo exato confirmado pelo banco
+      const res = await registrarPonto(person.id, person.nome)
+      const tipo = res.tipo || "Entrada"
 
-    // Mostrar sucesso IMEDIATAMENTE
-    const completed: RecognizedPerson = {
-      ...person,
-      registroCompleto: true,
-      tipo,
-      hora: now.toLocaleTimeString(),
-      data: now.toLocaleDateString(),
-      mensagem: getMensagem(tipo),
-    }
+      const getMensagem = (t: string) => {
+        const tl = t.toLowerCase().trim()
+        if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
+        if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
+        if (tl.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
+        if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite e descanso, ${primeiroNome}!`
+        return `Excelente trabalho, ${primeiroNome}!`
+      }
 
-    setRecognizedPerson(completed)
-    setShowSuccess(true)
+      const mensagem = res.emCooldown
+        ? `Olá, ${primeiroNome}! Seu ponto (${tipo}) já foi registrado recentemente.`
+        : getMensagem(tipo)
 
-    // Auto-retorno em 30 segundos
-    successTimeoutRef.current = window.setTimeout(() => {
-      resetToInitialState()
-    }, 30000)
+      const completed: RecognizedPerson = {
+        ...person,
+        registroCompleto: true,
+        tipo,
+        hora: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        data: now.toLocaleDateString(),
+        mensagem,
+      }
 
-    // Insert no Supabase em background (não bloqueia a UI)
-    registrarPonto(person.id, person.nome, tipo).catch(error => {
+      setRecognizedPerson(completed)
+      setShowSuccess(true)
+
+      // Auto-retorno em 15 segundos
+      successTimeoutRef.current = window.setTimeout(() => {
+        resetToInitialState()
+      }, 15000)
+    } catch (error) {
       console.error("Erro ao registrar ponto:", error)
-    })
+      const completed: RecognizedPerson = {
+        ...person,
+        registroCompleto: true,
+        tipo: "Aviso",
+        hora: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        data: now.toLocaleDateString(),
+        mensagem: error instanceof Error ? error.message : "Não foi possível registrar o ponto.",
+      }
+      setRecognizedPerson(completed)
+      setShowSuccess(true)
+      successTimeoutRef.current = window.setTimeout(() => {
+        resetToInitialState()
+      }, 8000)
+    }
   }
 
   // Reset timer de inatividade
@@ -384,17 +397,18 @@ export default function RegistrarPonto() {
   }
 
   // Reset para estado inicial (SEM recarregar a página!)
-  // Worker + modelos + descritores continuam em memória → próximo reconhecimento é instantâneo
   const resetToInitialState = () => {
     if (successTimeoutRef.current) {
       clearTimeout(successTimeoutRef.current)
       successTimeoutRef.current = null
     }
+    isRegisteringRef.current = false
     setShowSuccess(false)
     setRecognizedPerson(null)
     isProcessingRef.current = false
     setScreensaver(true)
   }
+
 
   // Parar câmera
   const stopCamera = useCallback(() => {

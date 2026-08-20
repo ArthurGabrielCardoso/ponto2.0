@@ -88,8 +88,13 @@ const WORK_HEIGHT = 144
 // Cadastro roda uma vez por foto, não a 10fps: vale gastar resolução.
 // 192x144 (o tamanho de reconhecimento) produz descritor ruim, e um descritor
 // ruim gravado no banco estraga o reconhecimento daquele funcionário para sempre.
-const ENROLL_MAX_SIDE = 640
-const ENROLL_INPUT_SIZE = 320
+//
+// Mas não dá para exagerar: cada shape novo de tensor faz o TFJS compilar um
+// shader novo, e GPU Intel integrada (o caso dos tablets) estoura o compilador
+// HLSL com GL_OUT_OF_MEMORY, derrubando o contexto WebGL inteiro. 416/224 é o
+// meio-termo — bem acima do reconhecimento, longe do limite da GPU fraca.
+const ENROLL_MAX_SIDE = 416
+const ENROLL_INPUT_SIZE = 224
 
 let modelsLoaded = false
 let faceMatcher: any = null
@@ -118,7 +123,29 @@ function bitmapToWorkCanvas(bitmap: ImageBitmap): OffscreenCanvas {
  * Tenta ativar o melhor backend TFJS disponível: webgl → wasm (SIMD) → cpu.
  * WASM é bem mais rápido que CPU puro em tablets fracos sem WebGL performático.
  */
-async function setupBestBackend(fa: typeof import("face-api.js")) {
+async function setupBestBackend(
+  fa: typeof import("face-api.js"),
+  forcarBackend?: "wasm" | "cpu",
+) {
+  if (forcarBackend) {
+    // O cliente já viu a GPU falhar nesta sessão e pediu para pular o WebGL.
+    console.warn(`[face-worker] backend forçado: ${forcarBackend}`)
+    if (forcarBackend === "wasm") {
+      try {
+        const wasm = await import("@tensorflow/tfjs-backend-wasm")
+        wasm.setWasmPaths(`${self.location.origin}/tfjs-wasm/`)
+        await fa.tf.setBackend("wasm")
+        await fa.tf.ready()
+        if (fa.tf.getBackend() === "wasm") return
+      } catch (e) {
+        console.warn("[face-worker] wasm forçado falhou:", e)
+      }
+    }
+    await fa.tf.setBackend("cpu")
+    await fa.tf.ready()
+    return
+  }
+
   // 1. WebGL
   try {
     await fa.tf.setBackend("webgl")
@@ -151,11 +178,11 @@ async function setupBestBackend(fa: typeof import("face-api.js")) {
   console.warn("[face-worker] backend: cpu (LENTO — nem webgl nem wasm disponíveis)")
 }
 
-async function handleInit() {
+async function handleInit(forcarBackend?: "wasm" | "cpu") {
   if (modelsLoaded) return
   const fa = await loadFaceApi()
 
-  await setupBestBackend(fa)
+  await setupBestBackend(fa, forcarBackend)
 
   // No worker, caminhos relativos (/models) podem não resolver dependendo
   // do bundler. Usamos URL absoluto pra garantir.
@@ -316,13 +343,42 @@ async function handleSmileOnly(bitmap: ImageBitmap, smileThreshold: number) {
   return { isSmiling: happy >= smileThreshold, confidence: happy * 100 }
 }
 
+// Id da mensagem sendo processada agora.
+//
+// O TFJS pode estourar dentro de uma promise própria, fora da nossa cadeia de
+// await — foi o que aconteceu quando o contexto WebGL caiu: o erro virou
+// unhandledrejection, o try/catch abaixo nunca viu nada, e a chamada do cliente
+// ficou pendurada para sempre ("Cadastrando..." eterno). Guardamos o id em voo
+// para conseguir responder falha nesses casos.
+let msgEmVoo: number | null = null
+
+function falharMsgEmVoo(motivo: unknown) {
+  const id = msgEmVoo
+  if (id === null) return
+  msgEmVoo = null
+  const msg =
+    (motivo as any)?.message || String(motivo || "erro desconhecido")
+  console.error("[face-worker] falha fora da cadeia de await:", msg)
+  self.postMessage({ id, ok: false, error: msg })
+}
+
+self.addEventListener("unhandledrejection", (ev: any) => {
+  ev.preventDefault?.()
+  falharMsgEmVoo(ev?.reason)
+})
+
+self.addEventListener("error", (ev: any) => {
+  falharMsgEmVoo(ev?.error || ev?.message)
+})
+
 self.onmessage = async (e: MessageEvent) => {
   const { id, type, payload } = e.data
+  msgEmVoo = id
   try {
     let result: any = null
     switch (type) {
       case "init":
-        await handleInit()
+        await handleInit(payload?.forcarBackend)
         result = { backend: faceapi?.tf?.getBackend?.() || "unknown" }
         break
       case "loadDescriptors":
@@ -343,8 +399,10 @@ self.onmessage = async (e: MessageEvent) => {
       default:
         throw new Error(`Mensagem desconhecida: ${type}`)
     }
+    msgEmVoo = null
     self.postMessage({ id, ok: true, result })
   } catch (error: any) {
+    msgEmVoo = null
     console.error("[face-worker] erro:", error)
     self.postMessage({ id, ok: false, error: error?.message || String(error) })
   }

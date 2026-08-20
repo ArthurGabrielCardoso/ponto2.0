@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ChevronLeft, ChevronRight, ArrowDown, ArrowUp, Printer, CalendarCheck, Edit, Plus, Trash2 } from "lucide-react"
 import type { RegistroPonto, ResumoHoras, HorariosSemana } from "@/lib/types"
-import { agruparRegistrosPorDia, minutosParaHoras, calcularSaldoDia, calcularCargaHorariaPorDia, formatarHora } from "@/lib/utils-ponto"
+import { agruparRegistrosPorDia, minutosParaHoras, calcularSaldoDia, calcularCargaHorariaPorDia, formatarHora, obterHorasEsperadasParaData } from "@/lib/utils-ponto"
 import { buscarFuncionarioPorId, buscarRegistrosPorPeriodo, atualizarRegistroPonto, deletarRegistroPonto, criarRegistroPonto, salvarAjusteSaldo, buscarAjusteSaldo, atualizarAjusteSaldo, verificarTabelaAjustesSaldo } from "@/lib/supabase"
 
 interface CalendarioSemanalProps {
@@ -153,7 +153,7 @@ export function CalendarioSemanal({
         
         if (registrosDoDia.length > 0) {
           // Calcular saldo para este dia usando os registros encontrados
-          const resultado = calcularSaldoDia(registrosDoDia, dataIteracao)
+          const resultado = calcularSaldoDia(registrosDoDia, dataIteracao, horariosFuncionario || cargaHorariaDiaria)
           resumoDia = {
             data: dataFormatada,
             saldoDia: resultado.saldoDia,
@@ -174,7 +174,7 @@ export function CalendarioSemanal({
         console.log(`➕ ${dataFormatada}: ${resumoComAjuste.saldoDia}min (total: ${saldoTotal}min)`)
       } else {
         // Se não há registros, considerar como falta (saldo negativo)
-        const horasEsperadas = calcularCargaHorariaPorDia(dataIteracao)
+        const horasEsperadas = obterHorasEsperadasParaData(dataIteracao, horariosFuncionario, cargaHorariaDiaria)
         if (horasEsperadas > 0) { // Só subtrair se for dia útil
           saldoTotal -= horasEsperadas
           console.log(`➖ ${dataFormatada}: falta -${horasEsperadas}min (total: ${saldoTotal}min)`)
@@ -308,9 +308,8 @@ export function CalendarioSemanal({
 
 
   const calcularHorasEsperadasDia = useCallback((dia: Date): number => {
-    // Usar a nova função que aplica a regra: Segunda a Quinta = 9h, Sexta = 8h
-    return calcularCargaHorariaPorDia(dia)
-  }, [])
+    return obterHorasEsperadasParaData(dia, horariosFuncionario, cargaHorariaDiaria)
+  }, [horariosFuncionario, cargaHorariaDiaria])
 
   // (definição duplicada removida)
 
@@ -348,7 +347,7 @@ export function CalendarioSemanal({
       const registrosDoDia = registrosPorDiaMap[dataFormatada] || []
 
       // Usar a nova função de cálculo de saldo
-      const resultado = calcularSaldoDia(registrosDoDia, dia)
+      const resultado = calcularSaldoDia(registrosDoDia, dia, horariosFuncionario || cargaHorariaDiaria)
       
       console.log(`Processando ${dataFormatada}:`, resultado)
 
@@ -790,9 +789,6 @@ export function CalendarioSemanal({
       
       if (ehSexta) {
         console.log("🔥 DEBUG SEXTA-FEIRA:")
-        console.log("   - Registros do banco:", registrosDoDia.length)
-        console.log("   - Resumo no estado:", resumoExistente ? "SIM" : "NÃO")
-        console.log("   - Pares de pontos:", resumoExistente?.paresPontos?.length || 0)
       }
       
       // Se não há registros, criar um registro vazio para permitir adicionar  
@@ -801,9 +797,6 @@ export function CalendarioSemanal({
       // Verificação adicional para sexta-feira: se ainda não tem registros, tentar estado global
       if (ehSexta && registrosParaEditar.length === 0) {
         console.log("🔍 SEXTA SEM REGISTROS - VERIFICANDO TODOS OS ESTADOS:")
-        console.log("   - registros originais:", registros.length)
-        console.log("   - registrosAtualizados:", registrosAtualizados.length)
-        console.log("   - resumosPorDia para hoje:", resumoExistente)
         
         // Tentar buscar nos registros originais também
         const registrosOriginais = registros.filter(r => {
@@ -815,7 +808,6 @@ export function CalendarioSemanal({
           }
         })
         
-        console.log("   - registros originais do dia:", registrosOriginais.length, registrosOriginais)
         
         if (registrosOriginais.length > 0) {
           console.log("🎯 USANDO REGISTROS ORIGINAIS PARA MODAL")
@@ -1177,21 +1169,12 @@ export function CalendarioSemanal({
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as unknown as { debugCalendario: () => void }).debugCalendario = () => {
-        console.log("🔍 DEBUG CALENDÁRIO SEMANAL:")
-        console.log("   - funcionarioId:", funcionarioId)
-        console.log("   - diasDaSemana:", diasDaSemana.map(d => format(d, "dd/MM/yyyy")))
-        console.log("   - registros originais:", registros.length)
-        console.log("   - registrosAtualizados:", registrosAtualizados.length)
-        console.log("   - resumosPorDia:", Object.keys(resumosPorDia).length, resumosPorDia)
         
         const hoje = new Date()
         const hojeFormatado = format(hoje, "dd/MM/yyyy")
-        console.log("   - hoje:", hojeFormatado)
-        console.log("   - resumo de hoje:", resumosPorDia[hojeFormatado])
         
         // Debug do saldo total
         const saldoTotal = calcularSaldoTotalMes(hoje)
-        console.log("   - SALDO TOTAL CALCULADO:", saldoTotal, "min =", minutosParaHoras(saldoTotal))
       }
     }
   }, [funcionarioId, diasDaSemana, registros, registrosAtualizados, resumosPorDia, calcularSaldoTotalMes])
@@ -1555,9 +1538,6 @@ export function CalendarioSemanal({
               
               <div className="space-y-4">
                 {(() => {
-                  console.log("🎨 RENDERIZANDO MODAL - Registros:", registrosEditando.length)
-                  console.log("📝 DETALHES DOS REGISTROS NO MODAL:", registrosEditando)
-                  console.log("📅 DIA EDITANDO:", dataFormatadaEditando)
                   return null
                 })()}
                 {registrosEditando.length === 0 ? (

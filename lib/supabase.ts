@@ -484,54 +484,69 @@ export async function determinarProximoTipo(funcionarioId: string): Promise<stri
 }
 
 // Registrar ponto de um funcionário
+export interface ResultadoRegistroPonto {
+  success: boolean
+  tipo: string
+  emCooldown?: boolean
+  jaRegistrado?: boolean
+  segundosRestantes?: number
+  quantidadeHoje?: number
+  dataHora: string
+  mensagem?: string
+}
+
 export async function registrarPonto(
   funcionarioId: string,
   nomeFuncionario: string,
-  tipoForçado?: string,
-): Promise<{ tipo: string }> {
+  tipoForcado?: string,
+): Promise<ResultadoRegistroPonto> {
   try {
-    // Registrar ponto
-
-    // Verificar se o cliente Supabase está disponível
     if (!isSupabaseAvailable()) {
       console.error("Cliente Supabase não disponível.")
       throw new Error("Supabase indisponível")
     }
 
-    // Buscar o último registro do funcionário
+    const agora = new Date()
+    const dataHoraIso = agora.toISOString()
+
     const ultimoRegistro = await buscarUltimoRegistroPonto(funcionarioId)
 
-    // Guard server-side: BLOQUEAR duplicidade dentro de 60s (1 minuto)
     if (ultimoRegistro) {
-      const agora = Date.now()
       const tsUltimo = new Date(ultimoRegistro.data_hora).getTime()
-      if (Math.abs(agora - tsUltimo) < 60 * 1000) {
-        console.warn("⚠️ BLOQUEADO: Tentativa de registrar em menos de 1 minuto. Ignorando inserção.")
-        // Retornar o tipo do último registro para não causar erro na UI
-        return { tipo: ultimoRegistro.tipo || "Entrada" }
+      const diferencaMs = Math.abs(agora.getTime() - tsUltimo)
+      const COOLDOWN_MS = 60 * 1000
+
+      if (diferencaMs < COOLDOWN_MS) {
+        const segundosRestantes = Math.ceil((COOLDOWN_MS - diferencaMs) / 1000)
+        console.warn(`⚠️ Cooldown ativo (${segundosRestantes}s restantes). Ignorando inserção duplicada.`)
+        return {
+          success: true,
+          tipo: ultimoRegistro.tipo || "Entrada",
+          emCooldown: true,
+          jaRegistrado: true,
+          segundosRestantes,
+          dataHora: ultimoRegistro.data_hora,
+          mensagem: `Ponto já registrado há ${Math.round(diferencaMs / 1000)}s`,
+        }
       }
     }
 
-    // Determinar o tipo de registro baseado na sequência do DIA
-    let tipo = tipoForçado
+    let tipo = tipoForcado
+
+    const inicioDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0).toISOString()
+    const fimDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 23, 59, 59).toISOString()
+
+    const { data: registrosHoje } = await supabase!
+      .from("registros_ponto")
+      .select("id, tipo, data_hora")
+      .eq("funcionario_id", funcionarioId)
+      .gte("data_hora", inicioDia)
+      .lte("data_hora", fimDia)
+      .order("data_hora", { ascending: true })
+
+    const quantidadeHoje = registrosHoje?.length || 0
 
     if (!tipo) {
-      // Buscar TODOS os registros do dia atual
-      const hoje = new Date()
-      const inicioDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 0).toISOString()
-      const fimDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59).toISOString()
-
-      const { data: registrosHoje } = await supabase!
-        .from("registros_ponto")
-        .select("*")
-        .eq("funcionario_id", funcionarioId)
-        .gte("data_hora", inicioDia)
-        .lte("data_hora", fimDia)
-        .order("data_hora", { ascending: true })
-
-      const quantidadeHoje = (registrosHoje as unknown as RegistroPonto[])?.length || 0
-
-      // Sequência FIXA: 1º = Entrada, 2º = Saída Almoço, 3º = Retorno Almoço, 4º = Saída
       switch (quantidadeHoje) {
         case 0:
           tipo = "Entrada"
@@ -546,38 +561,43 @@ export async function registrarPonto(
           tipo = "Saída"
           break
         default:
-          // Se já tem 4 ou mais registros no dia, não permitir mais
-          console.warn("⚠️ BLOQUEADO: Limite de 4 registros por dia atingido.")
-          throw new Error("Limite de registros por dia atingido (4 registros)")
+          tipo = "Registro Extra"
+          break
       }
     }
 
-    // Tipo de registro determinado
-    const dataHora = new Date().toISOString()
-
-    const { error } = await supabase!
+    const { error: erroInsert } = await supabase!
       .from("registros_ponto")
       .insert([
         {
           funcionario_id: funcionarioId,
           nome_funcionario: nomeFuncionario,
-          data_hora: dataHora,
+          data_hora: dataHoraIso,
           tipo: tipo,
         },
       ])
 
-    if (error) {
-      console.error("Erro ao registrar ponto:", error)
-      throw error
+    if (erroInsert) {
+      console.error("Erro ao registrar ponto no Supabase:", erroInsert)
+      throw erroInsert
     }
 
-    console.log(`✅ Ponto registrado: ${tipo}`)
-    return { tipo: tipo || "Entrada" }
+    console.log(`✅ Ponto registrado com sucesso: ${nomeFuncionario} -> ${tipo} (${quantidadeHoje + 1}º do dia)`)
+
+    return {
+      success: true,
+      tipo: tipo || "Entrada",
+      emCooldown: false,
+      jaRegistrado: false,
+      quantidadeHoje: quantidadeHoje + 1,
+      dataHora: dataHoraIso,
+    }
   } catch (error) {
     console.error("Exceção ao registrar ponto:", error)
     throw error as Error
   }
 }
+
 
 // Função para simular registro de ponto (não utilizada)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -895,16 +915,45 @@ function obterDiaSemana(dia: number): keyof HorariosSemana {
 }
 
 // Atualizar horários de um funcionário
-export async function atualizarHorariosFuncionario(id: string, horarios: HorariosSemana): Promise<void> {
+function calcularCargaHorariaMediaSemana(horarios: HorariosSemana): number {
+  let totalMinutos = 0
+  let diasAtivos = 0
+  for (const dia of Object.values(horarios)) {
+    if (dia && dia.ativo) {
+      const [hE, mE] = (dia.entrada || "08:00").split(":").map(Number)
+      const [hSA, mSA] = (dia.saida_almoco || "12:00").split(":").map(Number)
+      const [hRA, mRA] = (dia.retorno_almoco || "13:00").split(":").map(Number)
+      const [hS, mS] = (dia.saida || "17:00").split(":").map(Number)
+      const totalDia = Math.max(0, (hS * 60 + mS - (hE * 60 + mE)) - (hRA * 60 + mRA - (hSA * 60 + mSA)))
+      totalMinutos += totalDia
+      diasAtivos++
+    }
+  }
+  return diasAtivos > 0 ? Math.round(totalMinutos / diasAtivos) : 480
+}
+
+export async function atualizarHorariosFuncionario(
+  id: string,
+  horarios: HorariosSemana,
+  cargaHorariaCustom?: number
+): Promise<void> {
   try {
     if (!isSupabaseAvailable()) {
       console.warn("Cliente Supabase não disponível. Operação simulada.")
       return
     }
 
+    const cargaHorariaDiaria =
+      typeof cargaHorariaCustom === "number" && cargaHorariaCustom > 0
+        ? cargaHorariaCustom
+        : calcularCargaHorariaMediaSemana(horarios)
+
     const { error } = await supabase!
       .from("funcionarios")
-      .update({ horarios: horarios })
+      .update({
+        horarios: horarios,
+        carga_horaria_diaria_minutos: cargaHorariaDiaria,
+      })
       .eq("id", id)
 
     if (error) {
@@ -912,14 +961,14 @@ export async function atualizarHorariosFuncionario(id: string, horarios: Horario
       throw error
     }
 
-    console.log("Horários atualizados com sucesso para funcionário:", id)
+    console.log("Horários e carga horária atualizados com sucesso para funcionário:", id, `(${cargaHorariaDiaria}min)`)
   } catch (error) {
     console.error("Erro ao atualizar horários:", error)
     throw error as Error
   }
 }
 
-// Atualizar registro de ponto existente
+
 export async function atualizarRegistroPonto(id: string, data_hora: string, tipo: string): Promise<void> {
   try {
     if (!isSupabaseAvailable()) {

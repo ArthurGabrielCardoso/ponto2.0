@@ -27,6 +27,8 @@ let modelsLoaded = false
 let modelsLoading: Promise<void> | null = null
 let descriptorCount = 0
 let tfBackend = ""
+// Depois de uma queda de GPU, o resto da sessão roda em WASM.
+let backendForcado: "wasm" | undefined
 
 export interface RecognitionResult {
   id: string
@@ -72,19 +74,77 @@ function getWorker(): Worker {
 function call<T>(
   type: string,
   payload?: any,
-  transfer?: Transferable[]
+  transfer?: Transferable[],
+  timeoutMs = 30000
 ): Promise<T> {
   const w = getWorker()
   const id = ++nextMsgId
   return new Promise<T>((resolve, reject) => {
-    pending.set(id, { resolve, reject })
+    // Rede de segurança: se o worker morrer de vez (contexto WebGL perdido
+    // derruba a thread inteira em alguns drivers), nenhuma resposta volta e a
+    // promise fica pendurada. Sem isto a tela trava em "Cadastrando..." e o
+    // usuário não tem como saber o que houve.
+    const timer = setTimeout(() => {
+      if (!pending.has(id)) return
+      pending.delete(id)
+      reject(
+        new Error(
+          `O reconhecimento facial não respondeu em ${Math.round(timeoutMs / 1000)}s (etapa: ${type}).`
+        )
+      )
+    }, timeoutMs)
+
+    pending.set(id, {
+      resolve: (v: any) => {
+        clearTimeout(timer)
+        resolve(v)
+      },
+      reject: (e: Error) => {
+        clearTimeout(timer)
+        reject(e)
+      },
+    })
+
     try {
       w.postMessage({ id, type, payload }, transfer || [])
     } catch (err) {
+      clearTimeout(timer)
       pending.delete(id)
       reject(err as Error)
     }
   })
+}
+
+/**
+ * Mata o worker e limpa o estado, para que a próxima chamada recrie tudo.
+ * Usado quando a GPU cai: um contexto WebGL perdido não se recupera.
+ */
+function destruirWorker(motivo: string) {
+  console.warn(`[face-client] reiniciando worker: ${motivo}`)
+  for (const [, p] of pending) p.reject(new Error(motivo))
+  pending.clear()
+  if (worker) {
+    worker.terminate()
+    worker = null
+  }
+  modelsLoaded = false
+  modelsLoading = null
+  descriptorCount = 0
+}
+
+/**
+ * Erros que indicam GPU/WebGL morta — vale reiniciar no backend WASM.
+ */
+function ehFalhaDeGpu(erro: unknown): boolean {
+  const msg = String((erro as any)?.message || erro || "").toLowerCase()
+  return (
+    msg.includes("webgl") ||
+    msg.includes("context") ||
+    msg.includes("shader") ||
+    msg.includes("out_of_memory") ||
+    msg.includes("out of memory") ||
+    msg.includes("não respondeu")
+  )
 }
 
 /**
@@ -120,7 +180,12 @@ export async function initModels(): Promise<void> {
   modelsLoading = (async () => {
     try {
       console.log("🧠 Inicializando worker de reconhecimento...")
-      const initResult = await call<{ backend: string }>("init")
+      const initResult = await call<{ backend: string }>(
+        "init",
+        { forcarBackend: backendForcado },
+        undefined,
+        120000 // carregar 4 modelos + warmup é lento em máquina fraca
+      )
       tfBackend = initResult?.backend || "unknown"
       modelsLoaded = true
       console.log(`✅ Worker pronto (backend: ${tfBackend})`)
@@ -242,12 +307,31 @@ export async function extractDescriptorFromBase64(
   imageBase64: string
 ): Promise<DescriptorExtraction | null> {
   await initModels()
-  const bitmap = await base64ToBitmap(imageBase64)
-  return await call<DescriptorExtraction | null>(
-    "extractDescriptor",
-    { bitmap },
-    [bitmap]
-  )
+
+  const tentar = async () => {
+    // Um ImageBitmap só pode ser transferido uma vez — recriar a cada tentativa.
+    const bitmap = await base64ToBitmap(imageBase64)
+    return await call<DescriptorExtraction | null>(
+      "extractDescriptor",
+      { bitmap },
+      [bitmap],
+      45000
+    )
+  }
+
+  try {
+    return await tentar()
+  } catch (erro) {
+    if (!ehFalhaDeGpu(erro) || backendForcado === "wasm") throw erro
+
+    // A GPU caiu (típico de Intel integrada: o compilador HLSL estoura ao
+    // montar shaders novos). Contexto WebGL perdido não volta — recria o
+    // worker em WASM, que é mais lento porém não depende de driver gráfico.
+    destruirWorker("falha de GPU no cadastro, migrando para WASM")
+    backendForcado = "wasm"
+    await initModels()
+    return await tentar()
+  }
 }
 
 export function isReady(): boolean {
