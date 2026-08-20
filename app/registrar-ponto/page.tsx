@@ -1,5 +1,6 @@
-import { obterLocalizacaoAtual } from "@/lib/geolocation"
 "use client"
+
+import { obterLocalizacaoAtual } from "@/lib/geolocation"
 
 /**
  * Página de Registro de Ponto - RECONHECIMENTO LOCAL
