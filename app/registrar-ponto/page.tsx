@@ -75,47 +75,28 @@ function SuccessAnimation({ tipo }: { tipo: string }) {
 }
 // Screensaver com relógio em tempo real e saudação dinâmica
 // Efeito de moldura luminosa e cantos futuristas nas bordas da tela ao identificar pessoa
-// Efeito de moldura luminosa com pulsação vibrante nas bordas ao identificar e sorrir
-function ViewfinderBorder({ isSmiling }: { isSmiling: boolean }) {
+// Moldura luminosa esmeralda pulsante ativada exclusivamente ao sorrir
+function ViewfinderBorder() {
   return (
     <>
       <style>{`
         @keyframes smilePulseIntense {
           0%, 100% {
             border-color: rgba(52, 211, 153, 0.95);
-            box-shadow: inset 0 0 70px rgba(16, 185, 129, 0.55), 0 0 35px rgba(16, 185, 129, 0.4);
+            box-shadow: inset 0 0 70px rgba(16, 185, 129, 0.6), 0 0 35px rgba(16, 185, 129, 0.45);
             transform: scale(1);
           }
           50% {
             border-color: rgba(16, 185, 129, 1);
-            box-shadow: inset 0 0 130px rgba(16, 185, 129, 0.9), 0 0 80px rgba(52, 211, 153, 0.8);
+            box-shadow: inset 0 0 130px rgba(16, 185, 129, 0.95), 0 0 80px rgba(52, 211, 153, 0.85);
             transform: scale(1.002);
           }
         }
-        @keyframes identifyPulseGentle {
-          0%, 100% {
-            border-color: rgba(45, 212, 191, 0.75);
-            box-shadow: inset 0 0 55px rgba(20, 184, 166, 0.3);
-          }
-          50% {
-            border-color: rgba(20, 184, 166, 0.95);
-            box-shadow: inset 0 0 80px rgba(20, 184, 166, 0.5);
-          }
-        }
         .smile-glow-pulse {
-          animation: smilePulseIntense 0.5s ease-in-out infinite;
-        }
-        .identify-glow-pulse {
-          animation: identifyPulseGentle 1.8s ease-in-out infinite;
+          animation: smilePulseIntense 0.45s ease-in-out infinite;
         }
       `}</style>
-      <div
-        className={`fixed inset-0 pointer-events-none z-20 transition-all duration-300 ${
-          isSmiling
-            ? "border-[7px] sm:border-[8px] smile-glow-pulse"
-            : "border-[5px] sm:border-[6px] identify-glow-pulse"
-        }`}
-      />
+      <div className="fixed inset-0 pointer-events-none z-20 border-[7px] sm:border-[8px] smile-glow-pulse" />
     </>
   )
 }
@@ -742,75 +723,48 @@ export default function RegistrarPonto() {
         />
       </div>
 
-      {/* Moldura luminosa instantânea nas bordas da tela ao detectar rosto */}
-      {recognizedPerson && !recognizedPerson.registroCompleto && !showSuccess && (
-        <ViewfinderBorder isSmiling={recognizedPerson.isSmiling} />
+      {/* Moldura luminosa esmeralda — Exibida exclusivamente quando a pessoa sorri */}
+      {recognizedPerson && recognizedPerson.isSmiling && !recognizedPerson.registroCompleto && !showSuccess && (
+        <ViewfinderBorder />
       )}
 
-      {/* Status em Glassmorphism Cristalino Translúcido — Surge ~0.65s após a borda iluminar */}
-      {recognizedPerson && !recognizedPerson.registroCompleto && !showSuccess && (
-        <div className="absolute bottom-0 left-0 right-0 z-30 w-full pointer-events-none">
-          <style>{`
-            @keyframes glassSlideUp {
-              0% { opacity: 0; transform: translateY(100%); }
-              100% { opacity: 1; transform: translateY(0); }
-            }
-            .bottom-bar-staggered {
-              animation: glassSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.65s both;
-            }
-          `}</style>
+      {/* Status em Glassmorphism Dourado - Pessoa reconhecida (Oculta ao sorrir) */}
+      {recognizedPerson && !recognizedPerson.isSmiling && !recognizedPerson.registroCompleto && !showSuccess && (
+        <div className="absolute bottom-0 left-0 right-0 z-30 w-full pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div
-            className={`bottom-bar-staggered py-5 px-6 border-t backdrop-blur-2xl transition-all duration-300 text-center space-y-1`}
+            className="py-5 px-6 border-t backdrop-blur-2xl text-center space-y-1 text-white"
             style={{
-              background: recognizedPerson.isSmiling
-                ? "linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(16, 185, 129, 0.38) 100%)"
-                : "linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(29, 185, 179, 0.32) 100%)",
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-              borderColor: recognizedPerson.isSmiling
-                ? "rgba(110, 231, 183, 0.7)"
-                : "rgba(255, 255, 255, 0.45)",
-              boxShadow: recognizedPerson.isSmiling
-                ? "0 -10px 40px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.6)"
-                : "0 -10px 35px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.45)",
+              background: "linear-gradient(180deg, rgba(198, 158, 107, 0.88) 0%, rgba(166, 124, 78, 0.94) 100%)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              borderColor: "rgba(255, 255, 255, 0.4)",
+              boxShadow: "0 -10px 30px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4)",
             }}
           >
-            <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white drop-shadow-md">
+            <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white drop-shadow">
               {recognizedPerson.nome}
             </div>
-            <div className="text-sm sm:text-base font-medium">
-              {recognizedPerson.isSmiling ? (
-                <span className="text-emerald-100 font-semibold tracking-wide drop-shadow-sm animate-pulse">
-                  Sorriso detectado! Registrando ponto...
-                </span>
-              ) : (
-                <span className="text-white/95 font-medium tracking-wide drop-shadow-sm">
-                  Sorria para registrar seu ponto
-                </span>
-              )}
+            <div className="text-sm sm:text-base font-medium text-amber-100/95 tracking-wide drop-shadow-sm">
+              Sorria para registrar seu ponto
             </div>
           </div>
         </div>
       )}
 
-      {/* Indicador estável em Glassmorphism Cristalino — Identificando */}
+      {/* Indicador em Glassmorphism Dourado — Posicione seu rosto na câmera (Sem bolinha) */}
       {!screensaver && !showSuccess && !recognizedPerson && modelsReady && cameraActive && (
         <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none animate-in fade-in duration-300">
           <div
-            className="py-4 px-6 border-t backdrop-blur-xl text-white flex items-center justify-center gap-3"
+            className="py-4 px-6 border-t backdrop-blur-xl text-white text-center"
             style={{
-              background: "linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(0, 0, 0, 0.3) 100%)",
+              background: "linear-gradient(180deg, rgba(198, 158, 107, 0.8) 0%, rgba(150, 107, 60, 0.9) 100%)",
               backdropFilter: "blur(20px)",
               WebkitBackdropFilter: "blur(20px)",
-              borderColor: "rgba(255, 255, 255, 0.25)",
+              borderColor: "rgba(255, 255, 255, 0.35)",
               boxShadow: "0 -8px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
             }}
           >
-            <div className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-300 opacity-80"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-300 shadow-[0_0_8px_rgba(45,212,191,0.8)]"></span>
-            </div>
-            <span className="text-sm font-medium tracking-wide text-white drop-shadow-sm">
+            <span className="text-sm sm:text-base font-medium tracking-wide text-white drop-shadow-sm">
               Posicione seu rosto na câmera
             </span>
           </div>
