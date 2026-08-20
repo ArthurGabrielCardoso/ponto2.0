@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 
 const ENDPOINT = "https://texttospeech.googleapis.com/v1/text:synthesize"
 const DEFAULT_LANGUAGE = "pt-BR"
-// Voz classica e oficial do Google Maps / Google Tradutor no Brasil: pt-BR-Wavenet-A
-const DEFAULT_VOICE = process.env.TTS_VOICE || process.env.GOOGLE_TTS_VOICE || "pt-BR-Wavenet-A"
+// Voz Chirp 3 HD Aoede: Voz generativa ultra-realista humana do Google Cloud (mesma do daily-briefing)
+const DEFAULT_VOICE = process.env.TTS_VOICE || process.env.GOOGLE_TTS_VOICE || "pt-BR-Chirp3-HD-Aoede"
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.GOOGLE_TTS_API_KEY || process.env.GOOGLE_API_KEY
 
-    // Se a chave nao estiver configurada no ambiente (ex: local antes do deploy), avisa para usar o fallback local do browser
+    // Se a chave nao estiver configurada no ambiente, avisa para usar o fallback local do browser
     if (!apiKey) {
       return NextResponse.json(
         {
@@ -32,13 +32,10 @@ export async function POST(req: NextRequest) {
       voice: {
         languageCode: DEFAULT_LANGUAGE,
         name: voice,
-        ssmlGender: "FEMALE",
       },
       audioConfig: {
         audioEncoding: "MP3",
         sampleRateHertz: 24000,
-        speakingRate: 1.0, // Ritmo limpo e natural do Google Maps
-        pitch: 0.0,
       },
     }
 
