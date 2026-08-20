@@ -187,7 +187,7 @@ function Screensaver({ onTap }: { onTap: () => void }) {
   useEffect(() => {
     const tick = () => {
       const now = new Date()
-      setTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }))
+      setTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }))
       const h = now.getHours()
       if (h < 12) setPeriodo("Excelente dia")
       else if (h < 18) setPeriodo("Excelente tarde")
@@ -248,9 +248,9 @@ function Screensaver({ onTap }: { onTap: () => void }) {
     >
       <style>{`
         @keyframes fadeUp{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
-        @keyframes nameSlideFade{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
+        @keyframes smoothNameFade{0%{opacity:0;transform:translateY(4px);filter:blur(3px)}100%{opacity:1;transform:translateY(0);filter:blur(0)}}
         .ss-fade{animation:fadeUp .6s ease-out both}
-        .ss-name-rot{animation:nameSlideFade .4s ease-out both}
+        .ss-name-smooth{display:inline-block;animation:smoothNameFade .8s cubic-bezier(0.22, 1, 0.36, 1) both}
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
@@ -267,7 +267,7 @@ function Screensaver({ onTap }: { onTap: () => void }) {
         <h2 className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight flex items-center justify-center flex-wrap">
           <span>{periodo},</span>
           {nomeAtual ? (
-            <span key={nomeAtual} className="ss-name-rot font-normal ml-2 sm:ml-3">
+            <span key={nomeAtual} className="ss-name-smooth font-normal ml-2 sm:ml-3">
               {nomeAtual}!
             </span>
           ) : (
