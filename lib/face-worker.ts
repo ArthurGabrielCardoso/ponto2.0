@@ -85,6 +85,12 @@ const TINY_SCORE_THRESHOLD = 0.5
 const WORK_WIDTH = 192
 const WORK_HEIGHT = 144
 
+// Cadastro roda uma vez por foto, não a 10fps: vale gastar resolução.
+// 192x144 (o tamanho de reconhecimento) produz descritor ruim, e um descritor
+// ruim gravado no banco estraga o reconhecimento daquele funcionário para sempre.
+const ENROLL_MAX_SIDE = 640
+const ENROLL_INPUT_SIZE = 320
+
 let modelsLoaded = false
 let faceMatcher: any = null
 const employeeMap = new Map<string, string>() // id -> nome
@@ -213,6 +219,56 @@ async function handleDetectFast(bitmap: ImageBitmap) {
   return { x: det.box.x, y: det.box.y, width: det.box.width, height: det.box.height }
 }
 
+/**
+ * Versão de alta resolução do bitmapToWorkCanvas, para cadastro.
+ * Preserva o aspecto e limita o lado maior a ENROLL_MAX_SIDE.
+ */
+function bitmapToEnrollCanvas(bitmap: ImageBitmap): OffscreenCanvas {
+  const escala = Math.min(1, ENROLL_MAX_SIDE / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * escala))
+  const h = Math.max(1, Math.round(bitmap.height * escala))
+  const canvas = new OffscreenCanvas(w, h)
+  const ctx = canvas.getContext("2d")!
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close()
+  return canvas
+}
+
+/**
+ * Extrai o descritor 128D de uma foto de cadastro.
+ *
+ * Usa withFaceLandmarks(true) — a rede *tiny*, a mesma que handleRecognize usa.
+ * O alinhamento do rosto sai dos landmarks, então cadastrar com a rede não-tiny
+ * e reconhecer com a tiny desloca o descritor e derruba a similaridade.
+ *
+ * Retorna null quando não há rosto: é uma resposta esperada, não um erro.
+ */
+async function handleExtractDescriptor(bitmap: ImageBitmap) {
+  if (!modelsLoaded) {
+    bitmap.close()
+    throw new Error("Modelos ainda não foram carregados")
+  }
+
+  const canvas = bitmapToEnrollCanvas(bitmap)
+  const det = await faceapi!
+    .detectSingleFace(
+      canvas as any,
+      new faceapi!.TinyFaceDetectorOptions({
+        inputSize: ENROLL_INPUT_SIZE,
+        scoreThreshold: TINY_SCORE_THRESHOLD,
+      }),
+    )
+    .withFaceLandmarks(true)
+    .withFaceDescriptor()
+
+  if (!det) return null
+
+  return {
+    descriptor: Array.from(det.descriptor as Float32Array),
+    confidence: det.detection.score * 100,
+  }
+}
+
 async function handleRecognize(bitmap: ImageBitmap, smileThreshold: number) {
   if (!modelsLoaded || !faceMatcher) {
     bitmap.close()
@@ -280,6 +336,9 @@ self.onmessage = async (e: MessageEvent) => {
         break
       case "smileOnly":
         result = await handleSmileOnly(payload.bitmap, payload.smileThreshold)
+        break
+      case "extractDescriptor":
+        result = await handleExtractDescriptor(payload.bitmap)
         break
       default:
         throw new Error(`Mensagem desconhecida: ${type}`)

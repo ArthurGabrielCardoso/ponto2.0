@@ -1,86 +1,87 @@
 import { NextRequest, NextResponse } from "next/server"
-import { indexFace } from "@/lib/face-api-server"
 import { atualizarDescritoresFuncionario, buscarFuncionarioPorId } from "@/lib/supabase"
+import {
+  ERRO_CONTRATO_ANTIGO,
+  TAMANHO_DESCRITOR,
+  usandoContratoAntigo,
+  validarDescritores,
+} from "@/lib/descritores"
 
 export const runtime = "nodejs"
 
+/**
+ * Acrescenta descritores faciais a um funcionário já cadastrado.
+ *
+ * Mesma migração da rota add-person: a extração saiu do servidor (que dependia
+ * do `canvas` nativo, quebrado no serverless) e foi para o worker do navegador.
+ * Aqui a rota valida, mescla com o que já existe e grava.
+ */
+
+type CorpoAtualizacao = {
+  funcionarioId?: unknown
+  descritores?: unknown
+  fotos?: unknown
+}
+
+function falha(erro: string, status: number) {
+  return NextResponse.json({ success: false, error: erro }, { status })
+}
+
 export async function POST(request: NextRequest) {
+  let body: CorpoAtualizacao
   try {
-    const body = await request.json()
-    const { funcionarioId, fotos } = body as {
-      funcionarioId: string
-      fotos: string[]
-    }
+    body = await request.json()
+  } catch {
+    return falha("O corpo da requisição não é um JSON válido.", 400)
+  }
 
-    if (!funcionarioId || !fotos || fotos.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "funcionarioId e fotos são obrigatórios" },
-        { status: 400 }
-      )
-    }
+  const funcionarioId =
+    typeof body.funcionarioId === "string" ? body.funcionarioId.trim() : ""
+  if (!funcionarioId) {
+    return falha("O campo 'funcionarioId' é obrigatório.", 400)
+  }
 
-    console.log(`📸 Atualizando funcionário: ${funcionarioId}`)
-    console.log(`📊 Total de novas fotos: ${fotos.length}`)
+  if (usandoContratoAntigo(body)) {
+    return falha(ERRO_CONTRATO_ANTIGO, 400)
+  }
 
-    // Buscar descritores existentes do funcionário
+  const validacao = validarDescritores(body.descritores)
+  if (!validacao.ok) {
+    return falha(validacao.erro, validacao.status)
+  }
+  const novosDescritores = validacao.descritores
+
+  try {
     const funcionario = await buscarFuncionarioPorId(funcionarioId)
-    const descritoresExistentes = funcionario?.descritores || []
-
-    // Extrair descritores das novas fotos com face-api.js
-    const faceIds: string[] = []
-    const novosDescritores: number[][] = []
-    const resultadosFotos: { foto: number; confianca: number; sucesso: boolean }[] = []
-    let fotosAdicionadas = 0
-
-    for (let i = 0; i < fotos.length; i++) {
-      try {
-        console.log(`📸 Processando foto ${i + 1}/${fotos.length}...`)
-
-        const result = await indexFace(fotos[i], funcionarioId)
-
-        faceIds.push(result.faceId)
-        novosDescritores.push(result.descriptor)
-        fotosAdicionadas++
-
-        resultadosFotos.push({ foto: i + 1, confianca: Math.round(result.confidence * 10) / 10, sucesso: true })
-        console.log(`✅ Foto ${i + 1} processada! Confiança: ${result.confidence.toFixed(1)}%`)
-      } catch (error) {
-        console.error(`❌ Erro ao processar foto ${i + 1}:`, error)
-        resultadosFotos.push({ foto: i + 1, confianca: 0, sucesso: false })
-      }
+    if (!funcionario) {
+      return falha(`Funcionário ${funcionarioId} não encontrado.`, 404)
     }
 
-    if (fotosAdicionadas === 0) {
-      throw new Error("Nenhuma foto pôde ser processada")
-    }
+    // Descarta descritores legados de outra dimensão que possam estar no banco:
+    // misturá-los com os 128D faria o FaceMatcher lançar erro no reconhecimento.
+    const existentes = (funcionario.descritores || []).filter(
+      (d) => Array.isArray(d) && d.length === TAMANHO_DESCRITOR,
+    )
+    const todos = [...existentes, ...novosDescritores]
 
-    // Combinar descritores existentes (128D) com novos
-    const descritoresValidos = descritoresExistentes.filter(d => d.length === 128)
-    const todosDescritores = [...descritoresValidos, ...novosDescritores]
+    await atualizarDescritoresFuncionario(funcionarioId, todos)
 
-    // Salvar no Supabase
-    await atualizarDescritoresFuncionario(funcionarioId, todosDescritores)
-
-    console.log(`✅ Funcionário atualizado com sucesso!`)
-    console.log(`📊 Fotos adicionadas: ${fotosAdicionadas}/${fotos.length}`)
+    console.log(
+      `[update-person] ${funcionarioId}: +${novosDescritores.length} descritor(es), total ${todos.length}`,
+    )
 
     return NextResponse.json({
       success: true,
-      message: `Fotos adicionadas com sucesso!`,
-      funcionarioId: funcionarioId,
-      fotosAdicionadas,
-      fotosTotais: fotos.length,
-      faceIds,
-      resultadosFotos,
+      message: "Fotos adicionadas com sucesso!",
+      funcionarioId,
+      descritoresAdicionados: novosDescritores.length,
+      descritoresTotais: todos.length,
     })
-  } catch (error) {
-    console.error("Erro ao atualizar funcionário:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Erro ao atualizar funcionário",
-      },
-      { status: 500 }
+  } catch (erro) {
+    console.error("[update-person] falha ao gravar no Supabase:", erro)
+    return falha(
+      erro instanceof Error ? erro.message : "Erro ao atualizar funcionário.",
+      500,
     )
   }
 }

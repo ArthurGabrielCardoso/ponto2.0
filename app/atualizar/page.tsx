@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { buscarFuncionarios } from "@/lib/supabase"
+import { extrairDescritores, lerResposta } from "@/lib/cadastro-cliente"
 import { UserPlus, Camera, AlertCircle } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import Image from "next/image"
@@ -165,75 +166,42 @@ export default function AtualizarFuncionario() {
     try {
       setIsLoading(true)
       setLogProcessamento([])
-      setStatus("Inicializando reconhecimento facial...")
-      setLogProcessamento(prev => [...prev, "🧠 Carregando modelos de reconhecimento facial..."])
+      setStatus("Processando fotos para reconhecimento facial...")
 
       const fotos = fotosBase64Ref.current
 
-      // Mostrar progresso simulado para cada foto enquanto a API processa
-      setLogProcessamento(prev => [...prev, "✅ Modelos carregados com sucesso!"])
+      // Extração roda no navegador. O progresso abaixo é real: antes o loop
+      // simulava as etapas e mandava tudo de uma vez na primeira iteração.
+      const descritores = await extrairDescritores(fotos, (logs) => {
+        setLogProcessamento(logs)
+        const feitas = logs.filter((l) => l.startsWith("✅ Foto") || l.startsWith("❌ Foto")).length
+        setProgresso(fotos.length > 0 ? (feitas / fotos.length) * 100 : 0)
+      })
 
-      for (let i = 0; i < fotos.length; i++) {
-        setLogProcessamento(prev => [...prev, `📸 Processando foto ${i + 1}/${fotos.length}...`])
-        setStatus(`Processando foto ${i + 1} de ${fotos.length}...`)
-        setProgresso(((i) / fotos.length) * 100)
+      setStatus("Salvando...")
+      const response = await fetch('/api/aws/update-person', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          funcionarioId: funcionarioSelecionado,
+          descritores
+        })
+      })
 
-        if (i === 0) {
-          // Na primeira foto, envia todas para a API
-          const response = await fetch('/api/aws/update-person', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              funcionarioId: funcionarioSelecionado,
-              fotos
-            })
-          })
+      await lerResposta(response)
 
-          const result = await response.json()
-
-          if (!result.success) {
-            throw new Error(result.error || 'Erro ao atualizar fotos')
-          }
-
-          // Mostrar resultados de cada foto
-          if (result.resultadosFotos) {
-            // Limpar logs de "processando" e mostrar resultados reais
-            const logsBase = ["🧠 Carregando modelos de reconhecimento facial...", "✅ Modelos carregados com sucesso!"]
-
-            for (let j = 0; j < result.resultadosFotos.length; j++) {
-              const r = result.resultadosFotos[j]
-              if (j > 0) {
-                logsBase.push(`📸 Processando foto ${j + 1}/${fotos.length}...`)
-              } else {
-                logsBase.push(`📸 Processando foto 1/${fotos.length}...`)
-              }
-              if (r.sucesso) {
-                logsBase.push(`✅ Foto ${r.foto} processada! Confiança: ${r.confianca}%`)
-              } else {
-                logsBase.push(`❌ Foto ${r.foto} falhou no processamento`)
-              }
-            }
-
-            logsBase.push(`✅ Funcionário atualizado com sucesso!`)
-            logsBase.push(`📊 Fotos adicionadas: ${result.fotosAdicionadas}/${result.fotosTotais}`)
-
-            setLogProcessamento(logsBase)
-            setProgresso(100)
-            setStatus(`✅ Fotos atualizadas! ${result.fotosAdicionadas} novas fotos processadas com sucesso.`)
-          }
-
-          // Pular loop (já processou tudo)
-          break
-        }
-      }
+      setLogProcessamento(prev => [...prev, "✅ Funcionário atualizado com sucesso!"])
+      setProgresso(100)
+      setStatus(`✅ Fotos atualizadas! ${descritores.length} nova(s) foto(s) processada(s).`)
 
       // Redirecionar após 4 segundos (mais tempo para ler os logs)
       setTimeout(() => {
         router.push("/dashboard")
       }, 4000)
     } catch (error) {
-      setLogProcessamento(prev => [...prev, `❌ Erro: ${error instanceof Error ? error.message : String(error)}`])
-      setStatus(`Erro: ${error instanceof Error ? error.message : String(error)}`)
+      const msg = error instanceof Error ? error.message : String(error)
+      setLogProcessamento(prev => [...prev, `❌ Erro: ${msg}`])
+      setStatus(`Erro: ${msg}`)
     } finally {
       setIsLoading(false)
     }

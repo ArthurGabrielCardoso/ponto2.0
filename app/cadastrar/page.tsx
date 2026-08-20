@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { buscarFuncionarios, deletarFuncionario } from "@/lib/supabase"
+import { extrairDescritores, lerResposta } from "@/lib/cadastro-cliente"
 import { UserPlus, ArrowLeft, Check, Camera, Clock, AlertCircle } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import type { HorariosSemana, HorarioDia } from "@/lib/types"
@@ -401,53 +402,37 @@ export default function Cadastrar() {
     if (!funcionarioSelecionado) return
     try {
       setIsLoading(true)
+      setError(null)
       setLogProcessamento([])
+
       setStatus("Processando fotos para reconhecimento facial...")
-      setLogProcessamento(["🧠 Carregando modelos de reconhecimento facial...", "✅ Modelos carregados com sucesso!"])
-
       const fotos = fotosBase64Ref.current
+      const descritores = await extrairDescritores(fotos, setLogProcessamento)
 
+      setStatus("Salvando...")
       const response = await fetch('/api/aws/update-person', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           funcionarioId: funcionarioSelecionado,
-          fotos
+          descritores
         })
       })
 
-      const result = await response.json()
+      await lerResposta(response)
 
-      if (!result.success) {
-        throw new Error(result.error || 'Erro ao atualizar fotos')
-      }
-
-      // Mostrar resultados detalhados
-      if (result.resultadosFotos) {
-        const logsDetalhados = ["🧠 Carregando modelos de reconhecimento facial...", "✅ Modelos carregados com sucesso!"]
-        for (const r of result.resultadosFotos) {
-          logsDetalhados.push(`📸 Processando foto ${r.foto}/${fotos.length}...`)
-          if (r.sucesso) {
-            logsDetalhados.push(`✅ Foto ${r.foto} processada! Confiança: ${r.confianca}%`)
-          } else {
-            logsDetalhados.push(`❌ Foto ${r.foto} falhou no processamento`)
-          }
-        }
-        logsDetalhados.push(`✅ Funcionário atualizado com sucesso!`)
-        logsDetalhados.push(`📊 Fotos adicionadas: ${result.fotosAdicionadas}/${result.fotosTotais}`)
-        setLogProcessamento(logsDetalhados)
-      }
-
-      setStatus(`✅ Fotos atualizadas! ${result.fotosAdicionadas} novas fotos processadas com sucesso.`)
+      setLogProcessamento(prev => [...prev, "✅ Funcionário atualizado com sucesso!"])
+      setStatus(`✅ Fotos atualizadas! ${descritores.length} nova(s) foto(s) processada(s).`)
 
       // Redirecionar após 4 segundos
       setTimeout(() => {
         router.push("/dashboard")
       }, 4000)
     } catch (error) {
-      setLogProcessamento(prev => [...prev, `❌ Erro: ${error instanceof Error ? error.message : String(error)}`])
-      setStatus(`Erro: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
+      const msg = error instanceof Error ? error.message : String(error)
+      setLogProcessamento(prev => [...prev, `❌ Erro: ${msg}`])
+      setError(`Erro ao atualizar fotos: ${msg}`)
+      setStatus("Erro ao atualizar fotos. Verifique os detalhes acima.")
       setIsLoading(false)
     }
   }
@@ -460,52 +445,29 @@ export default function Cadastrar() {
       setStatus("Cadastrando funcionário...")
       setIsLoading(true)
 
-      const fotos = fotosBase64Ref.current
-
-      setLogProcessamento(["🧠 Carregando modelos de reconhecimento facial...", "✅ Modelos carregados com sucesso!"])
       setStatus("Processando fotos para reconhecimento facial...")
+      const fotos = fotosBase64Ref.current
+      const descritores = await extrairDescritores(fotos, setLogProcessamento)
 
       // Calcular a carga horária média diária
       const cargaHorariaMedia = calcularCargaHorariaMedia()
 
-      // Cadastrar via API
+      setStatus("Salvando...")
       const response = await fetch('/api/aws/add-person', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nome,
-          fotos,
+          descritores,
           horarios,
           cargaHorariaDiaria: cargaHorariaMedia
         })
       })
 
-      const result = await response.json()
+      await lerResposta(response)
 
-      if (!result.success) {
-        throw new Error(result.error || 'Erro ao cadastrar funcionário')
-      }
-
-      // Mostrar resultados detalhados de cada foto
-      if (result.resultadosFotos) {
-        const logsDetalhados = ["🧠 Carregando modelos de reconhecimento facial...", "✅ Modelos carregados com sucesso!"]
-
-        for (const r of result.resultadosFotos) {
-          logsDetalhados.push(`📸 Processando foto ${r.foto}/${fotos.length}...`)
-          if (r.sucesso) {
-            logsDetalhados.push(`✅ Foto ${r.foto} processada! Confiança: ${r.confianca}%`)
-          } else {
-            logsDetalhados.push(`❌ Foto ${r.foto} falhou no processamento`)
-          }
-        }
-
-        logsDetalhados.push(`✅ Funcionário cadastrado com sucesso!`)
-        logsDetalhados.push(`📊 Fotos adicionadas: ${result.fotosAdicionadas}/${result.fotosTotais}`)
-
-        setLogProcessamento(logsDetalhados)
-      }
-
-      setStatus(`Funcionário cadastrado com sucesso! ${result.fotosAdicionadas} fotos processadas.`)
+      setLogProcessamento(prev => [...prev, "✅ Funcionário cadastrado com sucesso!"])
+      setStatus(`Funcionário cadastrado com sucesso! ${descritores.length} foto(s) processada(s).`)
 
       // Redirecionar após 4 segundos (mais tempo para ler os logs)
       setTimeout(() => {
@@ -513,8 +475,9 @@ export default function Cadastrar() {
       }, 4000)
     } catch (error) {
       console.error("Erro ao cadastrar funcionário:", error)
-      setLogProcessamento(prev => [...prev, `❌ Erro: ${error instanceof Error ? error.message : String(error)}`])
-      setError(`Erro ao cadastrar funcionário: ${error instanceof Error ? error.message : String(error)}`)
+      const msg = error instanceof Error ? error.message : String(error)
+      setLogProcessamento(prev => [...prev, `❌ Erro: ${msg}`])
+      setError(`Erro ao cadastrar funcionário: ${msg}`)
       setStatus("Erro ao cadastrar funcionário. Verifique os detalhes acima.")
       setIsLoading(false)
     }

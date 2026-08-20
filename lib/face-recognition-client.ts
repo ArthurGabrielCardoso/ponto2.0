@@ -214,6 +214,42 @@ export async function detectSmileOnly(
   }
 }
 
+export interface DescriptorExtraction {
+  descriptor: number[]
+  confidence: number
+}
+
+/**
+ * Converte um JPEG base64 (com ou sem prefixo data:) em ImageBitmap transferível.
+ */
+async function base64ToBitmap(imageBase64: string): Promise<ImageBitmap> {
+  const base64 = imageBase64.replace(/^data:image\/\w+;base64,/, "")
+  const binario = atob(base64)
+  const bytes = new Uint8Array(binario.length)
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i)
+  return await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }))
+}
+
+/**
+ * Extrai o descritor 128D de uma foto de cadastro, no navegador.
+ *
+ * É o caminho de cadastro: o servidor nunca vê a imagem, só o vetor.
+ * Não depende de loadDescriptors() — cadastrar não precisa do FaceMatcher.
+ *
+ * Retorna null quando não há rosto na foto (resposta esperada, não erro).
+ */
+export async function extractDescriptorFromBase64(
+  imageBase64: string
+): Promise<DescriptorExtraction | null> {
+  await initModels()
+  const bitmap = await base64ToBitmap(imageBase64)
+  return await call<DescriptorExtraction | null>(
+    "extractDescriptor",
+    { bitmap },
+    [bitmap]
+  )
+}
+
 export function isReady(): boolean {
   return modelsLoaded && descriptorCount > 0
 }
