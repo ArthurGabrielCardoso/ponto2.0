@@ -26,14 +26,23 @@ export function TelaPontoSucesso({
   onVoltar,
   modoDemonstracao = false,
 }: TelaPontoSucessoProps) {
-  // Transição coreografada: inicia no centro grande e desliza para a direita em ~600ms
-  const [docked, setDocked] = useState(false)
+  // Fases da coreografia:
+  // 1. "centro": Ícone grande no centro da tela (0 a 1.2s)
+  // 2. "deslizando": Ícone desliza suavemente para a direita (1.2s a 2.0s)
+  // 3. "revelar": Ícone 100% ancorado + espera um tiquinho -> surge a logo, badge e lado esquerdo (2.2s+)
+  const [fase, setFase] = useState<"centro" | "deslizando" | "revelar">("centro")
   const [timeLeft, setTimeLeft] = useState(Math.round(durationMs / 1000))
 
   useEffect(() => {
-    const tDock = setTimeout(() => {
-      setDocked(true)
-    }, 600)
+    // 1. Fica centralizado grande por 1.2s
+    const tDeslizar = setTimeout(() => {
+      setFase("deslizando")
+    }, 1200)
+
+    // 2. Chega 100% à direita aos 2.0s, espera um tiquinho (~200ms) e aos 2.2s revela o restante
+    const tRevelar = setTimeout(() => {
+      setFase("revelar")
+    }, 2200)
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -47,18 +56,26 @@ export function TelaPontoSucesso({
     }, 1000)
 
     return () => {
-      clearTimeout(tDock)
+      clearTimeout(tDeslizar)
+      clearTimeout(tRevelar)
       clearInterval(timer)
     }
   }, [durationMs, onVoltar])
 
+  const iconeAncorado = fase === "deslizando" || fase === "revelar"
+  const conteudoVisivel = fase === "revelar"
+
   return (
     <div className="absolute inset-0 z-40 bg-white h-screen w-full flex flex-col justify-between p-4 sm:p-8 lg:p-10 overflow-hidden select-none">
-      {/* Fundo Orgânico Dourado */}
+      {/* Fundo com Onda Orgânica Dourada */}
       <OndaOrganicaDourada />
 
-      {/* Topo: Logo único e Badge de Status */}
-      <div className="relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0">
+      {/* TOPO: Logo e Badge "Ponto Registrado" — Aparece somente após o ícone ancorar à direita */}
+      <div
+        className={`relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0 transition-opacity duration-600 ease-out ${
+          conteudoVisivel ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      >
         <Image src="/logo.png" alt="Logo" width={150} height={75} priority style={{ height: "auto" }} />
         <span className="text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -66,18 +83,22 @@ export function TelaPontoSucesso({
         </span>
       </div>
 
-      {/* Área Central: Layout Dividido sem Scroll com Transição Coreografada */}
+      {/* ÁREA CENTRAL: Layout Dividido sem Scroll com Transição Cinematográfica */}
       <div className="relative z-10 flex-1 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-10 max-w-5xl mx-auto w-full my-auto px-2">
-        {/* LADO ESQUERDO: Texto, Saudação Dourada e Card de Informações (Surge após o ícone ancorar) */}
+        {/* LADO ESQUERDO: Saudação Dourada e Card de Informações — Surge após o ícone ancorar */}
         <div
-          className={`w-full md:w-[54%] space-y-4 sm:space-y-5 text-center md:text-left transition-all duration-700 ease-out ${
-            docked ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-8 pointer-events-none"
+          className={`w-full md:w-[54%] space-y-4 sm:space-y-5 text-center md:text-left transition-all duration-600 ease-out ${
+            conteudoVisivel
+              ? "opacity-100 translate-x-0 translate-y-0"
+              : "opacity-0 -translate-x-6 md:-translate-y-2 pointer-events-none"
           }`}
         >
           {/* Saudação com Nome em Dourado */}
           <div className="space-y-1">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-gray-900 leading-tight">
-              <span style={{ color: "#c69e6b" }}>{mensagem || `Excelente trabalho, ${nome.split(" ")[0]}!`}</span>
+              <span style={{ color: "#c69e6b" }}>
+                {mensagem || `Excelente trabalho, ${nome.split(" ")[0]}!`}
+              </span>
             </h1>
           </div>
 
@@ -126,27 +147,22 @@ export function TelaPontoSucesso({
           </div>
         </div>
 
-        {/* LADO DIREITO: Ilustração Animada com Transição do Centro para a Direita */}
+        {/* LADO DIREITO: Ícone Animado (Inicia no centro grande e desliza para a direita) */}
         <div
-          className={`w-full md:w-[46%] flex items-center justify-center transition-all duration-700 cubic-bezier(0.16, 1, 0.3, 1) ${
-            docked
+          className={`w-full md:w-[46%] flex items-center justify-center transition-all duration-800 cubic-bezier(0.2, 0.8, 0.2, 1) ${
+            iconeAncorado
               ? "translate-x-0 scale-100"
-              : "md:-translate-x-1/2 scale-125 md:scale-135"
+              : "md:-translate-x-[60%] scale-135 sm:scale-150 md:scale-160"
           }`}
         >
           <div className="relative">
-            {/* Halo Suave */}
-            <div className="absolute -inset-4 rounded-full bg-amber-400/15 blur-2xl pointer-events-none" />
-            <IlustracaoPontoAnimada tipo={tipo} className="w-40 h-40 sm:w-52 sm:h-52 lg:w-60 lg:h-60" />
+            <IlustracaoPontoAnimada tipo={tipo} className="w-48 h-48 sm:w-60 sm:h-60 lg:w-72 lg:h-72" />
           </div>
         </div>
       </div>
 
-      {/* Rodapé: Marca Vitall */}
-      <div className="relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0 pt-2">
-        <span className="text-[11px] text-gray-400 font-medium">Vitall Ponto Digital</span>
-        <span className="text-[11px] text-gray-400 font-medium">Sistema de Reconhecimento Facial</span>
-      </div>
+      {/* RODAPÉ: Limpo sem textos extras */}
+      <div className="relative z-10 h-4 shrink-0" />
     </div>
   )
 }
