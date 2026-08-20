@@ -91,7 +91,7 @@ export function DialogoPontoInteligente({
         { tipo: "Saída Almoço", dataHoraIso: agora },
       ],
       "Saída Almoço",
-      `Excelente almoço, ${primeiroNome}!`
+      `Excelente almoço, ${primeiroNome}! Aproveite seu almoço e bom descanso!`
     )
   }
 
@@ -101,7 +101,7 @@ export function DialogoPontoInteligente({
     onConfirmar(
       [{ tipo: "Saída Almoço", dataHoraIso: agora }],
       "Saída Almoço",
-      `Excelente almoço, ${primeiroNome}!`
+      `Excelente almoço, ${primeiroNome}! Aproveite seu almoço e bom descanso!`
     )
   }
 

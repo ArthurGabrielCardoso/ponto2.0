@@ -18,7 +18,7 @@ import type { Funcionario } from "@/lib/types"
 import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/dialogo-ponto-inteligente"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
-import { agendarLembretesAlmoco, cancelarLembretesAlmoco } from "@/lib/lembretes-almoco"
+import { agendarLembretesAlmoco, cancelarLembretesAlmoco, sincronizarSessoesAlmocoDoDia, type InfoAlmocoAtivo } from "@/lib/lembretes-almoco"
 import "../ponto-registrado/ponto-batido.css"
 import {
   initModels,
@@ -74,9 +74,66 @@ function SuccessAnimation({ tipo }: { tipo: string }) {
   )
 }
 // Screensaver com relógio em tempo real e saudação dinâmica
+// Componente individual com cronômetro regressivo ao vivo
+function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
+  const [tempoRestanteStr, setTempoRestanteStr] = useState("")
+  const [passouDoTempo, setPassouDoTempo] = useState(false)
+
+  useEffect(() => {
+    const calcular = () => {
+      const agora = Date.now()
+      const diffMs = item.retornoPrevistoMs - agora
+      const totalSeg = Math.floor(Math.abs(diffMs) / 1000)
+      const horas = Math.floor(totalSeg / 3600)
+      const min = Math.floor((totalSeg % 3600) / 60)
+      const seg = totalSeg % 60
+
+      const formatado =
+        horas > 0
+          ? `${horas}h ${String(min).padStart(2, "0")}m ${String(seg).padStart(2, "0")}s`
+          : `${String(min).padStart(2, "0")}m ${String(seg).padStart(2, "0")}s`
+
+      if (diffMs >= 0) {
+        setPassouDoTempo(false)
+        setTempoRestanteStr(formatado)
+      } else {
+        setPassouDoTempo(true)
+        setTempoRestanteStr(`+${formatado}`)
+      }
+    }
+
+    calcular()
+    const timer = setInterval(calcular, 1000)
+    return () => clearInterval(timer)
+  }, [item.retornoPrevistoMs])
+
+  return (
+    <div className="flex items-center justify-between gap-3 bg-white/15 rounded-xl px-3.5 py-2.5 border border-white/15 text-xs shadow-md backdrop-blur-sm">
+      <div className="flex flex-col">
+        <span className="font-bold text-sm text-white tracking-tight leading-tight">{item.primeiroNome}</span>
+        <span className="text-[11px] text-amber-100/90 font-medium mt-0.5">
+          {item.horaSaida} às {item.horaRetornoPrevista}
+        </span>
+      </div>
+
+      <div
+        className={`flex items-center gap-1.5 font-mono font-bold text-xs px-2.5 py-1 rounded-lg border shadow-sm ${
+          passouDoTempo
+            ? "bg-red-500/40 text-red-100 border-red-400/50 animate-pulse"
+            : "bg-black/40 text-amber-300 border-amber-400/30"
+        }`}
+      >
+        <span className="text-xs">⏳</span>
+        <span>{tempoRestanteStr}</span>
+      </div>
+    </div>
+  )
+}
+
 function Screensaver({ onTap }: { onTap: () => void }) {
   const [time, setTime] = useState("")
   const [greeting, setGreeting] = useState("")
+  const [funcionariosEmAlmoco, setFuncionariosEmAlmoco] = useState<InfoAlmocoAtivo[]>([])
 
   useEffect(() => {
     const tick = () => {
@@ -89,13 +146,24 @@ function Screensaver({ onTap }: { onTap: () => void }) {
     }
     tick()
     const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
+
+    // Sincronizar funcionários atualmente em almoço
+    const atualizarAlmoco = () => {
+      sincronizarSessoesAlmocoDoDia().then(setFuncionariosEmAlmoco).catch(() => {})
+    }
+    atualizarAlmoco()
+    const idAlmoco = setInterval(atualizarAlmoco, 10000)
+
+    return () => {
+      clearInterval(id)
+      clearInterval(idAlmoco)
+    }
   }, [])
 
   return (
     <div
-      className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none"
-      style={{ background: "linear-gradient(135deg, rgba(29,185,179,0.85) 0%, rgba(13,132,136,0.9) 100%)" }}
+      className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden"
+      style={{ background: "linear-gradient(135deg, rgba(198, 158, 107, 0.95) 0%, rgba(166, 124, 78, 0.95) 50%, rgba(133, 91, 48, 0.97) 100%)" }}
       onClick={onTap}
     >
       <style>{`
@@ -107,6 +175,8 @@ function Screensaver({ onTap }: { onTap: () => void }) {
         .ss-fade-d3{animation-delay:.5s}
         .ss-colon{animation:pulse-dot 2s ease-in-out infinite}
       `}</style>
+
+      {/* Centro: Logo, Horário e Saudação */}
       <div className="text-center text-white">
         <div className="ss-fade mb-6">
           <Image src="/logo.png" alt="Logo" width={420} height={210} priority style={{ height: "auto" }} />
@@ -115,11 +185,41 @@ function Screensaver({ onTap }: { onTap: () => void }) {
           {time}
         </p>
         <p className="ss-fade ss-fade-d2 text-2xl font-light opacity-90 mb-8">{greeting}</p>
-        <p className="ss-fade ss-fade-d3 text-lg opacity-60">Toque na tela para registrar o ponto</p>
+        <p className="ss-fade ss-fade-d3 text-lg opacity-80 font-medium tracking-wide">Toque na tela para registrar o ponto</p>
       </div>
+
+      {/* Canto Inferior Direito: Status com Cronômetro Regressivo */}
+      {funcionariosEmAlmoco.length > 0 && (
+        <div
+          className="absolute bottom-6 right-6 z-40 max-w-xs sm:max-w-sm pointer-events-auto ss-fade"
+          onClick={(e) => {
+            e.stopPropagation()
+            onTap()
+          }}
+        >
+          <div className="bg-black/40 backdrop-blur-md border border-white/20 rounded-2xl p-4 text-white shadow-2xl space-y-3">
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-200">
+                <span className="text-base">🍽️</span>
+                <span>Saída Almoço</span>
+              </div>
+              <span className="text-[10px] font-semibold bg-amber-500/30 text-amber-200 px-2 py-0.5 rounded-full border border-amber-400/30">
+                {funcionariosEmAlmoco.length} {funcionariosEmAlmoco.length === 1 ? "ativo" : "ativos"}
+              </span>
+            </div>
+
+            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+              {funcionariosEmAlmoco.map((f) => (
+                <BadgeAlmocoCronometro key={f.funcionarioId} item={f} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
 
 // Barra de progresso do auto-retorno
 function ReturnProgress({ durationMs }: { durationMs: number }) {
@@ -379,7 +479,7 @@ export default function RegistrarPonto() {
       const getMensagem = (t: string) => {
         const tl = t.toLowerCase().trim()
         if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
-        if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
+        if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}! Aproveite seu almoço e bom descanso!`
         if (tl.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
         if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite e bom descanso, ${primeiroNome}!`
         return `Excelente trabalho, ${primeiroNome}!`

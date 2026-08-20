@@ -1,6 +1,16 @@
-import type { Funcionario } from "./types"
+import type { Funcionario, RegistroPonto } from "./types"
 import { obterGradeDoDia, horaParaMinutos } from "./logica-ponto-inteligente"
 import { reproduzirVozSaudacao } from "./tts-audio"
+import { buscarFuncionarios, buscarTodosRegistrosHoje } from "./supabase"
+
+export interface InfoAlmocoAtivo {
+  funcionarioId: string
+  nome: string
+  primeiroNome: string
+  horaSaida: string
+  horaRetornoPrevista: string
+  retornoPrevistoMs: number
+}
 
 interface SessaoAlmocoAtiva {
   funcionarioId: string
@@ -31,7 +41,7 @@ function sortearEmoji(): string {
   return EMOJIS_FALADOS[idx]
 }
 
-// Formata hora em texto natural falado (ex: "13h02", "14h15")
+// Formata hora em texto natural falado e visual (ex: "13h02", "14h17")
 export function formatarHoraTexto(d: Date): string {
   const h = String(d.getHours()).padStart(2, "0")
   const m = String(d.getMinutes()).padStart(2, "0")
@@ -62,6 +72,24 @@ export function obterDuracaoAlmocoMinutos(funcionario: Funcionario, data = new D
   const minRetorno = horaParaMinutos(grade.retornoAlmoco)
   const duracao = minRetorno - minSaida
   return duracao > 0 ? duracao : 60 // Padrão: 60 minutos (1 hora)
+}
+
+/**
+ * Retorna a lista de todos os funcionários atualmente em horário de almoço
+ */
+export function obterSessoesAlmocoAtivas(): InfoAlmocoAtivo[] {
+  const lista: InfoAlmocoAtivo[] = []
+  for (const s of sessoesAtivas.values()) {
+    lista.push({
+      funcionarioId: s.funcionarioId,
+      nome: s.nome,
+      primeiroNome: s.primeiroNome,
+      horaSaida: formatarHoraTexto(s.dataHoraSaida),
+      horaRetornoPrevista: formatarHoraTexto(s.retornoPrevisto),
+      retornoPrevistoMs: s.retornoPrevisto.getTime(),
+    })
+  }
+  return lista
 }
 
 /**
@@ -108,7 +136,6 @@ export function agendarLembretesAlmoco(
   // --- 1. Lembrete: 10 minutos após bater a saída de almoço ---
   const ms10MinDepois = 10 * 60 * 1000
   sessao.timer10MinDepois = setTimeout(() => {
-    // Calcular tempo restante atual
     const agora = new Date()
     const msRestantes = retornoPrevisto.getTime() - agora.getTime()
     const minRestantes = Math.max(0, Math.round(msRestantes / (60 * 1000)))
@@ -137,4 +164,51 @@ export function agendarLembretesAlmoco(
   console.log(
     `🥪 Lembretes de almoço agendados para ${primeiroNome} (Saída: ${horaSaidaStr}, Retorno Previsto: ${horaRetornoStr}, Duração: ${duracaoMinutos} min)`
   )
+}
+
+/**
+ * Sincroniza as sessões ativas de almoço com os registros de hoje no Supabase
+ * (Garante que a lista continue ativa mesmo se o tablet reiniciar ou recarregar)
+ */
+export async function sincronizarSessoesAlmocoDoDia(): Promise<InfoAlmocoAtivo[]> {
+  try {
+    const [funcionarios, registrosHoje] = await Promise.all([
+      buscarFuncionarios().catch(() => []),
+      buscarTodosRegistrosHoje().catch(() => []),
+    ])
+
+    if (!registrosHoje || registrosHoje.length === 0) {
+      return obterSessoesAlmocoAtivas()
+    }
+
+    const registrosPorFunc = new Map<string, RegistroPonto[]>()
+    for (const r of registrosHoje) {
+      if (!registrosPorFunc.has(r.funcionario_id)) registrosPorFunc.set(r.funcionario_id, [])
+      registrosPorFunc.get(r.funcionario_id)!.push(r)
+    }
+
+    for (const func of funcionarios) {
+      const regs = registrosPorFunc.get(func.id) || []
+      const ultSaidaAlmoco = regs
+        .filter((r) => (r.tipo || "").toLowerCase().includes("saída") && (r.tipo || "").toLowerCase().includes("almoço"))
+        .pop()
+      const ultRetornoAlmoco = regs.filter((r) => (r.tipo || "").toLowerCase().includes("retorno")).pop()
+
+      if (
+        ultSaidaAlmoco &&
+        (!ultRetornoAlmoco || new Date(ultSaidaAlmoco.data_hora) > new Date(ultRetornoAlmoco.data_hora))
+      ) {
+        if (!sessoesAtivas.has(func.id)) {
+          agendarLembretesAlmoco(func, new Date(ultSaidaAlmoco.data_hora))
+        }
+      } else if (ultRetornoAlmoco && sessoesAtivas.has(func.id)) {
+        cancelarLembretesAlmoco(func.id)
+      }
+    }
+
+    return obterSessoesAlmocoAtivas()
+  } catch (e) {
+    console.warn("Erro ao sincronizar sessões de almoço:", e)
+    return obterSessoesAlmocoAtivas()
+  }
 }

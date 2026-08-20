@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import type { Funcionario, RegistroPonto, HorariosSemana, AjusteSaldo } from "./types"
 
 // Inicializar o cliente Supabase com tratamento de erros aprimorado
-let supabase: ReturnType<typeof createClient> | null = null
+export let supabase: ReturnType<typeof createClient> | null = null
 
 try {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
@@ -26,7 +26,7 @@ try {
 }
 
 // Função para verificar se o cliente Supabase está disponível
-function isSupabaseAvailable(): boolean {
+export function isSupabaseAvailable(): boolean {
   return !!supabase
 }
 
@@ -497,6 +497,32 @@ export interface ResultadoRegistroPonto {
 }
 
 // Busca todos os registros do dia atual de um funcionário
+// Busca todos os registros de hoje de todos os funcionários
+export async function buscarTodosRegistrosHoje(): Promise<RegistroPonto[]> {
+  try {
+    if (!isSupabaseAvailable()) return []
+    const agora = new Date()
+    const inicioDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0).toISOString()
+    const fimDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 23, 59, 59).toISOString()
+
+    const { data, error } = await supabase!
+      .from("registros_ponto")
+      .select("*")
+      .gte("data_hora", inicioDia)
+      .lte("data_hora", fimDia)
+      .order("data_hora", { ascending: true })
+
+    if (error) {
+      console.error("Erro ao buscar todos os registros de hoje:", error)
+      return []
+    }
+
+    return (data as unknown as RegistroPonto[]) || []
+  } catch {
+    return []
+  }
+}
+
 export async function buscarRegistrosHoje(funcionarioId: string): Promise<RegistroPonto[]> {
   try {
     if (!isSupabaseAvailable()) return []
