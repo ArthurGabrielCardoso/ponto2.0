@@ -601,6 +601,9 @@ export default function RegistrarPonto() {
         mensagem,
       }
 
+      // Manter a moldura esmeralda pulsante por 750ms para confirmação visual satisfatória antes da transição
+      await new Promise((r) => setTimeout(r, 750))
+
       setRecognizedPerson(completed)
       setShowSuccess(true)
       reproduzirVozSaudacao(completed.mensagem)
@@ -802,83 +805,153 @@ export default function RegistrarPonto() {
       {/* Proteção de tela */}
       {screensaver && <Screensaver onTap={() => { screensaverRef.current = false; setScreensaver(false); resetInactivityTimer() }} />}
 
-      {/* Tela de sucesso */}
+      {/* Tela de sucesso de Ponto Registrado (Design Moderno, Dourado & Glassmorphism) */}
       {showSuccess && completedPerson && (
-        <div className="absolute inset-0 z-40">
+        <div className="absolute inset-0 z-40 bg-white flex flex-col md:flex-row overflow-hidden animate-in fade-in duration-500">
           <style>{`
-            @keyframes slideUp{0%{opacity:0;transform:translateY(30px)}100%{opacity:1;transform:translateY(0)}}
-            .su{animation:slideUp .5s ease-out both}
-            .su-d1{animation-delay:.15s}
-            .su-d2{animation-delay:.3s}
-            .su-d3{animation-delay:.45s}
+            @keyframes bounceBadge {
+              0% { transform: scale(0.6) rotate(-10deg); opacity: 0; }
+              50% { transform: scale(1.1) rotate(3deg); opacity: 1; }
+              70% { transform: scale(0.96) rotate(-1deg); }
+              100% { transform: scale(1) rotate(0deg); opacity: 1; }
+            }
+            @keyframes pulseRing {
+              0%, 100% { transform: scale(1); opacity: 0.5; }
+              50% { transform: scale(1.18); opacity: 0.15; }
+            }
+            .badge-pop { animation: bounceBadge 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+            .ring-pulse { animation: pulseRing 2.4s ease-in-out infinite; }
+            .su-card { animation: fadeUp 0.5s ease-out 0.2s both; }
+            .su-btn { animation: fadeUp 0.5s ease-out 0.35s both; }
           `}</style>
-          <div className="ponto-batido-container">
-            {/* Lado esquerdo - texto */}
-            <div className="ponto-batido-form-section relative">
-              <div className="w-full max-w-md">
-                <div className="text-center space-y-6 mt-20">
-                  <div className="flex justify-center su">
-                    <SuccessAnimation tipo={completedPerson.tipo || "Entrada"} />
+
+          {/* Lado Esquerdo - Detalhes do Registro e Informações */}
+          <div className="w-full md:w-[58%] h-full flex flex-col justify-between p-6 sm:p-10 lg:p-12 relative bg-gradient-to-b from-white via-amber-50/15 to-white overflow-y-auto">
+            {/* Topo: Logo */}
+            <div className="flex items-center justify-between">
+              <Image src="/logo.png" alt="Logo" width={160} height={80} priority style={{ height: "auto" }} />
+              <span className="text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Ponto Registrado
+              </span>
+            </div>
+
+            {/* Conteúdo Central */}
+            <div className="my-auto max-w-lg mx-auto w-full text-center space-y-6 py-6">
+              {/* Ícone Animado de Sucesso */}
+              <div className="flex justify-center relative">
+                <div className="relative">
+                  <div className="absolute -inset-3 rounded-full bg-emerald-400/20 ring-pulse blur-sm" />
+                  <div className="relative w-24 h-24 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-xl badge-pop">
+                    <svg className="w-12 h-12 stroke-current" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
                   </div>
-
-                  <h1 className="text-3xl font-bold su su-d1" style={{ color: "#c69e6b" }}>
-                    {completedPerson.mensagem}
-                  </h1>
-
-                  <div className="su su-d2 text-sm text-gray-600 bg-green-50 rounded-lg p-3 border border-green-200">
-                    <span className="text-green-700 font-semibold">{completedPerson.tipo}</span>{" "}
-                    registrada às{" "}
-                    <span className="font-semibold">{completedPerson.hora}</span> em{" "}
-                    {completedPerson.data}
-                  </div>
-
-                  <div className="su su-d3">
-                    <ReturnProgress durationMs={30000} />
-                  </div>
-
-                  <div className="absolute bottom-4 left-4">
-                    <button
-                      onClick={resetToInitialState}
-                      className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-                    >
-                      Voltar
-                    </button>
+                  {/* Badge de tipo no canto inferior */}
+                  <div className="absolute -bottom-1 -right-1 w-9 h-9 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-lg">
+                    {(() => {
+                      const t = (completedPerson.tipo || "").toLowerCase()
+                      if (t.includes("entrada")) return "🌤️"
+                      if (t.includes("almoço") && (t.includes("saída") || t.includes("saida"))) return "🍽️"
+                      if (t.includes("retorno")) return "💼"
+                      if (t.includes("saída") || t.includes("saida")) return "🌙"
+                      return "⭐"
+                    })()}
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Lado direito - gradiente temático */}
-            <div
-              className="ponto-batido-image-section"
-              style={{
-                background: (() => {
-                  const t = (completedPerson.tipo || "").toLowerCase()
-                  if (t.includes("entrada")) return "linear-gradient(135deg, #f6d365 0%, #fda085 100%)"
-                  if (t.includes("almoço") && (t.includes("saída") || t.includes("saida"))) return "linear-gradient(135deg, #ff9a56 0%, #ff6a3d 100%)"
-                  if (t.includes("retorno")) return "linear-gradient(135deg, #1db9b3 0%, #0d8488 100%)"
-                  if (t.includes("saída") || t.includes("saida")) return "linear-gradient(135deg, #2d3561 0%, #1e215d 50%, #0b0c2a 100%)"
-                  return "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)"
-                })(),
-              }}
-            >
-              <div className="text-center">
-                <Image src="/logo.png" alt="Logo" width={500} height={200} priority style={{ height: "auto" }} />
-                <p className="text-white/80 text-lg mt-6 font-light">
-                  {(() => {
-                    const t = (completedPerson.tipo || "").toLowerCase()
-                    if (t.includes("entrada")) return "Tenha um ótimo dia de trabalho!"
-                    if (t.includes("almoço") && (t.includes("saída") || t.includes("saida"))) return "Aproveite seu almoço e bom descanso!"
-                    if (t.includes("retorno")) return "Boa volta ao trabalho!"
-                    if (t.includes("saída") || t.includes("saida")) return "Descanse bem, até amanhã!"
-                    return "Ponto registrado com sucesso!"
-                  })()}
+              {/* Saudação com Nome em Dourado */}
+              <div className="space-y-1.5">
+                <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 leading-tight">
+                  <span style={{ color: "#c69e6b" }}>{completedPerson.mensagem}</span>
+                </h1>
+                <p className="text-sm text-gray-500 font-medium">
+                  Autenticação biométrica validada com sucesso
                 </p>
               </div>
+
+              {/* Card de Informações do Registro */}
+              <div className="su-card rounded-2xl p-5 bg-white border border-gray-100 shadow-[0_4px_25px_-5px_rgba(0,0,0,0.06)] space-y-3.5 text-left">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <span className="text-xs uppercase font-bold text-gray-400 tracking-wider">Tipo de Batida</span>
+                  <span className="font-bold text-sm px-3.5 py-1 rounded-md bg-amber-50 text-amber-900 border border-amber-200/80">
+                    {completedPerson.tipo}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs uppercase font-bold text-gray-400 tracking-wider block">Horário Registrado</span>
+                    <span className="text-2xl sm:text-3xl font-bold text-gray-800 tracking-tight font-mono">
+                      {completedPerson.hora}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs uppercase font-bold text-gray-400 tracking-wider block">Data</span>
+                    <span className="text-sm font-semibold text-gray-700">
+                      {completedPerson.data}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progresso de Retorno Automático */}
+              <div className="pt-2">
+                <ReturnProgress durationMs={30000} />
+              </div>
+            </div>
+
+            {/* Rodapé: Botão Voltar */}
+            <div className="su-btn flex items-center justify-between pt-4">
+              <button
+                onClick={resetToInitialState}
+                className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg active:scale-95"
+                style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
+              >
+                Voltar ao Início
+              </button>
+              <span className="text-xs text-gray-400">Vitall Ponto Digital</span>
+            </div>
+          </div>
+
+          {/* Lado Direito - Gradiente Temático com Ilustração e Logo */}
+          <div
+            className="hidden md:flex md:w-[42%] h-full flex-col items-center justify-center p-10 text-white text-center relative overflow-hidden"
+            style={{
+              background: (() => {
+                const t = (completedPerson.tipo || "").toLowerCase()
+                if (t.includes("entrada")) return "linear-gradient(135deg, #c69e6b 0%, #b88d57 50%, #8c5e28 100%)"
+                if (t.includes("almoço") && (t.includes("saída") || t.includes("saida"))) return "linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #9a3412 100%)"
+                if (t.includes("retorno")) return "linear-gradient(135deg, #1db9b3 0%, #16918d 50%, #0d8488 100%)"
+                if (t.includes("saída") || t.includes("saida")) return "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)"
+                return "linear-gradient(135deg, #1db9b3 0%, #0d8488 100%)"
+              })(),
+            }}
+          >
+            {/* Decoração de fundo */}
+            <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-black/10 blur-3xl pointer-events-none" />
+
+            <div className="relative z-10 space-y-6 max-w-sm">
+              <div className="p-4 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl inline-block">
+                <Image src="/logo.png" alt="Logo" width={400} height={180} priority style={{ height: "auto" }} />
+              </div>
+              <p className="text-white/95 text-xl font-light leading-relaxed">
+                {(() => {
+                  const t = (completedPerson.tipo || "").toLowerCase()
+                  if (t.includes("entrada")) return "Tenha um excelente e produtivo dia de trabalho!"
+                  if (t.includes("almoço") && (t.includes("saída") || t.includes("saida"))) return "Aproveite seu almoço e tenha um ótimo descanso!"
+                  if (t.includes("retorno")) return "Excelente retorno ao trabalho! Vamos em frente!"
+                  if (t.includes("saída") || t.includes("saida")) return "Dever cumprido! Descanse bem e até amanhã!"
+                  return "Ponto registrado com sucesso!"
+                })()}
+              </p>
             </div>
           </div>
         </div>
       )}
+
           {/* Diálogo Inteligente de Resolução de Horários */}
       {dialogoInteligente && (
         <DialogoPontoInteligente
