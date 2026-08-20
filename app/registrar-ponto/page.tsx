@@ -13,7 +13,10 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { DotLottieReact } from "@lottiefiles/dotlottie-react"
-import { registrarPonto, determinarProximoTipo } from "@/lib/supabase"
+import { registrarPonto, buscarRegistrosHoje, buscarFuncionarioPorId, registrarMultiplosPontos } from "@/lib/supabase"
+import type { Funcionario } from "@/lib/types"
+import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
+import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/dialogo-ponto-inteligente"
 import "../ponto-registrado/ponto-batido.css"
 import {
   initModels,
@@ -160,6 +163,10 @@ export default function RegistrarPonto() {
   const [loadingStatus, setLoadingStatus] = useState("Carregando sistema...")
   const [recognizedPerson, setRecognizedPerson] = useState<RecognizedPerson | null>(null)
   const recognizedPersonRef = useRef<RecognizedPerson | null>(null)
+  const [dialogoInteligente, setDialogoInteligente] = useState<{
+    diagnostico: DiagnosticoPonto
+    person: RecognizedPerson
+  } | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const showSuccessRef = useRef(false)
   const isRegisteringRef = useRef(false)
@@ -279,10 +286,7 @@ export default function RegistrarPonto() {
               console.log(`✅ Identificado: ${result.nome} (${result.similarity.toFixed(0)}%)`)
 
               pendingTipoRef.current = null
-              pendingTipoPromiseRef.current = determinarProximoTipo(result.id).then(tipo => {
-                pendingTipoRef.current = tipo
-                return tipo
-              }).catch(() => "Entrada")
+              pendingTipoPromiseRef.current = null
 
               const person: RecognizedPerson = {
                 id: result.id,
@@ -339,22 +343,43 @@ export default function RegistrarPonto() {
     if (isRegisteringRef.current) return
     isRegisteringRef.current = true
 
-    console.log(`🎯 REGISTRANDO PONTO: ${person.nome}`)
+    console.log(`🎯 ANALISANDO PONTO INTELIGENTE: ${person.nome}`)
 
     const now = new Date()
     const primeiroNome = person.nome.split(" ")[0]
 
     try {
-      // Registrar no Supabase e obter o tipo exato confirmado pelo banco
-      const res = await registrarPonto(person.id, person.nome)
-      const tipo = res.tipo || "Entrada"
+      // Buscar funcionário para obter a grade de horários e os registros do dia
+      const [funcionario, registrosHoje] = await Promise.all([
+        buscarFuncionarioPorId(person.id).catch(() => null),
+        buscarRegistrosHoje(person.id).catch(() => []),
+      ])
+
+      const funcObj: Funcionario = funcionario || {
+        id: person.id,
+        nome: person.nome,
+        descritores: [],
+      }
+
+      // Analisar situação inteligente com base na grade
+      const diag = analisarSituacaoPonto(funcObj, registrosHoje, now)
+
+      if (diag.tipo !== "DIRETO") {
+        // Exibir diálogo inteligente amigável
+        setDialogoInteligente({ diagnostico: diag, person })
+        return
+      }
+
+      // Fluxo Direto Normal
+      const res = await registrarPonto(person.id, person.nome, diag.proximoTipoSugerido)
+      const tipo = res.tipo || diag.proximoTipoSugerido
 
       const getMensagem = (t: string) => {
         const tl = t.toLowerCase().trim()
         if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
         if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
         if (tl.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
-        if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite e descanso, ${primeiroNome}!`
+        if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite e bom descanso, ${primeiroNome}!`
         return `Excelente trabalho, ${primeiroNome}!`
       }
 
@@ -396,12 +421,49 @@ export default function RegistrarPonto() {
     }
   }
 
+  // Confirmação do diálogo inteligente (insere múltiplos pontos ou ponto específico)
+  const handleConfirmarDialogoInteligente = async (
+    pontos: PontoRegularizacao[],
+    tipoExibicao: string,
+    mensagemPersonalizada: string
+  ) => {
+    if (!dialogoInteligente) return
+    const person = dialogoInteligente.person
+    setDialogoInteligente(null)
+
+    const now = new Date()
+
+    try {
+      await registrarMultiplosPontos(person.id, person.nome, pontos)
+
+      const completed: RecognizedPerson = {
+        ...person,
+        registroCompleto: true,
+        tipo: tipoExibicao,
+        hora: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        data: now.toLocaleDateString(),
+        mensagem: mensagemPersonalizada,
+      }
+
+      setRecognizedPerson(completed)
+      setShowSuccess(true)
+
+      successTimeoutRef.current = window.setTimeout(() => {
+        resetToInitialState()
+      }, 15000)
+    } catch (error) {
+      console.error("Erro ao registrar regularização de ponto:", error)
+      resetToInitialState()
+    }
+  }
+
   // Reset timer de inatividade
   const resetInactivityTimer = () => {
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current)
     inactivityTimerRef.current = window.setTimeout(() => {
       setScreensaver(true)
       setRecognizedPerson(null)
+      setDialogoInteligente(null)
     }, 5 * 60 * 1000) // 5 minutos
   }
 
@@ -414,6 +476,7 @@ export default function RegistrarPonto() {
     isRegisteringRef.current = false
     setShowSuccess(false)
     setRecognizedPerson(null)
+    setDialogoInteligente(null)
     isProcessingRef.current = false
     setScreensaver(true)
   }
@@ -571,6 +634,18 @@ export default function RegistrarPonto() {
           </div>
         </div>
       )}
-    </div>
+          {/* Diálogo Inteligente de Resolução de Horários */}
+      {dialogoInteligente && (
+        <DialogoPontoInteligente
+          nome={dialogoInteligente.person.nome}
+          diagnostico={dialogoInteligente.diagnostico}
+          onConfirmar={handleConfirmarDialogoInteligente}
+          onCancelar={() => {
+            setDialogoInteligente(null)
+            resetToInitialState()
+          }}
+        />
+      )}
+</div>
   )
 }

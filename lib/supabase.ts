@@ -489,12 +489,86 @@ export interface ResultadoRegistroPonto {
   tipo: string
   emCooldown?: boolean
   jaRegistrado?: boolean
+  limiteAtingido?: boolean
   segundosRestantes?: number
   quantidadeHoje?: number
   dataHora: string
   mensagem?: string
 }
 
+// Busca todos os registros do dia atual de um funcionário
+export async function buscarRegistrosHoje(funcionarioId: string): Promise<RegistroPonto[]> {
+  try {
+    if (!isSupabaseAvailable()) return []
+    const agora = new Date()
+    const inicioDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0).toISOString()
+    const fimDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 23, 59, 59).toISOString()
+
+    const { data, error } = await supabase!
+      .from("registros_ponto")
+      .select("*")
+      .eq("funcionario_id", funcionarioId)
+      .gte("data_hora", inicioDia)
+      .lte("data_hora", fimDia)
+      .order("data_hora", { ascending: true })
+
+    if (error) {
+      console.error("Erro ao buscar registros de hoje:", error)
+      return []
+    }
+
+    return (data as unknown as RegistroPonto[]) || []
+  } catch {
+    return []
+  }
+}
+
+// Registrar múltiplos pontos (ex: retorno esquecido + saída atual) de forma ordenada
+export async function registrarMultiplosPontos(
+  funcionarioId: string,
+  nomeFuncionario: string,
+  pontos: { tipo: string; dataHoraIso: string }[]
+): Promise<ResultadoRegistroPonto> {
+  try {
+    if (!isSupabaseAvailable()) {
+      throw new Error("Supabase indisponível")
+    }
+
+    if (!pontos || pontos.length === 0) {
+      throw new Error("Nenhum ponto a registrar")
+    }
+
+    const payload = pontos.map((p) => ({
+      funcionario_id: funcionarioId,
+      nome_funcionario: nomeFuncionario,
+      data_hora: p.dataHoraIso,
+      tipo: p.tipo,
+    }))
+
+    const { error } = await supabase!.from("registros_ponto").insert(payload)
+
+    if (error) {
+      console.error("Erro ao registrar múltiplos pontos:", error)
+      throw error
+    }
+
+    const ultimo = pontos[pontos.length - 1]
+    console.log(`✅ ${pontos.length} ponto(s) registrado(s) para ${nomeFuncionario}:`, pontos.map((p) => p.tipo).join(", "))
+
+    return {
+      success: true,
+      tipo: ultimo.tipo,
+      emCooldown: false,
+      jaRegistrado: false,
+      dataHora: ultimo.dataHoraIso,
+    }
+  } catch (error) {
+    console.error("Exceção ao registrar múltiplos pontos:", error)
+    throw error as Error
+  }
+}
+
+// Registrar ponto de um funcionário consultando a sequência real no banco de dados
 export async function registrarPonto(
   funcionarioId: string,
   nomeFuncionario: string,
@@ -509,6 +583,7 @@ export async function registrarPonto(
     const agora = new Date()
     const dataHoraIso = agora.toISOString()
 
+    // 1. Buscar último registro para checagem de cooldown (60 segundos)
     const ultimoRegistro = await buscarUltimoRegistroPonto(funcionarioId)
 
     if (ultimoRegistro) {
@@ -533,20 +608,23 @@ export async function registrarPonto(
 
     let tipo = tipoForcado
 
-    const inicioDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0).toISOString()
-    const fimDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 23, 59, 59).toISOString()
-
-    const { data: registrosHoje } = await supabase!
-      .from("registros_ponto")
-      .select("id, tipo, data_hora")
-      .eq("funcionario_id", funcionarioId)
-      .gte("data_hora", inicioDia)
-      .lte("data_hora", fimDia)
-      .order("data_hora", { ascending: true })
-
-    const quantidadeHoje = registrosHoje?.length || 0
+    // 2. Buscar todos os registros de hoje no Supabase para saber o próximo tipo com precisão
+    const registrosHoje = await buscarRegistrosHoje(funcionarioId)
+    const quantidadeHoje = registrosHoje.length
 
     if (!tipo) {
+      if (quantidadeHoje >= 4) {
+        console.warn(`⚠️ Expediente completo: 4 registros já realizados hoje.`)
+        return {
+          success: true,
+          tipo: "Saída",
+          limiteAtingido: true,
+          quantidadeHoje,
+          dataHora: dataHoraIso,
+          mensagem: "Todos os 4 registros do dia já foram preenchidos.",
+        }
+      }
+
       switch (quantidadeHoje) {
         case 0:
           tipo = "Entrada"
@@ -560,12 +638,10 @@ export async function registrarPonto(
         case 3:
           tipo = "Saída"
           break
-        default:
-          tipo = "Registro Extra"
-          break
       }
     }
 
+    // 3. Inserir no Supabase
     const { error: erroInsert } = await supabase!
       .from("registros_ponto")
       .insert([
