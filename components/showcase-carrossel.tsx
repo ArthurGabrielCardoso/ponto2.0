@@ -1,13 +1,11 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { ArrowLeft, ArrowRight, Volume2, LayoutDashboard } from "lucide-react"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import { DialogoPontoInteligente } from "@/components/dialogo-ponto-inteligente"
-import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
-import { OndaOrganicaDourada } from "@/components/onda-organica-dourada"
+import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
 import type { DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 
 interface SlideItem {
@@ -154,20 +152,18 @@ export function ShowcaseCarrossel() {
   const totalSlides = SLIDES.length
   const current = SLIDES[slideAtual]
 
-  // Falar o texto do slide atual
   const falarSlideAtual = useCallback(() => {
     setFalando(true)
     reproduzirVozSaudacao(current.vozTexto)
     setTimeout(() => setFalando(false), 4000)
   }, [current.vozTexto])
 
-  // Tocar a voz ao mudar de slide
   useEffect(() => {
     falarSlideAtual()
     setTempoRestante(15)
   }, [slideAtual, falarSlideAtual])
 
-  // Temporizador de rotação automática de 15 segundos para o próximo slide
+  // Temporizador de 15 segundos para avançar automaticamente
   useEffect(() => {
     const timer = setInterval(() => {
       setTempoRestante((prev) => {
@@ -197,7 +193,7 @@ export function ShowcaseCarrossel() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [totalSlides, falarSlideAtual])
 
-  // Gestos de Arrastar / Swipe
+  // Gestos de Swipe
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX
   }
@@ -321,81 +317,20 @@ export function ShowcaseCarrossel() {
         </div>
       </div>
 
-      {/* RENDERIZAÇÃO DO CONTEÚDO DO SLIDE */}
-      <div className="w-full h-full pt-12">
+      {/* CONTEÚDO DO SLIDE */}
+      <div className="w-full h-full pt-10">
         {current.tipo === "ponto_batido" && current.dadosPonto && (
-          <div className="w-full h-full bg-white flex flex-col justify-between p-6 sm:p-10 lg:p-12 relative overflow-hidden select-none animate-in fade-in duration-300">
-            {/* Fundo Orgânico Dourado */}
-            <OndaOrganicaDourada />
-
-            {/* Topo */}
-            <div className="relative z-10 flex items-center justify-between w-full max-w-4xl mx-auto pt-2">
-              <Image src="/logo.png" alt="Logo" width={160} height={80} priority style={{ height: "auto" }} />
-              <span className="text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Ponto Registrado
-              </span>
-            </div>
-
-            {/* Centro */}
-            <div className="relative z-10 my-auto max-w-xl mx-auto w-full text-center space-y-6 py-4">
-              <div className="flex justify-center">
-                <IlustracaoPontoAnimada tipo={current.dadosPonto.tipo} className="w-32 h-32 sm:w-40 sm:h-40" />
-              </div>
-
-              <div className="space-y-1">
-                <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-gray-900 leading-tight">
-                  <span style={{ color: "#c69e6b" }}>{current.dadosPonto.mensagem}</span>
-                </h1>
-                <p className="text-sm text-gray-500 font-medium">Autenticação biométrica validada com sucesso</p>
-              </div>
-
-              <div className="rounded-lg p-5 bg-white/90 backdrop-blur-md border border-amber-200/60 shadow-[0_8px_30px_-8px_rgba(198,158,107,0.2)] space-y-3 text-left">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-                  <span className="text-xs uppercase font-bold text-gray-400 tracking-wider">Tipo de Batida</span>
-                  <span className="font-bold text-sm px-3 py-1 rounded-md bg-amber-50 text-amber-900 border border-amber-200/80">
-                    {current.dadosPonto.tipo}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs uppercase font-bold text-gray-400 tracking-wider block">Horário Registrado</span>
-                    <span className="text-2xl sm:text-3xl font-bold text-gray-800 tracking-tight font-mono">{current.dadosPonto.hora}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs uppercase font-bold text-gray-400 tracking-wider block">Data</span>
-                    <span className="text-sm font-semibold text-gray-700">{current.dadosPonto.data}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-1 max-w-md mx-auto space-y-1.5">
-                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-1000 ease-linear"
-                    style={{
-                      width: `${(tempoRestante / 15) * 100}%`,
-                      background: "linear-gradient(90deg, #c69e6b 0%, #1db9b3 100%)",
-                    }}
-                  />
-                </div>
-                <p className="text-[11px] text-gray-400 font-medium">Avançando automaticamente em {tempoRestante}s...</p>
-              </div>
-            </div>
-
-            {/* Rodapé */}
-            <div className="relative z-10 flex items-center justify-between w-full max-w-4xl mx-auto pt-2">
-              <button
-                onClick={() => setSlideAtual((prev) => (prev + 1) % totalSlides)}
-                className="px-6 py-2.5 rounded-lg text-sm font-bold text-white transition-all shadow-md hover:shadow-lg"
-                style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
-              >
-                Próximo Design
-              </button>
-              <span className="text-xs text-gray-400 font-medium">Vitall Showcase</span>
-            </div>
-          </div>
+          <TelaPontoSucesso
+            key={current.id}
+            nome={current.dadosPonto.nome}
+            tipo={current.dadosPonto.tipo}
+            hora={current.dadosPonto.hora}
+            data={current.dadosPonto.data}
+            mensagem={current.dadosPonto.mensagem}
+            durationMs={15000}
+            onVoltar={() => setSlideAtual((prev) => (prev + 1) % totalSlides)}
+            modoDemonstracao={true}
+          />
         )}
 
         {current.tipo === "dialogo" && current.dadosDialogo && (

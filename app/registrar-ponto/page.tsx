@@ -17,7 +17,7 @@ import { registrarPonto, buscarRegistrosHoje, buscarFuncionarioPorId, registrarM
 import type { Funcionario } from "@/lib/types"
 import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/dialogo-ponto-inteligente"
-import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
+import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
 import { OndaOrganicaDourada } from "@/components/onda-organica-dourada"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import { agendarLembretesAlmoco, cancelarLembretesAlmoco, sincronizarSessoesAlmocoDoDia, type InfoAlmocoAtivo } from "@/lib/lembretes-almoco"
@@ -807,81 +807,17 @@ export default function RegistrarPonto() {
       {/* Proteção de tela */}
       {screensaver && <Screensaver onTap={() => { screensaverRef.current = false; setScreensaver(false); resetInactivityTimer() }} />}
 
-      {/* Tela de sucesso de Ponto Registrado — Canvas Único, Orgânico Dourado & Animações Vivas */}
+      {/* Tela de sucesso de Ponto Registrado — Zero Scroll, Animação do Centro para Direita & Dourado */}
       {showSuccess && completedPerson && (
-        <div className="absolute inset-0 z-40 bg-white flex flex-col justify-between p-6 sm:p-10 lg:p-12 overflow-hidden select-none animate-in fade-in duration-400">
-          {/* Fundo Orgânico Dourado */}
-          <OndaOrganicaDourada />
-
-          {/* Topo: Logo único e Badge de Status */}
-          <div className="relative z-10 flex items-center justify-between w-full max-w-4xl mx-auto">
-            <Image src="/logo.png" alt="Logo" width={160} height={80} priority style={{ height: "auto" }} />
-            <span className="text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Ponto Registrado
-            </span>
-          </div>
-
-          {/* Centro: Ilustração Animada, Saudação Dourada e Card Retangular Organizado */}
-          <div className="relative z-10 my-auto max-w-xl mx-auto w-full text-center space-y-6 py-4">
-            {/* Ilustração Animada Viva (Sol, Almoço com Vapor, Maleta de Foco ou Lua Noturna) */}
-            <div className="flex justify-center">
-              <IlustracaoPontoAnimada tipo={completedPerson.tipo || "Entrada"} className="w-32 h-32 sm:w-40 sm:h-40" />
-            </div>
-
-            {/* Saudação com Nome em Dourado */}
-            <div className="space-y-1">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-gray-900 leading-tight">
-                <span style={{ color: "#c69e6b" }}>{completedPerson.mensagem}</span>
-              </h1>
-              <p className="text-sm text-gray-500 font-medium">
-                Autenticação biométrica validada com sucesso
-              </p>
-            </div>
-
-            {/* Card de Informações Limpo e Mais Quadrado */}
-            <div className="rounded-lg p-5 bg-white/90 backdrop-blur-md border border-amber-200/60 shadow-[0_8px_30px_-8px_rgba(198,158,107,0.2)] space-y-3 text-left">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-                <span className="text-xs uppercase font-bold text-gray-400 tracking-wider">Tipo de Batida</span>
-                <span className="font-bold text-sm px-3 py-1 rounded-md bg-amber-50 text-amber-900 border border-amber-200/80">
-                  {completedPerson.tipo}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs uppercase font-bold text-gray-400 tracking-wider block">Horário Registrado</span>
-                  <span className="text-2xl sm:text-3xl font-bold text-gray-800 tracking-tight font-mono">
-                    {completedPerson.hora}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs uppercase font-bold text-gray-400 tracking-wider block">Data</span>
-                  <span className="text-sm font-semibold text-gray-700">
-                    {completedPerson.data}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Progresso de Retorno Automático */}
-            <div className="pt-1 max-w-md mx-auto">
-              <ReturnProgress durationMs={30000} />
-            </div>
-          </div>
-
-          {/* Rodapé: Botão Voltar */}
-          <div className="relative z-10 flex items-center justify-between w-full max-w-4xl mx-auto pt-2">
-            <button
-              onClick={resetToInitialState}
-              className="px-6 py-2.5 rounded-lg text-sm font-bold text-white transition-all shadow-md hover:shadow-lg active:scale-95"
-              style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
-            >
-              Voltar ao Início
-            </button>
-            <span className="text-xs text-gray-400 font-medium">Vitall Ponto Digital</span>
-          </div>
-        </div>
+        <TelaPontoSucesso
+          nome={completedPerson.nome}
+          tipo={completedPerson.tipo || "Entrada"}
+          hora={completedPerson.hora || "08:00:00"}
+          data={completedPerson.data || new Date().toLocaleDateString()}
+          mensagem={completedPerson.mensagem || ""}
+          durationMs={30000}
+          onVoltar={resetToInitialState}
+        />
       )}
 
           {/* Diálogo Inteligente de Resolução de Horários */}
