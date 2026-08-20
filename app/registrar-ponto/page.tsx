@@ -74,7 +74,7 @@ function SuccessAnimation({ tipo }: { tipo: string }) {
   )
 }
 // Screensaver com relógio em tempo real e saudação dinâmica
-// Componente individual com cronômetro regressivo ao vivo
+// Componente individual com cronômetro regressivo ao vivo (Design Dourado e mais quadrado)
 function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
   const [tempoRestanteStr, setTempoRestanteStr] = useState("")
   const [passouDoTempo, setPassouDoTempo] = useState(false)
@@ -108,19 +108,19 @@ function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
   }, [item.retornoPrevistoMs])
 
   return (
-    <div className="flex items-center justify-between gap-3 bg-white/15 rounded-xl px-3.5 py-2.5 border border-white/15 text-xs shadow-md backdrop-blur-sm">
+    <div className="flex items-center justify-between gap-3 bg-black/20 rounded-md px-3.5 py-2.5 border border-white/20 text-xs shadow-sm">
       <div className="flex flex-col">
         <span className="font-bold text-sm text-white tracking-tight leading-tight">{item.primeiroNome}</span>
-        <span className="text-[11px] text-amber-100/90 font-medium mt-0.5">
+        <span className="text-[12px] text-amber-100 font-medium mt-0.5">
           {item.horaSaida} às {item.horaRetornoPrevista}
         </span>
       </div>
 
       <div
-        className={`flex items-center gap-1.5 font-mono font-bold text-xs px-2.5 py-1 rounded-lg border shadow-sm ${
+        className={`flex items-center gap-1.5 font-mono font-bold text-xs px-2.5 py-1.5 rounded-md border shadow-sm ${
           passouDoTempo
-            ? "bg-red-500/40 text-red-100 border-red-400/50 animate-pulse"
-            : "bg-black/40 text-amber-300 border-amber-400/30"
+            ? "bg-red-600/70 text-white border-red-400/60 animate-pulse"
+            : "bg-black/40 text-amber-200 border-white/20"
         }`}
       >
         <span className="text-xs">⏳</span>
@@ -162,8 +162,12 @@ function Screensaver({ onTap }: { onTap: () => void }) {
 
   return (
     <div
-      className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden"
-      style={{ background: "linear-gradient(135deg, rgba(198, 158, 107, 0.95) 0%, rgba(166, 124, 78, 0.95) 50%, rgba(133, 91, 48, 0.97) 100%)" }}
+      className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden backdrop-blur-xl"
+      style={{
+        background: "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+      }}
       onClick={onTap}
     >
       <style>{`
@@ -185,30 +189,32 @@ function Screensaver({ onTap }: { onTap: () => void }) {
           {time}
         </p>
         <p className="ss-fade ss-fade-d2 text-2xl font-light opacity-90 mb-8">{greeting}</p>
-        <p className="ss-fade ss-fade-d3 text-lg opacity-80 font-medium tracking-wide">Toque na tela para registrar o ponto</p>
+        <p className="ss-fade ss-fade-d3 text-lg opacity-60">Toque na tela para registrar o ponto</p>
       </div>
 
-      {/* Canto Inferior Direito: Status com Cronômetro Regressivo */}
+      {/* Canto Inferior Direito: Card Dourado com Status de Almoço */}
       {funcionariosEmAlmoco.length > 0 && (
         <div
-          className="absolute bottom-6 right-6 z-40 max-w-xs sm:max-w-sm pointer-events-auto ss-fade"
+          className="absolute bottom-6 right-6 z-40 w-96 max-w-[90vw] pointer-events-auto ss-fade"
           onClick={(e) => {
             e.stopPropagation()
             onTap()
           }}
         >
-          <div className="bg-black/40 backdrop-blur-md border border-white/20 rounded-2xl p-4 text-white shadow-2xl space-y-3">
-            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-200">
-                <span className="text-base">🍽️</span>
-                <span>Saída Almoço</span>
-              </div>
-              <span className="text-[10px] font-semibold bg-amber-500/30 text-amber-200 px-2 py-0.5 rounded-full border border-amber-400/30">
-                {funcionariosEmAlmoco.length} {funcionariosEmAlmoco.length === 1 ? "ativo" : "ativos"}
-              </span>
+          <div
+            className="rounded-lg p-4 text-white shadow-2xl space-y-3 border"
+            style={{
+              background: "linear-gradient(135deg, rgba(198, 158, 107, 0.95) 0%, rgba(175, 134, 87, 0.95) 50%, rgba(150, 107, 60, 0.98) 100%)",
+              borderColor: "rgba(255, 255, 255, 0.35)",
+              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3)",
+            }}
+          >
+            <div className="flex items-center gap-2 border-b border-white/20 pb-2">
+              <span className="text-lg">🍽️</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-white">Almoço</span>
             </div>
 
-            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
               {funcionariosEmAlmoco.map((f) => (
                 <BadgeAlmocoCronometro key={f.funcionarioId} item={f} />
               ))}
