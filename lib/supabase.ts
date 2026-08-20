@@ -1,3 +1,4 @@
+import type { CoordenadasLocalizacao } from "@/lib/geolocation"
 import { createClient } from "@supabase/supabase-js"
 import type { Funcionario, RegistroPonto, HorariosSemana, AjusteSaldo } from "./types"
 
@@ -585,7 +586,8 @@ export async function buscarRegistrosHoje(funcionarioId: string): Promise<Regist
 export async function registrarMultiplosPontos(
   funcionarioId: string,
   nomeFuncionario: string,
-  pontos: { tipo: string; dataHoraIso: string }[]
+  pontos: { tipo: string; dataHoraIso: string }[],
+  localizacao?: CoordenadasLocalizacao | null
 ): Promise<ResultadoRegistroPonto> {
   try {
     if (!isSupabaseAvailable()) {
@@ -596,14 +598,36 @@ export async function registrarMultiplosPontos(
       throw new Error("Nenhum ponto a registrar")
     }
 
-    const payload = pontos.map((p) => ({
-      funcionario_id: funcionarioId,
-      nome_funcionario: nomeFuncionario,
-      data_hora: p.dataHoraIso,
-      tipo: p.tipo,
-    }))
+    const payload = pontos.map((p) => {
+      const item: Record<string, any> = {
+        funcionario_id: funcionarioId,
+        nome_funcionario: nomeFuncionario,
+        data_hora: p.dataHoraIso,
+        tipo: p.tipo,
+      }
+      if (localizacao) {
+        item.latitude = localizacao.latitude
+        item.longitude = localizacao.longitude
+        item.precisao = localizacao.precisao
+        item.localizacao = localizacao
+      }
+      return item
+    })
 
-    const { error } = await supabase!.from("registros_ponto").insert(payload)
+    let { error } = await supabase!.from("registros_ponto").insert(payload)
+
+    // Fallback gracioso se as colunas de localização ainda não existirem no Supabase
+    if (error && localizacao) {
+      console.warn("⚠️ Tentando inserção padrão sem colunas de geolocalização...", error.message)
+      const payloadPadrao = pontos.map((p) => ({
+        funcionario_id: funcionarioId,
+        nome_funcionario: nomeFuncionario,
+        data_hora: p.dataHoraIso,
+        tipo: p.tipo,
+      }))
+      const resRetry = await supabase!.from("registros_ponto").insert(payloadPadrao)
+      error = resRetry.error
+    }
 
     if (error) {
       console.error("Erro ao registrar múltiplos pontos:", error)
@@ -631,6 +655,7 @@ export async function registrarPonto(
   funcionarioId: string,
   nomeFuncionario: string,
   tipoForcado?: string,
+  localizacao?: CoordenadasLocalizacao | null
 ): Promise<ResultadoRegistroPonto> {
   try {
     if (!isSupabaseAvailable()) {
@@ -699,17 +724,40 @@ export async function registrarPonto(
       }
     }
 
-    // 3. Inserir no Supabase
-    const { error: erroInsert } = await supabase!
+    // 3. Inserir no Supabase com suporte a Geolocalização
+    const dadosInsert: Record<string, any> = {
+      funcionario_id: funcionarioId,
+      nome_funcionario: nomeFuncionario,
+      data_hora: dataHoraIso,
+      tipo: tipo,
+    }
+
+    if (localizacao) {
+      dadosInsert.latitude = localizacao.latitude
+      dadosInsert.longitude = localizacao.longitude
+      dadosInsert.precisao = localizacao.precisao
+      dadosInsert.localizacao = localizacao
+    }
+
+    let { error: erroInsert } = await supabase!
       .from("registros_ponto")
-      .insert([
-        {
-          funcionario_id: funcionarioId,
-          nome_funcionario: nomeFuncionario,
-          data_hora: dataHoraIso,
-          tipo: tipo,
-        },
-      ])
+      .insert([dadosInsert])
+
+    // Fallback caso a tabela ainda não tenha as novas colunas no Supabase
+    if (erroInsert && localizacao) {
+      console.warn("⚠️ Tentando inserção padrão sem colunas de geolocalização...", erroInsert.message)
+      const resFallback = await supabase!
+        .from("registros_ponto")
+        .insert([
+          {
+            funcionario_id: funcionarioId,
+            nome_funcionario: nomeFuncionario,
+            data_hora: dataHoraIso,
+            tipo: tipo,
+          },
+        ])
+      erroInsert = resFallback.error
+    }
 
     if (erroInsert) {
       console.error("Erro ao registrar ponto no Supabase:", erroInsert)

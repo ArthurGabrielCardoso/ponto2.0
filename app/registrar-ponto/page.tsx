@@ -1,3 +1,4 @@
+import { obterLocalizacaoAtual } from "@/lib/geolocation"
 "use client"
 
 /**
@@ -578,7 +579,8 @@ export default function RegistrarPonto() {
       }
 
       // Fluxo Direto Normal
-      const res = await registrarPonto(person.id, person.nome, diag.proximoTipoSugerido)
+      const localizacao = await obterLocalizacaoAtual().catch(() => null)
+      const res = await registrarPonto(person.id, person.nome, diag.proximoTipoSugerido, localizacao)
       const tipo = res.tipo || diag.proximoTipoSugerido
 
       const getMensagemVisual = (t: string) => {
@@ -666,7 +668,8 @@ export default function RegistrarPonto() {
     const now = new Date()
 
     try {
-      await registrarMultiplosPontos(person.id, person.nome, pontos)
+      const localizacao = await obterLocalizacaoAtual().catch(() => null)
+      await registrarMultiplosPontos(person.id, person.nome, pontos, localizacao)
 
       const completed: RecognizedPerson = {
         ...person,

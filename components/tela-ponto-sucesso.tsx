@@ -27,7 +27,7 @@ export function TelaPontoSucesso({
 }: TelaPontoSucessoProps) {
   // Fases da coreografia:
   // 1. "centro": Ícone gigante centralizado (0 a 800ms)
-  // 2. "deslizando": Ícone desliza majestosamente para o lado direito (800ms a 1400ms)
+  // 2. "deslizando": Ícone desliza para o lado direito (800ms a 1400ms)
   // 3. "revelar": Ícone 100% ancorado -> surge a logo, badge e lado esquerdo (1500ms+)
   const [fase, setFase] = useState<"centro" | "deslizando" | "revelar">("centro")
   const [timeLeft, setTimeLeft] = useState(Math.round(durationMs / 1000))
@@ -72,98 +72,94 @@ export function TelaPontoSucesso({
   const iconeAncorado = fase === "deslizando" || fase === "revelar"
   const conteudoVisivel = fase === "revelar"
 
-  // Configuração atmosférica por período (Cenários ricos e imersivos)
+  // Configuração dos 4 Gradientes Ricos e Imersivos por Período
   const getCenario = () => {
     const t = (tipo || "").toLowerCase().trim()
 
-    // 1. NOITE / FIM DE EXPEDIENTE - Céu Noturno Azul Marinho Profundo com Dourado
+    // 1. NOITE / FIM DE EXPEDIENTE - Azul Marinho Escuro Profundo com Dourado Noturno
     if ((t.includes("saída") || t.includes("saida")) && !t.includes("almoço") && !t.includes("almoco")) {
       return {
-        isDark: true,
         bgStyle: {
-          background: "radial-gradient(circle at 75% 45%, #1e293b 0%, #0f172a 45%, #050811 100%)",
+          background: "radial-gradient(circle at 75% 45%, #1e293b 0%, #0f172a 50%, #050811 100%)",
         },
         glowOrb: "radial-gradient(circle, rgba(253, 224, 71, 0.18) 0%, rgba(99, 102, 241, 0.12) 50%, transparent 70%)",
-        cardClass: "bg-slate-900/85 backdrop-blur-xl border border-amber-400/25 shadow-[0_16px_50px_-10px_rgba(0,0,0,0.8)] text-white",
-        cardDivider: "border-slate-800",
+        cardClass: "bg-slate-900/80 backdrop-blur-2xl border border-amber-400/30 shadow-[0_16px_50px_-10px_rgba(0,0,0,0.8)] text-white",
+        cardDivider: "border-slate-800/80",
         cardLabel: "text-slate-400",
         timeText: "text-amber-200",
         dateText: "text-slate-300",
-        tagClass: "bg-amber-400/15 text-amber-300 border border-amber-400/30",
+        tagClass: "bg-amber-400/20 text-amber-300 border border-amber-400/40",
         greetingColor: "#fde047",
-        trackBg: "bg-slate-800",
-        statusBadge: "bg-amber-500/15 text-amber-300 border border-amber-400/30",
+        trackBg: "bg-slate-800/80",
+        statusBadge: "bg-amber-400/15 text-amber-300 border border-amber-400/30",
         statusDot: "bg-amber-400",
         btnGrad: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)",
         textMuted: "text-slate-400",
       }
     }
 
-    // 2. ENTRADA / MANHÃ - Amanhecer Radiante com Halo Solar e Fundo Dourado Suave
+    // 2. ENTRADA / DIA - Dourado Nobre Radiante (Signature Gold)
     if (t.includes("entrada")) {
       return {
-        isDark: false,
         bgStyle: {
-          background: "radial-gradient(circle at 75% 45%, #fef3c7 0%, #fffbeb 30%, #fcfbf9 70%, #f8f6f0 100%)",
+          background: "radial-gradient(circle at 75% 45%, #c69e6b 0%, #a67c4e 50%, #593e1f 100%)",
         },
-        glowOrb: "radial-gradient(circle, rgba(245, 158, 11, 0.28) 0%, rgba(251, 191, 36, 0.14) 50%, transparent 70%)",
-        cardClass: "bg-white/90 backdrop-blur-xl border border-amber-200/70 shadow-[0_16px_40px_-8px_rgba(198,158,107,0.25)] text-gray-900",
-        cardDivider: "border-amber-100",
-        cardLabel: "text-gray-400",
-        timeText: "text-gray-900",
-        dateText: "text-gray-700",
-        tagClass: "bg-amber-50 text-amber-900 border border-amber-200/80",
-        greetingColor: "#c69e6b",
-        trackBg: "bg-amber-100/60",
-        statusBadge: "bg-emerald-50 text-emerald-800 border border-emerald-200/80",
-        statusDot: "bg-emerald-500",
-        btnGrad: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)",
-        textMuted: "text-gray-400",
+        glowOrb: "radial-gradient(circle, rgba(254, 240, 138, 0.28) 0%, rgba(245, 158, 11, 0.15) 50%, transparent 70%)",
+        cardClass: "bg-black/25 backdrop-blur-2xl border border-amber-200/40 shadow-[0_16px_50px_-10px_rgba(0,0,0,0.5)] text-white",
+        cardDivider: "border-white/15",
+        cardLabel: "text-amber-200/80",
+        timeText: "text-white",
+        dateText: "text-amber-100",
+        tagClass: "bg-amber-300/25 text-amber-100 border border-amber-300/40",
+        greetingColor: "#ffffff",
+        trackBg: "bg-black/30",
+        statusBadge: "bg-white/20 text-amber-100 border border-white/30",
+        statusDot: "bg-amber-300",
+        btnGrad: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+        textMuted: "text-amber-200/80",
       }
     }
 
-    // 3. SAÍDA ALMOÇO - Âmbar Quente Gastronômico e Terracota
+    // 3. SAÍDA ALMOÇO - Laranja / Âmbar Quente Gastronômico
     if (t.includes("almoço") || t.includes("almoco")) {
       return {
-        isDark: false,
         bgStyle: {
-          background: "radial-gradient(circle at 75% 45%, #ffedd5 0%, #fff7ed 35%, #faf8f5 75%, #f4ede4 100%)",
+          background: "radial-gradient(circle at 75% 45%, #f97316 0%, #ea580c 50%, #7c2d12 100%)",
         },
-        glowOrb: "radial-gradient(circle, rgba(249, 115, 22, 0.25) 0%, rgba(251, 146, 60, 0.12) 50%, transparent 70%)",
-        cardClass: "bg-white/90 backdrop-blur-xl border border-orange-200/70 shadow-[0_16px_40px_-8px_rgba(234,88,12,0.2)] text-gray-900",
-        cardDivider: "border-orange-100",
-        cardLabel: "text-gray-400",
-        timeText: "text-gray-900",
-        dateText: "text-gray-700",
-        tagClass: "bg-orange-50 text-orange-950 border border-orange-200/80",
-        greetingColor: "#c69e6b",
-        trackBg: "bg-orange-100/60",
-        statusBadge: "bg-emerald-50 text-emerald-800 border border-emerald-200/80",
-        statusDot: "bg-emerald-500",
-        btnGrad: "linear-gradient(135deg, #ea580c 0%, #c2410c 100%)",
-        textMuted: "text-gray-400",
+        glowOrb: "radial-gradient(circle, rgba(254, 215, 170, 0.25) 0%, rgba(249, 115, 22, 0.15) 50%, transparent 70%)",
+        cardClass: "bg-black/25 backdrop-blur-2xl border border-orange-200/40 shadow-[0_16px_50px_-10px_rgba(0,0,0,0.5)] text-white",
+        cardDivider: "border-white/15",
+        cardLabel: "text-orange-200/80",
+        timeText: "text-white",
+        dateText: "text-orange-100",
+        tagClass: "bg-orange-300/25 text-orange-100 border border-orange-300/40",
+        greetingColor: "#ffffff",
+        trackBg: "bg-black/30",
+        statusBadge: "bg-white/20 text-orange-100 border border-white/30",
+        statusDot: "bg-orange-300",
+        btnGrad: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)",
+        textMuted: "text-orange-200/80",
       }
     }
 
-    // 4. RETORNO ALMOÇO - Foco & Produtividade Teal Signature
+    // 4. RETORNO ALMOÇO - Teal Esmeralda Signature
     return {
-      isDark: false,
       bgStyle: {
-        background: "radial-gradient(circle at 75% 45%, #ccfbf1 0%, #f0fdfa 35%, #f6fbfb 75%, #ebf5f5 100%)",
+        background: "radial-gradient(circle at 75% 45%, #14b8a6 0%, #0d9488 50%, #042f2e 100%)",
       },
-      glowOrb: "radial-gradient(circle, rgba(20, 184, 166, 0.25) 0%, rgba(45, 212, 191, 0.12) 50%, transparent 70%)",
-      cardClass: "bg-white/90 backdrop-blur-xl border border-teal-200/70 shadow-[0_16px_40px_-8px_rgba(13,148,136,0.2)] text-gray-900",
-      cardDivider: "border-teal-100",
-      cardLabel: "text-gray-400",
-      timeText: "text-gray-900",
-      dateText: "text-gray-700",
-      tagClass: "bg-teal-50 text-teal-950 border border-teal-200/80",
-      greetingColor: "#0f766e",
-      trackBg: "bg-teal-100/60",
-      statusBadge: "bg-emerald-50 text-emerald-800 border border-emerald-200/80",
-      statusDot: "bg-emerald-500",
-      btnGrad: "linear-gradient(135deg, #1db9b3 0%, #0d8488 100%)",
-      textMuted: "text-gray-400",
+      glowOrb: "radial-gradient(circle, rgba(204, 251, 241, 0.25) 0%, rgba(20, 184, 166, 0.15) 50%, transparent 70%)",
+      cardClass: "bg-black/25 backdrop-blur-2xl border border-teal-200/40 shadow-[0_16px_50px_-10px_rgba(0,0,0,0.5)] text-white",
+      cardDivider: "border-white/15",
+      cardLabel: "text-teal-200/80",
+      timeText: "text-white",
+      dateText: "text-teal-100",
+      tagClass: "bg-teal-300/25 text-teal-100 border border-teal-300/40",
+      greetingColor: "#ffffff",
+      trackBg: "bg-black/30",
+      statusBadge: "bg-white/20 text-teal-100 border border-white/30",
+      statusDot: "bg-teal-300",
+      btnGrad: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)",
+      textMuted: "text-teal-200/80",
     }
   }
 
@@ -171,10 +167,10 @@ export function TelaPontoSucesso({
 
   return (
     <div
-      className="absolute inset-0 z-40 h-screen w-full flex flex-col justify-between p-4 sm:p-8 lg:p-10 overflow-hidden select-none transition-colors duration-700"
+      className="absolute inset-0 z-40 h-screen w-full flex flex-col justify-between p-4 sm:p-8 lg:p-10 overflow-hidden select-none transition-all duration-700"
       style={cenario.bgStyle}
     >
-      {/* Halo de Luz de Fundo */}
+      {/* Halo de Luz Ambiente */}
       <div
         className="absolute inset-0 pointer-events-none transition-all duration-700"
         style={{ background: cenario.glowOrb }}
@@ -186,16 +182,18 @@ export function TelaPontoSucesso({
           conteudoVisivel ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        <Image src="/logo.png" alt="Logo" width={150} height={75} priority style={{ height: "auto" }} />
-        <span className={`text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-md shadow-sm flex items-center gap-1.5 ${cenario.statusBadge}`}>
+        <div className="p-2 rounded-xl bg-white/20 backdrop-blur-md border border-white/25 shadow-md inline-block">
+          <Image src="/logo.png" alt="Logo" width={140} height={70} priority style={{ height: "auto" }} />
+        </div>
+        <span className={`text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-md shadow-sm flex items-center gap-1.5 backdrop-blur-md ${cenario.statusBadge}`}>
           <span className={`w-2 h-2 rounded-full animate-pulse ${cenario.statusDot}`} />
           Ponto Registrado
         </span>
       </div>
 
-      {/* ÁREA CENTRAL: Layout sem Scroll com Transição Cinematográfica */}
+      {/* ÁREA CENTRAL: Layout Dividido sem Scroll com Transição Cinematográfica */}
       <div className="relative z-10 flex-1 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-10 max-w-5xl mx-auto w-full my-auto px-2">
-        {/* LADO ESQUERDO: Saudação Dourada e Card de Informações */}
+        {/* LADO ESQUERDO: Saudação e Card de Informações */}
         <div
           className={`w-full md:w-[52%] space-y-4 sm:space-y-5 text-center md:text-left transition-all duration-600 ease-out ${
             conteudoVisivel
@@ -205,14 +203,14 @@ export function TelaPontoSucesso({
         >
           {/* Saudação com Nome */}
           <div className="space-y-1">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight drop-shadow-sm">
               <span style={{ color: cenario.greetingColor }}>
                 {mensagem || `Excelente trabalho, ${nome.split(" ")[0]}!`}
               </span>
             </h1>
           </div>
 
-          {/* Card de Informações Retangular */}
+          {/* Card de Informações Retangular em Vidro Fosco Nobre */}
           <div className={`rounded-lg p-4 sm:p-5 space-y-3 ${cenario.cardClass}`}>
             <div className={`flex items-center justify-between border-b pb-2.5 ${cenario.cardDivider}`}>
               <span className={`text-xs uppercase font-bold tracking-wider ${cenario.cardLabel}`}>Tipo</span>
@@ -240,14 +238,14 @@ export function TelaPontoSucesso({
                 className="h-full rounded-full transition-all duration-1000 ease-linear"
                 style={{
                   width: `${(timeLeft / Math.round(durationMs / 1000)) * 100}%`,
-                  background: "linear-gradient(90deg, #c69e6b 0%, #1db9b3 100%)",
+                  background: "linear-gradient(90deg, #fde047 0%, #1db9b3 100%)",
                 }}
               />
             </div>
             <div className={`flex items-center justify-between text-xs ${cenario.textMuted}`}>
               <button
                 onClick={() => onVoltarRef.current()}
-                className="px-5 py-2 rounded-lg font-bold text-white transition-all shadow-sm hover:shadow active:scale-95 text-xs sm:text-sm"
+                className="px-5 py-2 rounded-lg font-bold text-white transition-all shadow-md hover:shadow-lg active:scale-95 text-xs sm:text-sm"
                 style={{ background: cenario.btnGrad }}
               >
                 Voltar ao Início
