@@ -74,7 +74,26 @@ function SuccessAnimation({ tipo }: { tipo: string }) {
   )
 }
 // Screensaver com relógio em tempo real e saudação dinâmica
-// Componente individual com cronômetro regressivo ao vivo (Design Dourado e mais quadrado)
+// Efeito de moldura luminosa e cantos futuristas nas bordas da tela ao identificar pessoa
+function ViewfinderBorder({ isSmiling }: { isSmiling: boolean }) {
+  return (
+    <div
+      className={`fixed inset-0 pointer-events-none z-20 transition-all duration-500 ${
+        isSmiling
+          ? "border-[5px] sm:border-[6px] border-emerald-400/90 shadow-[inset_0_0_80px_rgba(16,185,129,0.45)]"
+          : "border-[4px] sm:border-[5px] border-teal-400/75 shadow-[inset_0_0_60px_rgba(29,185,179,0.3)]"
+      }`}
+    >
+      {/* 4 Cantos estilo visor de alta precisão */}
+      <div className={`absolute top-4 left-4 w-9 h-9 border-t-4 border-l-4 rounded-tl-lg transition-colors duration-300 ${isSmiling ? "border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.8)]" : "border-teal-300 shadow-[0_0_12px_rgba(29,185,179,0.6)]"}`} />
+      <div className={`absolute top-4 right-4 w-9 h-9 border-t-4 border-r-4 rounded-tr-lg transition-colors duration-300 ${isSmiling ? "border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.8)]" : "border-teal-300 shadow-[0_0_12px_rgba(29,185,179,0.6)]"}`} />
+      <div className={`absolute bottom-4 left-4 w-9 h-9 border-b-4 border-l-4 rounded-bl-lg transition-colors duration-300 ${isSmiling ? "border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.8)]" : "border-teal-300 shadow-[0_0_12px_rgba(29,185,179,0.6)]"}`} />
+      <div className={`absolute bottom-4 right-4 w-9 h-9 border-b-4 border-r-4 rounded-br-lg transition-colors duration-300 ${isSmiling ? "border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.8)]" : "border-teal-300 shadow-[0_0_12px_rgba(29,185,179,0.6)]"}`} />
+    </div>
+  )
+}
+
+// Componente individual com cronômetro regressivo ao vivo (Design Dourado e horizontal)
 function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
   const [tempoRestanteStr, setTempoRestanteStr] = useState("")
   const [passouDoTempo, setPassouDoTempo] = useState(false)
@@ -108,19 +127,19 @@ function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
   }, [item.retornoPrevistoMs])
 
   return (
-    <div className="flex items-center justify-between gap-3 bg-black/20 rounded-md px-3.5 py-2.5 border border-white/20 text-xs shadow-sm">
-      <div className="flex flex-col">
-        <span className="font-bold text-sm text-white tracking-tight leading-tight">{item.primeiroNome}</span>
-        <span className="text-[12px] text-amber-100 font-medium mt-0.5">
+    <div className="flex items-center justify-between gap-3 bg-black/25 rounded-md px-3.5 py-2.5 border border-white/25 text-xs shadow-md">
+      <div className="flex flex-col min-w-0 pr-2">
+        <span className="font-bold text-sm text-white tracking-tight leading-tight truncate">{item.primeiroNome}</span>
+        <span className="text-[12px] text-amber-100 font-medium mt-0.5 whitespace-nowrap">
           {item.horaSaida} às {item.horaRetornoPrevista}
         </span>
       </div>
 
       <div
-        className={`flex items-center gap-1.5 font-mono font-bold text-xs px-2.5 py-1.5 rounded-md border shadow-sm ${
+        className={`flex items-center gap-1.5 font-mono font-bold text-xs px-2.5 py-1.5 rounded-md border shadow-sm shrink-0 ${
           passouDoTempo
-            ? "bg-red-600/70 text-white border-red-400/60 animate-pulse"
-            : "bg-black/40 text-amber-200 border-white/20"
+            ? "bg-red-600/75 text-white border-red-400/70 animate-pulse"
+            : "bg-black/45 text-amber-200 border-white/20"
         }`}
       >
         <span className="text-xs">⏳</span>
@@ -178,6 +197,8 @@ function Screensaver({ onTap }: { onTap: () => void }) {
         .ss-fade-d2{animation-delay:.3s}
         .ss-fade-d3{animation-delay:.5s}
         .ss-colon{animation:pulse-dot 2s ease-in-out infinite}
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
       {/* Centro: Horário, Saudação e Instrução */}
@@ -189,31 +210,35 @@ function Screensaver({ onTap }: { onTap: () => void }) {
         <p className="ss-fade ss-fade-d2 text-base sm:text-lg opacity-75 font-medium tracking-wide">Toque na tela para registrar o ponto</p>
       </div>
 
-      {/* Canto Inferior Direito: Card Dourado com Status de Almoço */}
+      {/* Canto Inferior: Cards de Almoço Horizontais (lado a lado com scroll horizontal se necessário) */}
       {funcionariosEmAlmoco.length > 0 && (
         <div
-          className="absolute bottom-6 right-6 z-40 w-96 max-w-[90vw] pointer-events-auto ss-fade"
+          className="absolute bottom-6 left-4 right-4 sm:left-6 sm:right-6 z-40 pointer-events-auto ss-fade"
           onClick={(e) => {
             e.stopPropagation()
             onTap()
           }}
         >
           <div
-            className="rounded-lg p-4 text-white shadow-2xl space-y-3 border"
+            className="rounded-lg p-3.5 text-white shadow-2xl border ml-auto"
             style={{
               background: "linear-gradient(135deg, rgba(198, 158, 107, 0.95) 0%, rgba(175, 134, 87, 0.95) 50%, rgba(150, 107, 60, 0.98) 100%)",
               borderColor: "rgba(255, 255, 255, 0.35)",
-              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3)",
+              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.35)",
+              maxWidth: funcionariosEmAlmoco.length === 1 ? "24rem" : "100%",
             }}
           >
-            <div className="flex items-center gap-2 border-b border-white/20 pb-2">
-              <span className="text-lg">🍽️</span>
+            <div className="flex items-center gap-2 mb-2 px-1 border-b border-white/20 pb-1.5">
+              <span className="text-base">🍽️</span>
               <span className="text-xs font-bold uppercase tracking-wider text-white">Almoço</span>
             </div>
 
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {/* Lista Horizontal de Funcionários com scroll suave */}
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
               {funcionariosEmAlmoco.map((f) => (
-                <BadgeAlmocoCronometro key={f.funcionarioId} item={f} />
+                <div key={f.funcionarioId} className="shrink-0 w-72 sm:w-80">
+                  <BadgeAlmocoCronometro item={f} />
+                </div>
               ))}
             </div>
           </div>
@@ -651,30 +676,49 @@ export default function RegistrarPonto() {
         />
       </div>
 
-      {/* Status inferior - Pessoa reconhecida */}
+      {/* Moldura luminosa nas bordas da tela quando reconhecido */}
       {recognizedPerson && !recognizedPerson.registroCompleto && !showSuccess && (
-        <div
-          className="absolute bottom-0 left-0 right-0 z-20 py-6 px-4"
-          style={{ backgroundColor: "rgba(29, 185, 179, 0.85)", backdropFilter: "blur(8px)" }}
-        >
-          <style>{`@keyframes nameIn{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}`}</style>
-          <div className="text-white text-center" style={{ animation: "nameIn .4s ease-out" }}>
-            <div className="text-2xl font-bold tracking-wide">{recognizedPerson.nome}</div>
-            <div className="text-sm mt-1 opacity-90">
-              {recognizedPerson.isSmiling
-                ? "Sorriso detectado!"
-                : "Sorria para registrar o ponto"}
+        <ViewfinderBorder isSmiling={recognizedPerson.isSmiling} />
+      )}
+
+      {/* Status em Glassmorphism - Pessoa reconhecida */}
+      {recognizedPerson && !recognizedPerson.registroCompleto && !showSuccess && (
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg px-4 pointer-events-none animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div
+            className={`p-5 sm:p-6 rounded-2xl backdrop-blur-2xl border transition-all duration-300 text-center shadow-2xl ${
+              recognizedPerson.isSmiling
+                ? "bg-emerald-950/80 border-emerald-400/60 text-white shadow-[0_0_35px_rgba(16,185,129,0.45)]"
+                : "bg-teal-950/80 border-teal-400/50 text-white shadow-[0_0_30px_rgba(29,185,179,0.35)]"
+            }`}
+          >
+            <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center justify-center gap-2">
+              <span>{recognizedPerson.nome}</span>
+              {recognizedPerson.isSmiling && <span className="text-2xl animate-bounce">✨</span>}
+            </div>
+            <div className="text-sm sm:text-base font-medium mt-1.5">
+              {recognizedPerson.isSmiling ? (
+                <span className="text-emerald-300 font-semibold flex items-center justify-center gap-1.5">
+                  <span>😊</span> Sorriso detectado! Registrando ponto...
+                </span>
+              ) : (
+                <span className="text-teal-200 flex items-center justify-center gap-1.5">
+                  <span className="text-lg">😄</span> Sorria para registrar seu ponto
+                </span>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Indicador estável — mostra enquanto ainda não reconheceu ninguém */}
+      {/* Indicador estável em Glassmorphism — Identificando */}
       {!screensaver && !showSuccess && !recognizedPerson && modelsReady && cameraActive && (
-        <div className="absolute bottom-0 left-0 right-0 z-20 py-4 px-4"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.4)" }}>
-          <div className="text-white text-center text-sm opacity-80">
-            Identificando...
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-in fade-in duration-300">
+          <div className="flex items-center gap-3 px-6 py-3 rounded-full bg-black/45 backdrop-blur-xl border border-white/20 text-white shadow-2xl">
+            <div className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-teal-500"></span>
+            </div>
+            <span className="text-sm font-medium tracking-wide text-white/90">Posicione seu rosto na câmera</span>
           </div>
         </div>
       )}
