@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
 import { OndaOrganicaDourada } from "@/components/onda-organica-dourada"
@@ -27,40 +27,50 @@ export function TelaPontoSucesso({
   modoDemonstracao = false,
 }: TelaPontoSucessoProps) {
   // Fases da coreografia:
-  // 1. "centro": Ícone grande no centro da tela (0 a 1.2s)
-  // 2. "deslizando": Ícone desliza suavemente para a direita (1.2s a 2.0s)
-  // 3. "revelar": Ícone 100% ancorado + espera um tiquinho -> surge a logo, badge e lado esquerdo (2.2s+)
+  // 1. "centro": Ícone centralizado e grande (0 a 800ms)
+  // 2. "deslizando": Ícone desliza suavemente para a direita (800ms a 1400ms)
+  // 3. "revelar": Ícone 100% ancorado à direita -> surge a logo, badge e lado esquerdo (1500ms+)
   const [fase, setFase] = useState<"centro" | "deslizando" | "revelar">("centro")
   const [timeLeft, setTimeLeft] = useState(Math.round(durationMs / 1000))
+  const onVoltarRef = useRef(onVoltar)
 
   useEffect(() => {
-    // 1. Fica centralizado grande por 1.2s
+    onVoltarRef.current = onVoltar
+  }, [onVoltar])
+
+  // Efeito isolado para a animação das fases (sem ser cancelado por re-renders externos)
+  useEffect(() => {
+    setFase("centro")
     const tDeslizar = setTimeout(() => {
       setFase("deslizando")
-    }, 1200)
+    }, 800)
 
-    // 2. Chega 100% à direita aos 2.0s, espera um tiquinho (~200ms) e aos 2.2s revela o restante
     const tRevelar = setTimeout(() => {
       setFase("revelar")
-    }, 2200)
+    }, 1500)
 
+    return () => {
+      clearTimeout(tDeslizar)
+      clearTimeout(tRevelar)
+    }
+  }, [tipo, nome])
+
+  // Efeito isolado para o temporizador de contagem regressiva
+  useEffect(() => {
+    setTimeLeft(Math.round(durationMs / 1000))
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer)
-          onVoltar()
+          onVoltarRef.current()
           return 0
         }
         return prev - 1
       })
     }, 1000)
 
-    return () => {
-      clearTimeout(tDeslizar)
-      clearTimeout(tRevelar)
-      clearInterval(timer)
-    }
-  }, [durationMs, onVoltar])
+    return () => clearInterval(timer)
+  }, [durationMs, tipo, nome])
 
   const iconeAncorado = fase === "deslizando" || fase === "revelar"
   const conteudoVisivel = fase === "revelar"
@@ -70,9 +80,9 @@ export function TelaPontoSucesso({
       {/* Fundo com Onda Orgânica Dourada */}
       <OndaOrganicaDourada />
 
-      {/* TOPO: Logo e Badge "Ponto Registrado" — Aparece somente após o ícone ancorar à direita */}
+      {/* TOPO: Logo e Badge "Ponto Registrado" — Surge na fase de revelação */}
       <div
-        className={`relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0 transition-opacity duration-600 ease-out ${
+        className={`relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0 transition-opacity duration-500 ease-out ${
           conteudoVisivel ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
@@ -85,7 +95,7 @@ export function TelaPontoSucesso({
 
       {/* ÁREA CENTRAL: Layout Dividido sem Scroll com Transição Cinematográfica */}
       <div className="relative z-10 flex-1 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-10 max-w-5xl mx-auto w-full my-auto px-2">
-        {/* LADO ESQUERDO: Saudação Dourada e Card de Informações — Surge após o ícone ancorar */}
+        {/* LADO ESQUERDO: Saudação Dourada e Card de Informações — Surge suavemente na fase 'revelar' */}
         <div
           className={`w-full md:w-[54%] space-y-4 sm:space-y-5 text-center md:text-left transition-all duration-600 ease-out ${
             conteudoVisivel
@@ -136,7 +146,7 @@ export function TelaPontoSucesso({
             </div>
             <div className="flex items-center justify-between text-xs text-gray-400">
               <button
-                onClick={onVoltar}
+                onClick={() => onVoltarRef.current()}
                 className="px-5 py-2 rounded-lg font-bold text-white transition-all shadow-sm hover:shadow active:scale-95 text-xs sm:text-sm"
                 style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
               >
@@ -149,7 +159,7 @@ export function TelaPontoSucesso({
 
         {/* LADO DIREITO: Ícone Animado (Inicia no centro grande e desliza para a direita) */}
         <div
-          className={`w-full md:w-[46%] flex items-center justify-center transition-all duration-800 cubic-bezier(0.2, 0.8, 0.2, 1) ${
+          className={`w-full md:w-[46%] flex items-center justify-center transition-all duration-700 cubic-bezier(0.2, 0.8, 0.2, 1) ${
             iconeAncorado
               ? "translate-x-0 scale-100"
               : "md:-translate-x-[60%] scale-135 sm:scale-150 md:scale-160"

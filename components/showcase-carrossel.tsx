@@ -152,6 +152,10 @@ export function ShowcaseCarrossel() {
   const totalSlides = SLIDES.length
   const current = SLIDES[slideAtual]
 
+  const avancarSlide = useCallback(() => {
+    setSlideAtual((prev) => (prev + 1) % totalSlides)
+  }, [totalSlides])
+
   const falarSlideAtual = useCallback(() => {
     setFalando(true)
     reproduzirVozSaudacao(current.vozTexto)
@@ -328,7 +332,7 @@ export function ShowcaseCarrossel() {
             data={current.dadosPonto.data}
             mensagem={current.dadosPonto.mensagem}
             durationMs={15000}
-            onVoltar={() => setSlideAtual((prev) => (prev + 1) % totalSlides)}
+            onVoltar={avancarSlide}
             modoDemonstracao={true}
           />
         )}
