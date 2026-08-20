@@ -75,15 +75,48 @@ function SuccessAnimation({ tipo }: { tipo: string }) {
 }
 // Screensaver com relógio em tempo real e saudação dinâmica
 // Efeito de moldura luminosa e cantos futuristas nas bordas da tela ao identificar pessoa
+// Efeito de moldura luminosa com pulsação vibrante nas bordas ao identificar e sorrir
 function ViewfinderBorder({ isSmiling }: { isSmiling: boolean }) {
   return (
-    <div
-      className={`fixed inset-0 pointer-events-none z-20 transition-all duration-500 ${
-        isSmiling
-          ? "border-[6px] border-emerald-400/90 shadow-[inset_0_0_80px_rgba(16,185,129,0.45)]"
-          : "border-[5px] border-teal-400/80 shadow-[inset_0_0_60px_rgba(29,185,179,0.35)]"
-      }`}
-    />
+    <>
+      <style>{`
+        @keyframes smilePulseIntense {
+          0%, 100% {
+            border-color: rgba(52, 211, 153, 0.95);
+            box-shadow: inset 0 0 70px rgba(16, 185, 129, 0.55), 0 0 35px rgba(16, 185, 129, 0.4);
+            transform: scale(1);
+          }
+          50% {
+            border-color: rgba(16, 185, 129, 1);
+            box-shadow: inset 0 0 130px rgba(16, 185, 129, 0.9), 0 0 80px rgba(52, 211, 153, 0.8);
+            transform: scale(1.002);
+          }
+        }
+        @keyframes identifyPulseGentle {
+          0%, 100% {
+            border-color: rgba(45, 212, 191, 0.75);
+            box-shadow: inset 0 0 55px rgba(20, 184, 166, 0.3);
+          }
+          50% {
+            border-color: rgba(20, 184, 166, 0.95);
+            box-shadow: inset 0 0 80px rgba(20, 184, 166, 0.5);
+          }
+        }
+        .smile-glow-pulse {
+          animation: smilePulseIntense 0.5s ease-in-out infinite;
+        }
+        .identify-glow-pulse {
+          animation: identifyPulseGentle 1.8s ease-in-out infinite;
+        }
+      `}</style>
+      <div
+        className={`fixed inset-0 pointer-events-none z-20 transition-all duration-300 ${
+          isSmiling
+            ? "border-[7px] sm:border-[8px] smile-glow-pulse"
+            : "border-[5px] sm:border-[6px] identify-glow-pulse"
+        }`}
+      />
+    </>
   )
 }
 
@@ -433,8 +466,12 @@ export default function RegistrarPonto() {
       rafRef.current = requestAnimationFrame(loop)
 
       if (showSuccessRef.current) return
-      if (screensaverRef.current) return
       if (isProcessingRef.current || isRegisteringRef.current) return
+
+      // Se a proteção de tela estiver ativa, executa em baixa frequência apenas para manter a GPU e worker 100% aquecidos
+      if (screensaverRef.current) {
+        if (Math.random() > 0.03) return // Warmup heartbeat periódico
+      }
 
       if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
         return
@@ -762,7 +799,7 @@ export default function RegistrarPonto() {
       )}
 
       {/* Proteção de tela */}
-      {screensaver && <Screensaver onTap={() => { setScreensaver(false); resetInactivityTimer() }} />}
+      {screensaver && <Screensaver onTap={() => { screensaverRef.current = false; setScreensaver(false); resetInactivityTimer() }} />}
 
       {/* Tela de sucesso */}
       {showSuccess && completedPerson && (
