@@ -17,6 +17,7 @@ import { registrarPonto, buscarRegistrosHoje, buscarFuncionarioPorId, registrarM
 import type { Funcionario } from "@/lib/types"
 import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/dialogo-ponto-inteligente"
+import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import "../ponto-registrado/ponto-batido.css"
 import {
   initModels,
@@ -398,6 +399,7 @@ export default function RegistrarPonto() {
 
       setRecognizedPerson(completed)
       setShowSuccess(true)
+      reproduzirVozSaudacao(completed.mensagem)
 
       // Auto-retorno em 15 segundos
       successTimeoutRef.current = window.setTimeout(() => {
@@ -447,6 +449,7 @@ export default function RegistrarPonto() {
 
       setRecognizedPerson(completed)
       setShowSuccess(true)
+      reproduzirVozSaudacao(completed.mensagem)
 
       successTimeoutRef.current = window.setTimeout(() => {
         resetToInitialState()
