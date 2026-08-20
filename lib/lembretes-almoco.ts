@@ -126,7 +126,7 @@ export function agendarLembretesAlmoco(
   if (msFaltando10Min > ms10MinDepois) {
     sessao.timer10MinAntes = setTimeout(() => {
       const emoji = sortearEmoji()
-      const fala10Antes = `Atenção ${primeiroNome}! Faltam apenas 10 minutos para o fim do seu almoço. Você retorna às ${horaRetornoStr}. Te esperamos de volta com toda energia! Até já e excelente almoço! ${emoji}`
+      const fala10Antes = `Oi ${primeiroNome}! Faltam apenas 10 minutos para o fim do seu almoço. Seu retorno é às ${horaRetornoStr}. Te esperamos de volta com toda energia! Até já e excelente almoço! ${emoji}`
 
       console.log(`🥪 [Lembrete Almoço -10min] Reproduzindo para ${primeiroNome}:`, fala10Antes)
       reproduzirVozSaudacao(fala10Antes)
