@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { BarChart, UserPlus, LogOut, Menu, X } from "lucide-react"
+import { BarChart, UserPlus, LogOut, Menu, X, Sparkles } from "lucide-react"
 
 interface DashboardHeaderProps {
   onLogout: () => void
@@ -23,21 +23,27 @@ export function DashboardHeader({ onLogout }: DashboardHeaderProps) {
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-4 justify-start">
+          <nav className="hidden md:flex items-center space-x-3 justify-start">
             <Link href="/dashboard">
               <Button variant="ghost" className="text-secondary hover:bg-secondary/10">
-                <BarChart className="h-5 w-5 mr-2" />
+                <BarChart className="h-4 w-4 mr-2" />
                 Dashboard
+              </Button>
+            </Link>
+            <Link href="/dashboard/showcase">
+              <Button className="text-white shadow-sm hover:opacity-90 font-medium" style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Visualizar Telas & Vozes
               </Button>
             </Link>
             <Link href="/cadastrar">
               <Button variant="ghost" className="text-secondary hover:bg-secondary/10">
-                <UserPlus className="h-5 w-5 mr-2" />
+                <UserPlus className="h-4 w-4 mr-2" />
                 Cadastrar Funcionário
               </Button>
             </Link>
             <Button variant="ghost" className="text-secondary hover:bg-secondary/10" onClick={onLogout}>
-              <LogOut className="h-5 w-5 mr-2" />
+              <LogOut className="h-4 w-4 mr-2" />
               Sair
             </Button>
           </nav>
@@ -59,6 +65,12 @@ export function DashboardHeader({ onLogout }: DashboardHeaderProps) {
               <Button variant="ghost" className="w-full text-secondary hover:bg-secondary/10 justify-start">
                 <BarChart className="h-5 w-5 mr-2" />
                 Dashboard
+              </Button>
+            </Link>
+            <Link href="/dashboard/showcase" className="block">
+              <Button className="w-full text-white justify-start" style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}>
+                <Sparkles className="h-5 w-5 mr-2" />
+                Visualizar Telas & Vozes
               </Button>
             </Link>
             <Link href="/cadastrar" className="block">

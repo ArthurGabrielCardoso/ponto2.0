@@ -581,10 +581,10 @@ export default function RegistrarPonto() {
 
       const getMensagem = (t: string) => {
         const tl = t.toLowerCase().trim()
-        if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
+        if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}! Tenha um ótimo e produtivo dia de trabalho!`
         if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}! Aproveite seu almoço e bom descanso!`
-        if (tl.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
-        if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite e bom descanso, ${primeiroNome}!`
+        if (tl.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}! Bom trabalho nesta tarde!`
+        if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite e bom descanso, ${primeiroNome}! Dever cumprido, até amanhã!`
         return `Excelente trabalho, ${primeiroNome}!`
       }
 
