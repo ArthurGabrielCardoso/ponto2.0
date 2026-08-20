@@ -588,7 +588,7 @@ export default function RegistrarPonto() {
         const tl = t.toLowerCase().trim()
         if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
         if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
-        if (tl.includes("retorno")) return `Excelente retorno, ${primeiroNome}!`
+        if (tl.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
         if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite, ${primeiroNome}!`
         return `Excelente trabalho, ${primeiroNome}!`
       }
