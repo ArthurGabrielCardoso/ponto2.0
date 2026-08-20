@@ -105,7 +105,7 @@ export function TelaPontoSucesso({
           {/* Card de Informações Retangular / Quadrado Limpo */}
           <div className="rounded-lg p-4 sm:p-5 bg-white/95 backdrop-blur-md border border-amber-200/60 shadow-[0_8px_30px_-8px_rgba(198,158,107,0.2)] space-y-3">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <span className="text-xs uppercase font-bold text-gray-400 tracking-wider">Tipo de Batida</span>
+              <span className="text-xs uppercase font-bold text-gray-400 tracking-wider">Tipo</span>
               <span className="font-bold text-sm px-3 py-1 rounded-md bg-amber-50 text-amber-900 border border-amber-200/80">
                 {tipo}
               </span>

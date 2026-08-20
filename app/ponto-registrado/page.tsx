@@ -18,7 +18,7 @@ export default function PontoRegistradoPage() {
     if (t.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
     if (t.includes("saída") && t.includes("almoço")) return `Excelente almoço, ${primeiroNome}! Aproveite seu almoço e bom descanso!`
     if (t.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
-    if (t.includes("saída") || t.includes("saida")) return `Excelente noite e bom descanso, ${primeiroNome}!`
+    if (t.includes("saída") || t.includes("saida")) return `Excelente noite, ${primeiroNome}!`
     return `Excelente trabalho, ${primeiroNome}!`
   })()
 

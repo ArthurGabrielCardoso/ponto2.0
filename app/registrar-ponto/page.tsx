@@ -581,7 +581,16 @@ export default function RegistrarPonto() {
       const res = await registrarPonto(person.id, person.nome, diag.proximoTipoSugerido)
       const tipo = res.tipo || diag.proximoTipoSugerido
 
-      const getMensagem = (t: string) => {
+      const getMensagemVisual = (t: string) => {
+        const tl = t.toLowerCase().trim()
+        if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
+        if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
+        if (tl.includes("retorno")) return `Excelente retorno, ${primeiroNome}!`
+        if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite, ${primeiroNome}!`
+        return `Excelente trabalho, ${primeiroNome}!`
+      }
+
+      const getMensagemVoz = (t: string) => {
         const tl = t.toLowerCase().trim()
         if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}! Tenha um ótimo e produtivo dia de trabalho!`
         if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}! Aproveite seu almoço e bom descanso!`
@@ -590,9 +599,13 @@ export default function RegistrarPonto() {
         return `Excelente trabalho, ${primeiroNome}!`
       }
 
-      const mensagem = res.emCooldown
+      const mensagemVisual = res.emCooldown
         ? `Olá, ${primeiroNome}! Seu ponto (${tipo}) já foi registrado recentemente.`
-        : getMensagem(tipo)
+        : getMensagemVisual(tipo)
+
+      const mensagemVoz = res.emCooldown
+        ? `Olá, ${primeiroNome}! Seu ponto (${tipo}) já foi registrado recentemente.`
+        : getMensagemVoz(tipo)
 
       const completed: RecognizedPerson = {
         ...person,
@@ -600,7 +613,7 @@ export default function RegistrarPonto() {
         tipo,
         hora: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
         data: now.toLocaleDateString(),
-        mensagem,
+        mensagem: mensagemVisual,
       }
 
       // Manter a moldura esmeralda pulsante por 750ms para confirmação visual satisfatória antes da transição
@@ -608,7 +621,7 @@ export default function RegistrarPonto() {
 
       setRecognizedPerson(completed)
       setShowSuccess(true)
-      reproduzirVozSaudacao(completed.mensagem)
+      reproduzirVozSaudacao(mensagemVoz)
 
       // Gerenciar lembretes automáticos de almoço por voz
       const tl = tipo.toLowerCase()

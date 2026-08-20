@@ -81,7 +81,7 @@ const SLIDES: SlideItem[] = [
       tipo: "Saída",
       hora: "18:01:10",
       data: "20/08/2026",
-      mensagem: "Excelente noite e bom descanso, Arthur!",
+      mensagem: "Excelente noite, Arthur!",
     },
   },
   {
