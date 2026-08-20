@@ -407,9 +407,26 @@ export default function RegistrarPonto() {
         if (mounted) {
           setModelsReady(true)
           setLoadingStatus(`Pronto! ${count} funcionário(s) carregado(s)`)
-          console.log("🎥 Sistema de reconhecimento local pronto!")
+          console.log(`🎥 Sistema de reconhecimento local pronto (${count} funcionários)!`)
           // Preload do Lottie check para transição instantânea
           fetch("https://lottie.host/8a95b3ad-f30a-4fb9-a55d-4153b3b92810/RPsps2O63O.lottie").catch(() => {})
+
+          // Se por ventura o Supabase estava acordando no momento do boot e retornou 0, tenta novamente a cada 3.5s
+          if (count === 0) {
+            const retryId = setInterval(async () => {
+              if (!mounted) {
+                clearInterval(retryId)
+                return
+              }
+              try {
+                const c = await loadDescriptors()
+                if (c > 0) {
+                  console.log(`✅ ${c} funcionário(s) carregado(s) com sucesso pelo retry automático!`)
+                  clearInterval(retryId)
+                }
+              } catch (_) {}
+            }, 3500)
+          }
         }
       } catch (error) {
         console.error("Erro ao carregar modelos:", error)

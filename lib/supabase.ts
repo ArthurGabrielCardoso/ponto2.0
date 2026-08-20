@@ -32,47 +32,79 @@ export function isSupabaseAvailable(): boolean {
 
 // Buscar funcionários com tratamento de erros aprimorado
 export async function buscarFuncionarios(): Promise<Funcionario[]> {
-  try {
-    type FuncionarioRow = {
-      id: string
-      nome: string
-      descritores: number[][] | null
-      descritores_sorriso?: number[][] | null
-      aws_face_ids?: string[] | null
-      carga_horaria_diaria_minutos?: number | null
-      horarios?: HorariosSemana | null
-    }
+  const LOCAL_CACHE_KEY = "vitall_cached_funcionarios"
 
-    // Verificar se o cliente Supabase está disponível
-    if (!isSupabaseAvailable()) {
-      console.error("Cliente Supabase não disponível. Verifique variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY.")
-      return []
-    }
-
-    const { data, error } = await supabase!
-      .from("funcionarios")
-      .select("*")
-      .returns<FuncionarioRow[]>()
-    if (error) {
-      console.error("Erro ao buscar funcionários:", error)
-      return []
-    }
-
-    const safeData: FuncionarioRow[] = Array.isArray(data) ? data : []
-    const funcionarios: Funcionario[] = safeData.map((row) => ({
-      id: row.id,
-      nome: row.nome,
-      descritores: Array.isArray(row.descritores) ? (row.descritores as number[][]) : [],
-      descritores_sorriso: Array.isArray(row.descritores_sorriso) ? (row.descritores_sorriso as number[][]) : undefined,
-      aws_face_ids: row.aws_face_ids ?? undefined,
-      carga_horaria_diaria_minutos: row.carga_horaria_diaria_minutos ?? undefined,
-      horarios: row.horarios ?? undefined,
-    }))
-    return funcionarios
-  } catch (error) {
-    console.error("Exceção ao buscar funcionários:", error)
-    return []
+  type FuncionarioRow = {
+    id: string
+    nome: string
+    descritores: number[][] | null
+    descritores_sorriso?: number[][] | null
+    aws_face_ids?: string[] | null
+    carga_horaria_diaria_minutos?: number | null
+    horarios?: HorariosSemana | null
   }
+
+  // Tentar com retry até 3 vezes (caso o Supabase esteja em cold-start)
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    try {
+      if (!isSupabaseAvailable()) {
+        console.error("Cliente Supabase não disponível. Verifique variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY.")
+        break
+      }
+
+      const { data, error } = await supabase!
+        .from("funcionarios")
+        .select("*")
+        .returns<FuncionarioRow[]>()
+
+      if (error) {
+        console.warn(`[Supabase] Tentativa ${tentativa}/3 falhou ao buscar funcionários:`, error.message || error)
+        if (tentativa < 3) await new Promise((r) => setTimeout(r, 1500 * tentativa))
+        continue
+      }
+
+      const safeData: FuncionarioRow[] = Array.isArray(data) ? data : []
+      if (safeData.length > 0) {
+        const funcionarios: Funcionario[] = safeData.map((row) => ({
+          id: row.id,
+          nome: row.nome,
+          descritores: Array.isArray(row.descritores) ? (row.descritores as number[][]) : [],
+          descritores_sorriso: Array.isArray(row.descritores_sorriso) ? (row.descritores_sorriso as number[][]) : undefined,
+          aws_face_ids: row.aws_face_ids ?? undefined,
+          carga_horaria_diaria_minutos: row.carga_horaria_diaria_minutos ?? undefined,
+          horarios: row.horarios ?? undefined,
+        }))
+
+        // Salvar no cache local para resiliência offline e cold-start
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(funcionarios))
+          }
+        } catch (_) {}
+
+        return funcionarios
+      }
+    } catch (error) {
+      console.warn(`[Supabase] Exceção na tentativa ${tentativa}/3:`, error)
+      if (tentativa < 3) await new Promise((r) => setTimeout(r, 1500 * tentativa))
+    }
+  }
+
+  // Fallback: carregar do cache local persistido se o Supabase estiver fora ou acordando
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const cached = localStorage.getItem(LOCAL_CACHE_KEY)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log(`⚡ Usando ${parsed.length} funcionário(s) do cache local persistente`)
+          return parsed as Funcionario[]
+        }
+      }
+    }
+  } catch (_) {}
+
+  return []
 }
 
 // Função para gerar dados simulados para desenvolvimento
