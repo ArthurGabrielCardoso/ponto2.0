@@ -749,31 +749,49 @@ export default function RegistrarPonto() {
         />
       </div>
 
-      {/* Moldura luminosa nas bordas da tela quando reconhecido */}
+      {/* Moldura luminosa instantânea nas bordas da tela ao detectar rosto */}
       {recognizedPerson && !recognizedPerson.registroCompleto && !showSuccess && (
         <ViewfinderBorder isSmiling={recognizedPerson.isSmiling} />
       )}
 
-      {/* Status em Glassmorphism - Pessoa reconhecida (Largura total colada no fundo) */}
+      {/* Status em Glassmorphism Cristalino Translúcido — Surge ~0.65s após a borda iluminar */}
       {recognizedPerson && !recognizedPerson.registroCompleto && !showSuccess && (
-        <div className="absolute bottom-0 left-0 right-0 z-30 w-full pointer-events-none animate-in fade-in duration-300">
+        <div className="absolute bottom-0 left-0 right-0 z-30 w-full pointer-events-none">
+          <style>{`
+            @keyframes glassSlideUp {
+              0% { opacity: 0; transform: translateY(100%); }
+              100% { opacity: 1; transform: translateY(0); }
+            }
+            .bottom-bar-staggered {
+              animation: glassSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.65s both;
+            }
+          `}</style>
           <div
-            className={`py-5 px-6 border-t backdrop-blur-2xl transition-all duration-300 text-center space-y-1 ${
-              recognizedPerson.isSmiling
-                ? "bg-emerald-950/85 border-emerald-400/60 text-white shadow-[0_-5px_30px_rgba(16,185,129,0.35)]"
-                : "bg-teal-950/85 border-teal-400/50 text-white shadow-[0_-5px_25px_rgba(29,185,179,0.3)]"
-            }`}
+            className={`bottom-bar-staggered py-5 px-6 border-t backdrop-blur-2xl transition-all duration-300 text-center space-y-1`}
+            style={{
+              background: recognizedPerson.isSmiling
+                ? "linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(16, 185, 129, 0.38) 100%)"
+                : "linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(29, 185, 179, 0.32) 100%)",
+              backdropFilter: "blur(24px)",
+              WebkitBackdropFilter: "blur(24px)",
+              borderColor: recognizedPerson.isSmiling
+                ? "rgba(110, 231, 183, 0.7)"
+                : "rgba(255, 255, 255, 0.45)",
+              boxShadow: recognizedPerson.isSmiling
+                ? "0 -10px 40px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.6)"
+                : "0 -10px 35px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.45)",
+            }}
           >
-            <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white drop-shadow-md">
               {recognizedPerson.nome}
             </div>
             <div className="text-sm sm:text-base font-medium">
               {recognizedPerson.isSmiling ? (
-                <span className="text-emerald-300 font-semibold tracking-wide animate-pulse">
+                <span className="text-emerald-100 font-semibold tracking-wide drop-shadow-sm animate-pulse">
                   Sorriso detectado! Registrando ponto...
                 </span>
               ) : (
-                <span className="text-teal-200/95 font-medium tracking-wide">
+                <span className="text-white/95 font-medium tracking-wide drop-shadow-sm">
                   Sorria para registrar seu ponto
                 </span>
               )}
@@ -782,15 +800,24 @@ export default function RegistrarPonto() {
         </div>
       )}
 
-      {/* Indicador estável em Glassmorphism — Identificando (Largura total colada no fundo) */}
+      {/* Indicador estável em Glassmorphism Cristalino — Identificando */}
       {!screensaver && !showSuccess && !recognizedPerson && modelsReady && cameraActive && (
         <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none animate-in fade-in duration-300">
-          <div className="py-4 px-6 bg-black/55 backdrop-blur-xl border-t border-white/15 text-white flex items-center justify-center gap-3">
+          <div
+            className="py-4 px-6 border-t backdrop-blur-xl text-white flex items-center justify-center gap-3"
+            style={{
+              background: "linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(0, 0, 0, 0.3) 100%)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              borderColor: "rgba(255, 255, 255, 0.25)",
+              boxShadow: "0 -8px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
+            }}
+          >
             <div className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-400"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-300 opacity-80"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-300 shadow-[0_0_8px_rgba(45,212,191,0.8)]"></span>
             </div>
-            <span className="text-sm font-medium tracking-wide text-white/90">
+            <span className="text-sm font-medium tracking-wide text-white drop-shadow-sm">
               Posicione seu rosto na câmera
             </span>
           </div>
