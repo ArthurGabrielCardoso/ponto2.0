@@ -72,7 +72,7 @@ export function TelaPontoSucesso({
   const iconeAncorado = fase === "deslizando" || fase === "revelar"
   const conteudoVisivel = fase === "revelar"
 
-  // Configuração dos 4 Cenários de Glassmorphism de Tela Inteira
+  // Configuração dos 4 Cenários de Glassmorphism com Dourado Puro e Ícones Ampliados
   const getCenario = () => {
     const t = (tipo || "").toLowerCase().trim()
 
@@ -98,24 +98,24 @@ export function TelaPontoSucesso({
       }
     }
 
-    // 2. ENTRADA / DIA - Full-Screen Glassmorphism Dourado Nobre
+    // 2. ENTRADA / DIA - Full-Screen Glassmorphism DOURADO NOBRE PURO (Sem tons laranjas)
     if (t.includes("entrada")) {
       return {
-        baseBg: "bg-[#140e07]",
-        orb1: "bg-[#c69e6b]",
-        orb2: "bg-[#d97706]",
-        orb3: "bg-[#fde047]",
-        glassTint: "bg-amber-950/40",
-        cardClass: "bg-white/[0.08] backdrop-blur-2xl border border-white/20 shadow-[0_16px_40px_-10px_rgba(0,0,0,0.5)] text-white",
+        baseBg: "bg-[#0f0c05]",
+        orb1: "bg-[#eab308]",
+        orb2: "bg-[#ca8a04]",
+        orb3: "bg-[#fef08a]",
+        glassTint: "bg-yellow-950/30",
+        cardClass: "bg-white/[0.08] backdrop-blur-2xl border border-amber-200/30 shadow-[0_16px_40px_-10px_rgba(0,0,0,0.5)] text-white",
         cardDivider: "border-white/15",
-        cardLabel: "text-amber-200/80",
+        cardLabel: "text-amber-200/90",
         timeText: "text-white",
         dateText: "text-amber-100",
-        tagClass: "bg-amber-300/25 text-amber-100 border border-amber-300/40",
+        tagClass: "bg-amber-400/25 text-amber-100 border border-amber-300/50",
         greetingColor: "#ffffff",
         trackBg: "bg-black/30",
         statusDot: "bg-amber-300",
-        btnGrad: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)",
+        btnGrad: "linear-gradient(135deg, #eab308 0%, #ca8a04 100%)",
         textMuted: "text-amber-200/80",
       }
     }
@@ -169,9 +169,9 @@ export function TelaPontoSucesso({
     <div className={`absolute inset-0 z-40 h-screen w-full select-none overflow-hidden ${cenario.baseBg}`}>
       {/* 1. CAMADA DE LUZES / ESFERAS AMBIENTES FLUIDAS NO FUNDO */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className={`absolute -top-24 right-0 w-[550px] h-[550px] rounded-full ${cenario.orb1} blur-[120px] opacity-70 animate-pulse`} />
-        <div className={`absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full ${cenario.orb2} blur-[110px] opacity-60`} />
-        <div className={`absolute top-1/3 left-1/3 w-[380px] h-[380px] rounded-full ${cenario.orb3} blur-[100px] opacity-40`} />
+        <div className={`absolute -top-24 right-0 w-[550px] h-[550px] rounded-full ${cenario.orb1} blur-[120px] opacity-75 animate-pulse`} />
+        <div className={`absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full ${cenario.orb2} blur-[110px] opacity-65`} />
+        <div className={`absolute top-1/3 left-1/3 w-[380px] h-[380px] rounded-full ${cenario.orb3} blur-[100px] opacity-45`} />
       </div>
 
       {/* 2. SUPERFÍCIE DE GLASSMORPHISM DE TELA INTEIRA (100% LARGURA/ALTURA, SEM BORDAS) */}
@@ -195,7 +195,7 @@ export function TelaPontoSucesso({
         <div className="relative z-10 flex-1 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-10 max-w-5xl mx-auto w-full my-auto px-2">
           {/* LADO ESQUERDO: Saudação e Card de Informações */}
           <div
-            className={`w-full md:w-[48%] space-y-4 sm:space-y-5 text-center md:text-left transition-all duration-600 ease-out ${
+            className={`w-full md:w-[46%] space-y-4 sm:space-y-5 text-center md:text-left transition-all duration-600 ease-out ${
               conteudoVisivel
                 ? "opacity-100 translate-x-0 translate-y-0"
                 : "opacity-0 -translate-x-6 md:-translate-y-2 pointer-events-none"
@@ -214,7 +214,7 @@ export function TelaPontoSucesso({
             <div className={`rounded-2xl p-5 sm:p-6 space-y-3.5 ${cenario.cardClass}`}>
               <div className={`flex items-center justify-between border-b pb-2.5 ${cenario.cardDivider}`}>
                 <span className={`text-xs uppercase font-bold tracking-wider ${cenario.cardLabel}`}>Tipo</span>
-                <span className={`font-bold text-sm px-3 py-1 rounded-md ${cenario.tagClass}`}>
+                <span className={`font-bold text-sm px-3.5 py-1 rounded-md ${cenario.tagClass}`}>
                   {tipo}
                 </span>
               </div>
@@ -255,16 +255,16 @@ export function TelaPontoSucesso({
             </div>
           </div>
 
-          {/* LADO DIREITO: Ícone Animado Gigante */}
+          {/* LADO DIREITO: Ícone Animado Gigante Expandido */}
           <div
-            className={`w-full md:w-[50%] flex items-center justify-center transition-all duration-700 cubic-bezier(0.2, 0.8, 0.2, 1) ${
+            className={`w-full md:w-[54%] flex items-center justify-center transition-all duration-700 cubic-bezier(0.2, 0.8, 0.2, 1) ${
               iconeAncorado
-                ? "translate-x-0 scale-110 sm:scale-115"
-                : "md:-translate-x-[50%] scale-135 sm:scale-145 md:scale-155"
+                ? "translate-x-0 scale-120 sm:scale-125"
+                : "md:-translate-x-[45%] scale-140 sm:scale-155 md:scale-165"
             }`}
           >
             <div className="relative flex items-center justify-center">
-              <IlustracaoPontoAnimada tipo={tipo} className="w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 lg:w-[440px] lg:h-[440px]" />
+              <IlustracaoPontoAnimada tipo={tipo} className="w-72 h-72 sm:w-88 sm:h-88 md:w-[420px] md:h-[420px] lg:w-[480px] lg:h-[480px]" />
             </div>
           </div>
         </div>
