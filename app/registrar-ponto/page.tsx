@@ -18,6 +18,7 @@ import type { Funcionario } from "@/lib/types"
 import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/dialogo-ponto-inteligente"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
+import { agendarLembretesAlmoco, cancelarLembretesAlmoco } from "@/lib/lembretes-almoco"
 import "../ponto-registrado/ponto-batido.css"
 import {
   initModels,
@@ -401,6 +402,14 @@ export default function RegistrarPonto() {
       setShowSuccess(true)
       reproduzirVozSaudacao(completed.mensagem)
 
+      // Gerenciar lembretes automáticos de almoço por voz
+      const tl = tipo.toLowerCase()
+      if (tl.includes("saída") && tl.includes("almoço")) {
+        agendarLembretesAlmoco(funcObj, now)
+      } else if (tl.includes("retorno") || (tl.includes("saída") && !tl.includes("almoço"))) {
+        cancelarLembretesAlmoco(funcObj.id)
+      }
+
       // Auto-retorno em 15 segundos
       successTimeoutRef.current = window.setTimeout(() => {
         resetToInitialState()
@@ -450,6 +459,16 @@ export default function RegistrarPonto() {
       setRecognizedPerson(completed)
       setShowSuccess(true)
       reproduzirVozSaudacao(completed.mensagem)
+
+      // Gerenciar lembretes automáticos de almoço por voz na regularização inteligente
+      const funcionario = await buscarFuncionarioPorId(person.id).catch(() => null)
+      const funcObj: Funcionario = funcionario || { id: person.id, nome: person.nome, descritores: [] }
+      const tl = tipoExibicao.toLowerCase()
+      if (tl.includes("saída") && tl.includes("almoço")) {
+        agendarLembretesAlmoco(funcObj, now)
+      } else if (tl.includes("retorno") || (tl.includes("saída") && !tl.includes("almoço"))) {
+        cancelarLembretesAlmoco(funcObj.id)
+      }
 
       successTimeoutRef.current = window.setTimeout(() => {
         resetToInitialState()
