@@ -80,16 +80,10 @@ function ViewfinderBorder({ isSmiling }: { isSmiling: boolean }) {
     <div
       className={`fixed inset-0 pointer-events-none z-20 transition-all duration-500 ${
         isSmiling
-          ? "border-[5px] sm:border-[6px] border-emerald-400/90 shadow-[inset_0_0_80px_rgba(16,185,129,0.45)]"
-          : "border-[4px] sm:border-[5px] border-teal-400/75 shadow-[inset_0_0_60px_rgba(29,185,179,0.3)]"
+          ? "border-[6px] border-emerald-400/90 shadow-[inset_0_0_80px_rgba(16,185,129,0.45)]"
+          : "border-[5px] border-teal-400/80 shadow-[inset_0_0_60px_rgba(29,185,179,0.35)]"
       }`}
-    >
-      {/* 4 Cantos estilo visor de alta precisão */}
-      <div className={`absolute top-4 left-4 w-9 h-9 border-t-4 border-l-4 rounded-tl-lg transition-colors duration-300 ${isSmiling ? "border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.8)]" : "border-teal-300 shadow-[0_0_12px_rgba(29,185,179,0.6)]"}`} />
-      <div className={`absolute top-4 right-4 w-9 h-9 border-t-4 border-r-4 rounded-tr-lg transition-colors duration-300 ${isSmiling ? "border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.8)]" : "border-teal-300 shadow-[0_0_12px_rgba(29,185,179,0.6)]"}`} />
-      <div className={`absolute bottom-4 left-4 w-9 h-9 border-b-4 border-l-4 rounded-bl-lg transition-colors duration-300 ${isSmiling ? "border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.8)]" : "border-teal-300 shadow-[0_0_12px_rgba(29,185,179,0.6)]"}`} />
-      <div className={`absolute bottom-4 right-4 w-9 h-9 border-b-4 border-r-4 rounded-br-lg transition-colors duration-300 ${isSmiling ? "border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.8)]" : "border-teal-300 shadow-[0_0_12px_rgba(29,185,179,0.6)]"}`} />
-    </div>
+    />
   )
 }
 
@@ -681,28 +675,27 @@ export default function RegistrarPonto() {
         <ViewfinderBorder isSmiling={recognizedPerson.isSmiling} />
       )}
 
-      {/* Status em Glassmorphism - Pessoa reconhecida */}
+      {/* Status em Glassmorphism - Pessoa reconhecida (Largura total colada no fundo) */}
       {recognizedPerson && !recognizedPerson.registroCompleto && !showSuccess && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg px-4 pointer-events-none animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="absolute bottom-0 left-0 right-0 z-30 w-full pointer-events-none animate-in fade-in duration-300">
           <div
-            className={`p-5 sm:p-6 rounded-2xl backdrop-blur-2xl border transition-all duration-300 text-center shadow-2xl ${
+            className={`py-5 px-6 border-t backdrop-blur-2xl transition-all duration-300 text-center space-y-1 ${
               recognizedPerson.isSmiling
-                ? "bg-emerald-950/80 border-emerald-400/60 text-white shadow-[0_0_35px_rgba(16,185,129,0.45)]"
-                : "bg-teal-950/80 border-teal-400/50 text-white shadow-[0_0_30px_rgba(29,185,179,0.35)]"
+                ? "bg-emerald-950/85 border-emerald-400/60 text-white shadow-[0_-5px_30px_rgba(16,185,129,0.35)]"
+                : "bg-teal-950/85 border-teal-400/50 text-white shadow-[0_-5px_25px_rgba(29,185,179,0.3)]"
             }`}
           >
-            <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center justify-center gap-2">
-              <span>{recognizedPerson.nome}</span>
-              {recognizedPerson.isSmiling && <span className="text-2xl animate-bounce">✨</span>}
+            <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+              {recognizedPerson.nome}
             </div>
-            <div className="text-sm sm:text-base font-medium mt-1.5">
+            <div className="text-sm sm:text-base font-medium">
               {recognizedPerson.isSmiling ? (
-                <span className="text-emerald-300 font-semibold flex items-center justify-center gap-1.5">
-                  <span>😊</span> Sorriso detectado! Registrando ponto...
+                <span className="text-emerald-300 font-semibold tracking-wide animate-pulse">
+                  Sorriso detectado! Registrando ponto...
                 </span>
               ) : (
-                <span className="text-teal-200 flex items-center justify-center gap-1.5">
-                  <span className="text-lg">😄</span> Sorria para registrar seu ponto
+                <span className="text-teal-200/95 font-medium tracking-wide">
+                  Sorria para registrar seu ponto
                 </span>
               )}
             </div>
@@ -710,15 +703,17 @@ export default function RegistrarPonto() {
         </div>
       )}
 
-      {/* Indicador estável em Glassmorphism — Identificando */}
+      {/* Indicador estável em Glassmorphism — Identificando (Largura total colada no fundo) */}
       {!screensaver && !showSuccess && !recognizedPerson && modelsReady && cameraActive && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-in fade-in duration-300">
-          <div className="flex items-center gap-3 px-6 py-3 rounded-full bg-black/45 backdrop-blur-xl border border-white/20 text-white shadow-2xl">
-            <div className="relative flex h-3 w-3">
+        <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none animate-in fade-in duration-300">
+          <div className="py-4 px-6 bg-black/55 backdrop-blur-xl border-t border-white/15 text-white flex items-center justify-center gap-3">
+            <div className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-teal-500"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-400"></span>
             </div>
-            <span className="text-sm font-medium tracking-wide text-white/90">Posicione seu rosto na câmera</span>
+            <span className="text-sm font-medium tracking-wide text-white/90">
+              Posicione seu rosto na câmera
+            </span>
           </div>
         </div>
       )}
