@@ -180,16 +180,13 @@ function Screensaver({ onTap }: { onTap: () => void }) {
         .ss-colon{animation:pulse-dot 2s ease-in-out infinite}
       `}</style>
 
-      {/* Centro: Logo, Horário e Saudação */}
+      {/* Centro: Horário, Saudação e Instrução */}
       <div className="text-center text-white">
-        <div className="ss-fade mb-6">
-          <Image src="/logo.png" alt="Logo" width={420} height={210} priority style={{ height: "auto" }} />
-        </div>
-        <p className="ss-fade ss-fade-d1 text-6xl font-light tracking-widest mb-4" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <p className="ss-fade text-7xl sm:text-8xl font-light tracking-widest mb-4" style={{ fontVariantNumeric: "tabular-nums" }}>
           {time}
         </p>
-        <p className="ss-fade ss-fade-d2 text-2xl font-light opacity-90 mb-8">{greeting}</p>
-        <p className="ss-fade ss-fade-d3 text-lg opacity-60">Toque na tela para registrar o ponto</p>
+        <p className="ss-fade ss-fade-d1 text-2xl sm:text-3xl font-light opacity-90 mb-6">{greeting}</p>
+        <p className="ss-fade ss-fade-d2 text-base sm:text-lg opacity-75 font-medium tracking-wide">Toque na tela para registrar o ponto</p>
       </div>
 
       {/* Canto Inferior Direito: Card Dourado com Status de Almoço */}
