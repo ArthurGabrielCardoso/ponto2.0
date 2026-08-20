@@ -27,10 +27,19 @@ function SuccessAnimation({ tipo }: { tipo: string }) {
   const [showCheck, setShowCheck] = useState(false)
   const tl = (tipo || "").toLowerCase()
   let icon: string
-  if (tl.includes("entrada")) icon = "🌤️"
-  else if (tl.includes("saída") && tl.includes("almoço")) icon = "🍽️"
-  else if (tl.includes("retorno")) icon = "💼"
-  else icon = "🌙"
+  if (tl.includes("entrada")) {
+    icon = "🌤️"
+  } else if (tl.includes("almoço") && (tl.includes("saída") || tl.includes("saida"))) {
+    icon = "🍽️"
+  } else if (tl.includes("retorno")) {
+    icon = "💼"
+  } else if (tl.includes("saída") || tl.includes("saida")) {
+    icon = "🌙" // Lua aparece apenas na Saída (fim do expediente)
+  } else if (tl.includes("extra")) {
+    icon = "⭐"
+  } else {
+    icon = "💼"
+  }
 
   useEffect(() => {
     const t = setTimeout(() => setShowCheck(true), 3500)
@@ -538,21 +547,23 @@ export default function RegistrarPonto() {
                 background: (() => {
                   const t = (completedPerson.tipo || "").toLowerCase()
                   if (t.includes("entrada")) return "linear-gradient(135deg, #f6d365 0%, #fda085 100%)"
-                  if (t.includes("saída") && t.includes("almoço")) return "linear-gradient(135deg, #ff9a56 0%, #ff6a3d 100%)"
+                  if (t.includes("almoço") && (t.includes("saída") || t.includes("saida"))) return "linear-gradient(135deg, #ff9a56 0%, #ff6a3d 100%)"
                   if (t.includes("retorno")) return "linear-gradient(135deg, #1db9b3 0%, #0d8488 100%)"
-                  return "linear-gradient(135deg, #2d3561 0%, #1e215d 50%, #0b0c2a 100%)"
+                  if (t.includes("saída") || t.includes("saida")) return "linear-gradient(135deg, #2d3561 0%, #1e215d 50%, #0b0c2a 100%)"
+                  return "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)"
                 })(),
               }}
             >
               <div className="text-center">
                 <Image src="/logo.png" alt="Logo" width={500} height={200} priority style={{ height: "auto" }} />
-                <p className="text-white/60 text-lg mt-6 font-light">
+                <p className="text-white/80 text-lg mt-6 font-light">
                   {(() => {
                     const t = (completedPerson.tipo || "").toLowerCase()
                     if (t.includes("entrada")) return "Tenha um ótimo dia de trabalho!"
-                    if (t.includes("saída") && t.includes("almoço")) return "Aproveite seu almoço!"
+                    if (t.includes("almoço") && (t.includes("saída") || t.includes("saida"))) return "Aproveite seu almoço e bom descanso!"
                     if (t.includes("retorno")) return "Boa volta ao trabalho!"
-                    return "Descanse bem, até amanhã!"
+                    if (t.includes("saída") || t.includes("saida")) return "Descanse bem, até amanhã!"
+                    return "Ponto registrado com sucesso!"
                   })()}
                 </p>
               </div>
