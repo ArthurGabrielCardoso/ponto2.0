@@ -13,7 +13,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { DotLottieReact } from "@lottiefiles/dotlottie-react"
-import { registrarPonto, buscarRegistrosHoje, buscarFuncionarioPorId, registrarMultiplosPontos } from "@/lib/supabase"
+import { registrarPonto, buscarRegistrosHoje, buscarFuncionarioPorId, registrarMultiplosPontos, buscarFuncionarios } from "@/lib/supabase"
 import type { Funcionario } from "@/lib/types"
 import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/dialogo-ponto-inteligente"
@@ -145,22 +145,51 @@ function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
 
 function Screensaver({ onTap }: { onTap: () => void }) {
   const [time, setTime] = useState("")
-  const [greeting, setGreeting] = useState("")
+  const [periodo, setPeriodo] = useState("Excelente dia")
+  const [nomes, setNomes] = useState<string[]>([])
+  const [nomeIndex, setNomeIndex] = useState(0)
   const [funcionariosEmAlmoco, setFuncionariosEmAlmoco] = useState<InfoAlmocoAtivo[]>([])
 
+  // Relógio em tempo real
   useEffect(() => {
     const tick = () => {
       const now = new Date()
       setTime(now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }))
       const h = now.getHours()
-      if (h < 12) setGreeting("Excelente dia!")
-      else if (h < 18) setGreeting("Excelente tarde!")
-      else setGreeting("Excelente noite!")
+      if (h < 12) setPeriodo("Excelente dia")
+      else if (h < 18) setPeriodo("Excelente tarde")
+      else setPeriodo("Excelente noite")
     }
     tick()
     const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [])
 
-    // Sincronizar funcionários atualmente em almoço
+  // Carregar lista de funcionários para rotação de primeiro nome
+  useEffect(() => {
+    buscarFuncionarios()
+      .then((funcs) => {
+        const primeirosNomes = funcs
+          .map((f) => f.nome.split(" ")[0].trim())
+          .filter(Boolean)
+        if (primeirosNomes.length > 0) {
+          setNomes(primeirosNomes)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Rotação de nomes a cada 3 segundos
+  useEffect(() => {
+    if (nomes.length <= 1) return
+    const id = setInterval(() => {
+      setNomeIndex((prev) => (prev + 1) % nomes.length)
+    }, 3000)
+    return () => clearInterval(id)
+  }, [nomes])
+
+  // Sincronizar funcionários atualmente em almoço
+  useEffect(() => {
     const atualizarAlmoco = () => {
       sincronizarSessoesAlmocoDoDia().then(setFuncionariosEmAlmoco).catch(() => {})
     }
@@ -168,14 +197,16 @@ function Screensaver({ onTap }: { onTap: () => void }) {
     const idAlmoco = setInterval(atualizarAlmoco, 10000)
 
     return () => {
-      clearInterval(id)
       clearInterval(idAlmoco)
     }
   }, [])
 
+  const nomeAtual = nomes.length > 0 ? nomes[nomeIndex] : ""
+  const saudacaoCompleta = nomeAtual ? `${periodo}, ${nomeAtual}!` : `${periodo}!`
+
   return (
     <div
-      className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden backdrop-blur-xl"
+      className="absolute inset-0 z-30 flex flex-col items-center justify-between p-6 cursor-pointer select-none overflow-hidden backdrop-blur-xl"
       style={{
         background: "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
         backdropFilter: "blur(20px)",
@@ -185,26 +216,39 @@ function Screensaver({ onTap }: { onTap: () => void }) {
     >
       <style>{`
         @keyframes fadeUp{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
-        @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.3}}
+        @keyframes nameFade{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
+        @keyframes pulseSlow{0%,100%{opacity:0.9}50%{opacity:0.55}}
         .ss-fade{animation:fadeUp .6s ease-out both}
         .ss-fade-d1{animation-delay:.1s}
-        .ss-fade-d2{animation-delay:.3s}
-        .ss-fade-d3{animation-delay:.5s}
-        .ss-colon{animation:pulse-dot 2s ease-in-out infinite}
+        .ss-name-rot{animation:nameFade .45s ease-out both}
+        .ss-pulse{animation:pulseSlow 3s ease-in-out infinite}
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      {/* Centro: Horário, Saudação e Instrução */}
-      <div className="text-center text-white">
-        <p className="ss-fade text-7xl sm:text-8xl font-light tracking-widest mb-4" style={{ fontVariantNumeric: "tabular-nums" }}>
+      {/* Espaçador superior */}
+      <div className="h-4" />
+
+      {/* Centro: Horário e Saudação Personalizada com Rotação de Nomes a cada 3s */}
+      <div className="text-center text-white my-auto">
+        <p className="ss-fade text-7xl sm:text-8xl md:text-9xl font-light tracking-widest mb-4" style={{ fontVariantNumeric: "tabular-nums" }}>
           {time}
         </p>
-        <p className="ss-fade ss-fade-d1 text-2xl sm:text-3xl font-light opacity-90 mb-6">{greeting}</p>
-        <p className="ss-fade ss-fade-d2 text-base sm:text-lg opacity-75 font-medium tracking-wide">Toque na tela para registrar o ponto</p>
+        <div key={nomeAtual || "padrao"} className="ss-name-rot">
+          <p className="text-3xl sm:text-4xl md:text-5xl font-light opacity-95 tracking-tight">
+            {saudacaoCompleta}
+          </p>
+        </div>
       </div>
 
-      {/* Canto Inferior: Cards de Almoço Horizontais (lado a lado com scroll horizontal se necessário) */}
+      {/* Parte de Baixo: Instrução de Toque posicionada na base */}
+      <div className={`text-center z-30 transition-all ${funcionariosEmAlmoco.length > 0 ? "mb-28 sm:mb-24" : "mb-6"}`}>
+        <p className="ss-pulse text-xs sm:text-sm text-white/90 font-semibold tracking-wider uppercase bg-black/25 backdrop-blur-md px-6 py-2.5 rounded-full border border-white/15 shadow-lg inline-block">
+          Toque na tela para registrar o ponto
+        </p>
+      </div>
+
+      {/* Canto Inferior: Cards de Almoço Horizontais com Scroll */}
       {funcionariosEmAlmoco.length > 0 && (
         <div
           className="absolute bottom-6 left-4 right-4 sm:left-6 sm:right-6 z-40 pointer-events-auto ss-fade"
@@ -227,7 +271,6 @@ function Screensaver({ onTap }: { onTap: () => void }) {
               <span className="text-xs font-bold uppercase tracking-wider text-white">Almoço</span>
             </div>
 
-            {/* Lista Horizontal de Funcionários com scroll suave */}
             <div className="flex items-center gap-3 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
               {funcionariosEmAlmoco.map((f) => (
                 <div key={f.funcionarioId} className="shrink-0 w-72 sm:w-80">
