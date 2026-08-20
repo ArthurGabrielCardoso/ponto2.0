@@ -467,6 +467,17 @@ export default function RegistrarPonto() {
           // Reconhecimento contínuo e detecção de sorriso em 1 único passe no Web Worker
           const result = await recognizeFace(video, 0.40)
           if (result) {
+            // Se o rosto detectado for desconhecido / não cadastrado (ex: Dra. Ana):
+            if (result.isUnknown || result.id === "unknown") {
+              if (recognizedPersonRef.current) {
+                console.log("⚠️ Rosto não cadastrado na câmera — limpando identificação anterior")
+                setRecognizedPerson(null)
+              }
+              lastFaceSeenRef.current = Date.now()
+              return
+            }
+
+            // Rosto válido de funcionário cadastrado!
             lastFaceSeenRef.current = Date.now()
 
             const isDifferentPerson = !current || current.id !== result.id
@@ -487,18 +498,18 @@ export default function RegistrarPonto() {
               if (isDifferentPerson) {
                 pendingTipoRef.current = null
                 pendingTipoPromiseRef.current = null
-                console.log(`✅ Pessoa identificada / trocada: ${result.nome} (${result.similarity.toFixed(0)}%)`)
+                console.log(`✅ Funcionário identificado: ${result.nome} (${result.similarity.toFixed(0)}%)`)
               }
               setRecognizedPerson(updated)
             }
 
-            // Registra ponto instantaneamente no 1º frame com sorriso
+            // Registra ponto instantaneamente no 1º frame com sorriso da pessoa identificada
             if (isSmiling && smileFrames >= SMILE_FRAMES_REQUIRED) {
               await handleRegistro(updated)
             }
           } else {
-            // Se ninguém estiver na frente da câmera por mais de 1.2s, reseta para o estado inicial
-            if (current && Date.now() - lastFaceSeenRef.current > 1200) {
+            // Se nenhum rosto for detectado na câmera por mais de 600ms, reseta
+            if (current && Date.now() - lastFaceSeenRef.current > 600) {
               setRecognizedPerson(null)
             }
           }

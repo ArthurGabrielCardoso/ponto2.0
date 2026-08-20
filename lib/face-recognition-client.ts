@@ -34,6 +34,7 @@ export interface RecognitionResult {
   id: string
   nome: string
   similarity: number
+  isUnknown?: boolean
   isSmiling: boolean
   smileConfidence: number
 }

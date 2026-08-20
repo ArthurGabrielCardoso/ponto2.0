@@ -312,10 +312,30 @@ async function handleRecognize(bitmap: ImageBitmap, smileThreshold: number) {
   if (!det) return null
 
   const best = faceMatcher.findBestMatch(det.descriptor)
-  if (best.label === "unknown") return null
+  
+  // Se o rosto foi detectado na câmera mas NÃO é de nenhum funcionário cadastrado (ou distância > 0.45):
+  if (best.label === "unknown" || best.distance > 0.45) {
+    return {
+      id: "unknown",
+      nome: "Rosto não reconhecido",
+      similarity: 0,
+      isUnknown: true,
+      isSmiling: false,
+      smileConfidence: 0,
+    }
+  }
 
   const nome = employeeMap.get(best.label)
-  if (!nome) return null
+  if (!nome) {
+    return {
+      id: "unknown",
+      nome: "Rosto não reconhecido",
+      similarity: 0,
+      isUnknown: true,
+      isSmiling: false,
+      smileConfidence: 0,
+    }
+  }
 
   const similarity = Math.max(0, (1 - best.distance) * 100)
   const happy = det.expressions.happy ?? 0
@@ -323,6 +343,7 @@ async function handleRecognize(bitmap: ImageBitmap, smileThreshold: number) {
     id: best.label,
     nome,
     similarity,
+    isUnknown: false,
     isSmiling: happy >= smileThreshold,
     smileConfidence: happy * 100,
   }
