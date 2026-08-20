@@ -1,0 +1,51 @@
+{
+  "name": "Vitall - Alarme de Almoço",
+  "short_name": "Alarme Vitall",
+  "description": "Sistema de alarme para lembrar do retorno do almoço",
+  "start_url": "/meu-alarme",
+  "display": "fullscreen",
+  "display_override": ["window-controls-overlay", "fullscreen", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#16918d",
+  "theme_color": "#1db9b3",
+  "categories": ["productivity", "business"],
+  "lang": "pt-BR",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ativar Alarme",
+      "short_name": "Alarme",
+      "description": "Ativar alarme de almoço",
+      "url": "/meu-alarme",
+      "icons": [
+        {
+          "src": "/favicon.png",
+          "sizes": "any",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+vitall",
+      "url": "/meu-alarme?action=%s"
+    }
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
+}

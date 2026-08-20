@@ -1,0 +1,128 @@
+/* Design especial para ponto batido */
+.ponto-batido-container {
+  position: relative !important;
+  background: white !important;
+  gap: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 100vh !important;
+  display: flex !important;
+}
+
+/* Seção do formulário - lado esquerdo */
+.ponto-batido-form-section {
+  width: 58% !important;
+  background: white !important;
+  position: relative !important;
+  z-index: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 2rem !important;
+}
+
+/* Seção da imagem - lado direito com gradiente */
+.ponto-batido-image-section {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  height: 100% !important;
+  width: 42% !important;
+  background: linear-gradient(135deg, #1db9b3 0%, #16918d 50%, #0d8488 100%) !important;
+  border-top-left-radius: 3rem !important;
+  border-bottom-left-radius: 3rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 2 !important;
+  /* Animação de entrada da direita */
+  animation: slideInRight 0.8s ease-out forwards !important;
+}
+
+/* Garantir que o gradiente seja aplicado */
+.ponto-batido-image-section::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: linear-gradient(135deg, #1db9b3 0%, #16918d 50%, #0d8488 100%) !important;
+  border-top-left-radius: 3rem !important;
+  border-bottom-left-radius: 3rem !important;
+  z-index: -1 !important;
+}
+
+/* Favicon no centro */
+.ponto-batido-favicon {
+  width: 300px !important;
+  height: 300px !important;
+  object-fit: contain !important;
+  z-index: 3 !important;
+  position: relative !important;
+}
+
+/* Responsividade para tablets pequenos */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .ponto-batido-image-section {
+    width: 38% !important;
+  }
+  .ponto-batido-form-section {
+    width: 62% !important;
+  }
+  .ponto-batido-favicon {
+    width: 240px !important;
+    height: 240px !important;
+  }
+}
+
+/* Responsividade para tablets e celulares */
+@media (max-width: 768px) {
+  .ponto-batido-image-section {
+    width: 40% !important;
+  }
+  .ponto-batido-form-section {
+    width: 60% !important;
+  }
+  .ponto-batido-favicon {
+    width: 180px !important;
+    height: 180px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .ponto-batido-image-section {
+    width: 35% !important;
+  }
+  .ponto-batido-form-section {
+    width: 65% !important;
+  }
+  .ponto-batido-favicon {
+    width: 120px !important;
+    height: 120px !important;
+  }
+}
+
+/* Remover qualquer border radius da seção do formulário */
+.ponto-batido-form-section .card,
+.ponto-batido-form-section .card-content {
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+/* Forçar transparência nos elementos filhos da seção da imagem */
+.ponto-batido-image-section * {
+  background-color: transparent !important;
+}
+
+/* Animação de entrada da direita para esquerda */
+@keyframes slideInRight {
+  0% {
+    transform: translateX(100%) !important;
+    opacity: 0 !important;
+  }
+  100% {
+    transform: translateX(0) !important;
+    opacity: 1 !important;
+  }
+}

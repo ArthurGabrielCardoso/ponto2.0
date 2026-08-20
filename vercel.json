@@ -1,0 +1,14 @@
+{
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://uizlhtiiwotcdqrrmalk.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpemxodGlpd290Y2RxcnJtYWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM1NTM2NzIsImV4cCI6MjA1OTEyOTY3Mn0.nqxgW3PtYqeH_UxiDgc5EU5AKf4SJwQv0wAdt6eF9Lk",
+    "NEXT_PUBLIC_MODAL_API_URL": "https://checkupodontologico1--face-test-test-endpoint.modal.run"
+  },
+  "functions": {
+    "app/api/**/*.js": {
+      "maxDuration": 30
+    }
+  }
+}

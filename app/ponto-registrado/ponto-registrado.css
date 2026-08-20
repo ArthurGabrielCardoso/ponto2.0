@@ -1,0 +1,269 @@
+/* Estilos removidos - finance.css não existe */
+
+/* Sobrescrever o layout para criar uma seção única */
+.login-container {
+  position: relative !important;
+  background: white !important;
+  gap: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Fazer a seção do formulário ocupar toda a largura */
+.login-form-section {
+  width: 100% !important;
+  background: white !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Posicionar a seção da imagem como overlay com gradiente da cor primária */
+.login-image-section {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  height: 100% !important;
+  width: 50% !important; /* Aumentar de 48% para 50% */
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 50%, #0f766e 100%) !important;
+  border-top-left-radius: 3rem !important;
+  border-bottom-left-radius: 3rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 2 !important;
+}
+
+/* Garantir que a cor seja aplicada mesmo com outras classes */
+.login-image-section,
+.login-image-section::before,
+.login-image-section::after {
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 50%, #0f766e 100%) !important;
+}
+
+/* Ajustar o conteúdo do formulário para não ficar sob a div do ícone */
+.login-form-section > div {
+  margin-right: 54% !important; /* Ajustar de 52% para 54% */
+  padding-right: 2rem !important;
+}
+
+/* Responsividade para tablets pequenos */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .login-image-section {
+    width: 42% !important; /* Mais largo em tablets */
+    background: linear-gradient(135deg, #14b8a6 0%, #0d9488 50%, #0f766e 100%) !important;
+  }
+
+  .login-form-section > div {
+    margin-right: 46% !important;
+    padding-right: 1.5rem !important;
+  }
+
+  .login-image-section img {
+    width: 180px !important;
+    height: 180px !important;
+  }
+}
+
+/* Responsividade para tablets e celulares */
+@media (max-width: 768px) {
+  .login-image-section {
+    width: 45% !important; /* Mais largo em tablets pequenos */
+    background: linear-gradient(135deg, #14b8a6 0%, #0d9488 50%, #0f766e 100%) !important;
+  }
+
+  .login-form-section > div {
+    margin-right: 48% !important;
+    padding-right: 1rem !important;
+  }
+
+  .login-image-section img {
+    width: 120px !important;
+    height: 120px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-image-section {
+    width: 40% !important; /* Em celulares um pouco menor mas ainda largo */
+    background: linear-gradient(135deg, #14b8a6 0%, #0d9488 50%, #0f766e 100%) !important;
+  }
+
+  .login-form-section > div {
+    margin-right: 43% !important;
+    padding-right: 0.5rem !important;
+  }
+
+  .login-image-section img {
+    width: 100px !important;
+    height: 100px !important;
+  }
+}
+
+/* Remover qualquer border radius da seção do formulário */
+.login-form-section .card,
+.login-form-section .card-content {
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+/* Forçar a cor em todos os elementos filhos da seção da imagem */
+.login-image-section * {
+  background-color: transparent !important;
+}
+
+/* Estilos para seções full-screen */
+.full-screen-section {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 50;
+}
+
+/* Animações personalizadas */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Classes de animação */
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out;
+}
+
+.animate-fade-in-delay-4 {
+  animation: fade-in 0.6s ease-out 0.8s both;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.8s ease-out;
+}
+
+.animate-slide-down {
+  animation: slide-down 0.8s ease-out;
+}
+
+/* Estilos modernos para cards */
+.modern-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: none;
+  box-shadow: 0 8px 32px rgba(20, 178, 166, 0.15);
+  transition: all 0.3s ease;
+  border-top-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-top-right-radius: 1rem;
+  border-bottom-left-radius: 1rem;
+}
+
+.modern-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(20, 178, 166, 0.25);
+}
+
+/* Inputs modernos com border-bottom */
+.modern-input {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 2px solid #e5e7eb !important;
+  border-radius: 0 !important;
+  padding: 12px 0 8px 0 !important;
+  transition: all 0.3s ease !important;
+  box-shadow: none !important;
+}
+
+.modern-input:focus {
+  border-bottom-color: #14b8a6 !important;
+  box-shadow: 0 2px 8px rgba(20, 178, 166, 0.3) !important;
+  outline: none !important;
+  background: transparent !important;
+}
+
+.modern-input:hover {
+  border-bottom-color: #14b8a6 !important;
+  box-shadow: 0 1px 4px rgba(20, 178, 166, 0.2) !important;
+}
+
+.modern-textarea {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 2px solid #e5e7eb !important;
+  border-radius: 0 !important;
+  padding: 12px 0 8px 0 !important;
+  transition: all 0.3s ease !important;
+  box-shadow: none !important;
+  resize: none !important;
+}
+
+.modern-textarea:focus {
+  border-bottom-color: #14b8a6 !important;
+  box-shadow: 0 2px 8px rgba(20, 178, 166, 0.3) !important;
+  outline: none !important;
+  background: transparent !important;
+}
+
+.modern-textarea:hover {
+  border-bottom-color: #14b8a6 !important;
+  box-shadow: 0 1px 4px rgba(20, 178, 166, 0.2) !important;
+}
+
+/* Melhorias para o formulário */
+.grid {
+  gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .grid {
+    gap: 1.5rem;
+  }
+}
+
+/* Transições suaves para todos os elementos interativos */
+button,
+input,
+textarea {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Hover effects melhorados */
+.hover\:scale-105:hover {
+  transform: scale(1.05);
+}
+
+/* Divisor curvo entre seções */
+.section-divider {
+  position: absolute;
+  top: 0;
+  right: 50%;
+  height: 100%;
+  width: 2px;
+  background: linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
+  z-index: 3;
+}

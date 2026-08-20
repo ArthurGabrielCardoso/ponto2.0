@@ -1,0 +1,111 @@
+Estou fazendo um mapeamento rápido do projeto para entender a estrutura atual (páginas de dashboard, bater ponto, cadastro), onde o Supabase é usado e se já existe algo de câmera/reconhecimento para planejar os passos. Vou vasculhar o repositório e trazer um plano de ação detalhado sem código. Vou rodar buscas em paralelo.
+Ran tool
+Ran tool
+Ran tool
+Search files...
+Search files...
+Ran tool
+Search files...
+Search files...
+
+Vou levantar rapidamente referências dos modelos solicitados (BlazeFace, MediaPipe FaceMesh e EdgeFace) para propor a melhor integração em Web/Next.js e confirmar nomes de pacotes, para então te devolver o plano de ação detalhado sem código.
+Ran tool
+
+Acabei de mapear o projeto: encontrei `app/registrar-ponto/page.tsx` já com reconhecimento via `face-api.js` (detecção, landmarks e expressões para sorriso), `app/cadastrar/page.tsx` com fluxo de câmera e cadastro, e a integração Supabase centralizada em `lib/supabase.ts` (com `descritores` sendo salvos para cada funcionário). Há um script `scripts/download-essential-models.js` baixando pesos do `face-api.js`. Vou propor o plano para migrar para BlazeFace + MediaPipe FaceMesh + EdgeFace e ajustar a UI para câmera em tela cheia com a logo no topo esquerdo.
+
+### Plano de ação (sem código)
+
+1) Dependências e modelos
+- Instalar e configurar:
+  - BlazeFace: `@tensorflow-models/blazeface` + `@tensorflow/tfjs` (com backend WebGL).
+  - MediaPipe FaceMesh: `@mediapipe/face_mesh` (ou Tasks Vision FaceLandmarker, se preferirmos blendshapes de sorriso; manteremos FaceMesh se seguir estritamente o pedido).
+  - EdgeFace: carregar modelo ONNX no navegador via `onnxruntime-web` e colocar o arquivo do modelo em `public/models/edgeface.onnx`.
+- Remover gradualmente `face-api.js` e o script `scripts/download-essential-models.js` (substituir por novo script de download dos modelos BlazeFace/EdgeFace, se necessário).
+- Ajustar `next.config.ts` se precisarmos servir `.wasm`/`.onnx` (habilitar headers/mime corretos).
+
+2) Pipeline de reconhecimento (tempo real)
+- Detecção: BlazeFace (baixa latência) para obter bounding box do rosto principal (se múltiplos rostos, selecionar o de maior área).
+- Landmarks e sorriso: MediaPipe FaceMesh para 468 pontos; calcular métrica de sorriso:
+  - Preferencial: usar distâncias relativas dos cantos da boca e abertura dos lábios com normalização por escala facial.
+  - Definir threshold de sorriso (ex.: 0.6–0.7) e histerese para estabilidade (janela móvel).
+- Embedding: recortar o rosto, normalizar e inferir com EdgeFace (ONNX), obtendo embedding L2-normalizado.
+- Identificação: comparar embedding com `descritores` dos funcionários em memória (carregados do Supabase) por distância (cosine/L2). Definir `limiar_identificacao` (ex.: 0.5–0.7, a calibrar).
+- Confirmação: somente se (face detectado) AND (sorriso acima do threshold por N frames consecutivos) AND (distância < limiar) → libera o registro.
+- Resfriamento: aplicar cooldown de ~5–10s após um registro para evitar múltiplas inserções.
+
+3) Cadastro de funcionário (atualização de `app/cadastrar/page.tsx`)
+- Captura assistida: coletar 10–20 frames do rosto olhando ao centro (e levemente angulado) para variabilidade.
+- Para cada frame válido: BlazeFace → crop alinhado → FaceMesh (validação de qualidade) → EdgeFace → embedding.
+- Agregar embeddings (média e opcionalmente variância) e salvar em `descritores` via `cadastrarFuncionario` (já previsto em `lib/supabase.ts`).
+- UX: barra de progresso de coleta, instruções “olhe para câmera, vire levemente, sorria”, validação mínima de nitidez e enquadramento.
+
+4) Registro de ponto (atualização de `app/registrar-ponto/page.tsx`)
+- UI full-screen:
+  - Vídeo em tela cheia (ocupar viewport).
+  - Apenas a logo no topo esquerdo (overlay leve).
+  - Overlays mínimos para instruções/feedback (ex.: “Sorria para registrar” / “Identificando...” / “Registrado!”).
+- Fluxo:
+  - Carregar funcionários e `descritores` do Supabase ao montar.
+  - Iniciar webcam, rodar pipeline (item 2).
+  - Ao identificar e validar sorriso, chamar `registrarPonto` (já implementado) e redirecionar para `ponto-registrado`.
+- Remover/ocultar o modo manual e o seletor de funcionário na UI (o pedido é 100% facial+sorriso).
+
+5) Integração com Supabase (reuso e ajustes mínimos)
+- Reaproveitar `buscarFuncionarios`, `registrarPonto`, `buscarUltimoRegistroPonto`.
+- Confirmar que a tabela `funcionarios` inclui `descritores` (matriz de vetores). Ajustar tipos se necessário para acomodar tamanho de embedding do EdgeFace.
+- Otimização:
+  - Cache local de `descritores` na sessão do navegador para reduzir leituras repetidas.
+  - Opcional: endpoint para baixar embeddings com ETag e cache HTTP.
+
+6) Desempenho e robustez
+- Backends: `tfjs-backend-webgl` por padrão; fallback para `wasm` se WebGL indisponível.
+- Reduzir resolução de entrada (por ex. 720p → inferir com escalas internas), e usar `requestVideoFrameCallback`.
+- Debounce / taxa fixa (15–30 FPS efetivos) e processamento a cada 2–3 frames.
+- Worker opcional para isolação do pipeline (se necessário para UX suave).
+- Timeouts e cancelamentos limpos ao desmontar componentes.
+
+7) UX e acessibilidade
+- Feedback claro: estados “carregando modelos”, “posicione o rosto”, “sorria”, “identificando...”, “ponto registrado”.
+- Erros tratáveis: sem câmera, sem permissão, baixa luz, múltiplos rostos → instruções úteis.
+- Multi-usuário: se 2+ rostos, priorizar maior bounding box e exibir aviso para ficar sozinho no quadro.
+
+8) Segurança, privacidade e LGPD
+- Exibir consentimento e política na primeira utilização do cadastro.
+- Evitar persistir imagens; salvar apenas embeddings (pseudonimizados).
+- HTTPS obrigatório; nenhum envio de video para servidor, apenas resultado (id e hora).
+- Revisar RLS do Supabase para acesso controlado dos dados.
+
+9) Entregáveis e alterações por arquivo
+- `package.json`: adicionar dependências (TFJS, BlazeFace, MediaPipe FaceMesh, onnxruntime-web); remover `face-api.js`.
+- `public/models/edgeface.onnx`: modelo do EdgeFace; garantir carregamento via `onnxruntime-web`.
+- `app/registrar-ponto/page.tsx`: refatorar para pipeline BlazeFace + FaceMesh + EdgeFace; UI full-screen; remover seletor manual.
+- `app/cadastrar/page.tsx`: fluxo de coleta e média de embeddings com EdgeFace.
+- `lib/supabase.ts`: manter; validar tipos de `descritores` (tamanho/forma do vetor EdgeFace).
+- `app/layout.tsx`/`globals.css`: estilos para full-screen e overlay da logo.
+- Remover `scripts/download-essential-models.js` e criar opção equivalente (se necessário) para EdgeFace.
+
+10) Critérios de aceite
+- Câmera ocupa 100% da tela; somente a logo visível no canto superior esquerdo.
+- Registro só ocorre com sorriso detectado e funcionário identificado.
+- Cadastro gera embeddings consistentes (média de múltiplos frames) e são usados na identificação.
+- Registros gravados no Supabase e exibidos normalmente no dashboard/relatórios.
+- Performance fluida em notebooks comuns e navegadores modernos.
+
+11) Calibração e testes
+- Definir thresholds de sorriso e identificação com base em testes reais do time.
+- Testes em diferentes iluminações, com/sem barba, óculos, máscaras (deve falhar com máscara para segurança).
+- Testes com rostos semelhantes entre funcionários (valorizar distância mínima e margem relativa).
+
+- Roadmap rápido:
+  - Dia 1: deps, carregamento de modelos, PoC de pipeline (detecção → landmarks → embedding).
+  - Dia 2: refatorar `registrar-ponto` (full-screen + fluxo completo) e cooldown.
+  - Dia 3: refatorar `cadastrar` (coleta de embeddings), ajuste Supabase.
+  - Dia 4: calibração de thresholds, UX/erros, limpeza de `face-api.js`.
+  - Dia 5: testes cross-device e ajustes finais.
+
+Resumo
+- Vou migrar o reconhecimento de `face-api.js` para BlazeFace (detecção), MediaPipe FaceMesh (sorriso) e EdgeFace (embeddings).
+- A página `registrar-ponto` ficará full-screen com só a logo no topo esquerdo; sem modo manual.
+- `cadastrar` passará a coletar múltiplos frames e salvar embeddings EdgeFace em `descritores` no Supabase.
+- Manteremos a API atual do Supabase e só ajustaremos tipos/validações se necessário.
+- Entregar com thresholds calibrados, UX de instruções/erros e performance fluida.
