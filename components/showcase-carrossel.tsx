@@ -521,6 +521,7 @@ export function ShowcaseCarrossel() {
             hora={current.dadosPonto.hora}
             data={current.dadosPonto.data}
             mensagem={current.dadosPonto.mensagem}
+            falaVoz={current.vozTexto}
             durationMs={20000}
             onVoltar={avancarSlide}
             modoDemonstracao={true}

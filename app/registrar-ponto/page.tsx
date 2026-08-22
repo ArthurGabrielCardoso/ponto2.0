@@ -333,6 +333,7 @@ interface RecognizedPerson {
   hora?: string
   data?: string
   mensagem?: string
+  falaVoz?: string
 }
 
 export default function RegistrarPonto() {
@@ -620,6 +621,7 @@ export default function RegistrarPonto() {
         hora: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
         data: now.toLocaleDateString(),
         mensagem: mensagemVisual,
+        falaVoz: mensagemVoz,
       }
 
       // Manter a moldura esmeralda pulsante por 750ms para confirmação visual satisfatória antes da transição
@@ -715,6 +717,7 @@ export default function RegistrarPonto() {
         hora: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
         data: now.toLocaleDateString(),
         mensagem: saudacaoIa.visual || mensagemPersonalizada,
+        falaVoz: saudacaoIa.voz || mensagemPersonalizada,
       }
 
       setRecognizedPerson(completed)
@@ -863,22 +866,23 @@ export default function RegistrarPonto() {
       {screensaver && <Screensaver onTap={() => { screensaverRef.current = false; setScreensaver(false); resetInactivityTimer() }} />}
 
       {/* Tela de sucesso de Ponto Registrado — Zero Scroll, Animação do Centro para Direita & Dourado */}
-      {showSuccess && completedPerson && (
+      {showSuccess && recognizedPerson && (
         <TelaPontoSucesso
-          nome={completedPerson.nome}
-          tipo={completedPerson.tipo || "Entrada"}
-          hora={completedPerson.hora || "08:00:00"}
-          data={completedPerson.data || new Date().toLocaleDateString()}
-          mensagem={completedPerson.mensagem || ""}
+          nome={recognizedPerson.nome}
+          tipo={recognizedPerson.tipo || "Entrada"}
+          hora={recognizedPerson.hora || "08:00:00"}
+          data={recognizedPerson.data || new Date().toLocaleDateString()}
+          mensagem={recognizedPerson.mensagem || ""}
+          falaVoz={recognizedPerson.falaVoz || ""}
           durationMs={30000}
           onVoltar={resetToInitialState}
         />
       )}
 
       {/* Modal / Tela de Check-in de Humor no Padrão Ponto Batido (Ocasional) */}
-      {mostrarCheckinHumor && completedPerson && (
+      {mostrarCheckinHumor && recognizedPerson && (
         <ModalCheckinHumor
-          nome={completedPerson.nome}
+          nome={recognizedPerson.nome}
           onConfirmar={handleSelecionarHumor}
           onFechar={() => setMostrarCheckinHumor(false)}
           duracaoSegundos={12}
