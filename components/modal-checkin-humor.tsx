@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from "react"
 import Image from "next/image"
-import { Sparkles, Heart, ArrowRight, X } from "lucide-react"
+import { Sparkles, Heart, ArrowRight, X, Bot } from "lucide-react"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
+import { obterSaudacaoInteligente } from "@/lib/ia-saudacao"
+import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import "../app/ponto-registrado/ponto-batido.css"
 
 export interface OpcaoHumorCompleta {
@@ -60,7 +62,7 @@ export const OPCOES_HUMOR_DETALHADAS: OpcaoHumorCompleta[] = [
 
 interface ModalCheckinHumorProps {
   nome: string
-  onConfirmar: (humorId: string, label: string) => void
+  onConfirmar?: (humorId: string, label: string) => void
   onFechar: () => void
   duracaoSegundos?: number
 }
@@ -69,11 +71,12 @@ export function ModalCheckinHumor({
   nome,
   onConfirmar,
   onFechar,
-  duracaoSegundos = 12,
+  duracaoSegundos = 15,
 }: ModalCheckinHumorProps) {
   const [selecionado, setSelecionado] = useState<string | null>(null)
+  const [respostaIaTexto, setRespostaIaTexto] = useState<string | null>(null)
   const [tempoRestante, setTempoRestante] = useState(duracaoSegundos)
-  const primeiroNome = (nome || "").split(" ")[0]
+  const primeiroNome = (nome || "Colega").split(" ")[0]
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -89,21 +92,40 @@ export function ModalCheckinHumor({
     return () => clearInterval(timer)
   }, [onFechar])
 
-  const handleEscolher = (opcao: OpcaoHumorCompleta) => {
+  const handleEscolher = async (opcao: OpcaoHumorCompleta) => {
     setSelecionado(opcao.id)
-    onConfirmar(opcao.id, opcao.titulo)
+    if (onConfirmar) onConfirmar(opcao.id, opcao.titulo)
+
+    try {
+      const resp = await obterSaudacaoInteligente({
+        nome: nome || "Colaborador",
+        tipoPonto: "Entrada",
+        dataHora: new Date(),
+        humor: opcao.id,
+      })
+      if (resp?.voz) {
+        setRespostaIaTexto(resp.voz)
+        reproduzirVozSaudacao(resp.voz)
+      }
+    } catch {
+      const falaFallback = `Que ótimo, ${primeiroNome}! Excelente jornada de trabalho e vamo que vamo!`
+      setRespostaIaTexto(falaFallback)
+      reproduzirVozSaudacao(falaFallback)
+    }
+
+    // Deixa tocar a voz e fecha após 4.5 segundos
     setTimeout(() => {
       onFechar()
-    }, 1800)
+    }, 4500)
   }
 
   return (
     <div className="fixed inset-0 z-50 h-screen w-screen select-none overflow-hidden transition-all duration-700 bg-[#070b14] flex items-center justify-center">
       {/* 1. CAMADA DE LUZES / ESFERAS AMBIENTES NO FUNDO */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-24 right-0 w-[550px] h-[550px] rounded-full bg-[#c69e6b] blur-[130px] opacity-60 animate-pulse" />
-        <div className="absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full bg-[#14b8a6] blur-[120px] opacity-50" />
-        <div className="absolute top-1/3 left-1/3 w-[380px] h-[380px] rounded-full bg-[#3b82f6] blur-[110px] opacity-35" />
+        <div className="absolute -top-24 right-0 w-[550px] h-[550px] rounded-full bg-[#c69e6b] blur-[130px] opacity-65 animate-pulse" />
+        <div className="absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full bg-[#14b8a6] blur-[120px] opacity-55" />
+        <div className="absolute top-1/3 left-1/3 w-[380px] h-[380px] rounded-full bg-[#3b82f6] blur-[110px] opacity-40" />
       </div>
 
       {/* 2. SUPERFÍCIE DE GLASSMORPHISM DE TELA INTEIRA (100% LARGURA/ALTURA, SEM BORDAS) */}
@@ -133,7 +155,7 @@ export function ModalCheckinHumor({
               Como está sua energia hoje, <span style={{ color: "#c69e6b" }}>{primeiroNome}</span>?
             </h1>
             <p className="text-sm sm:text-base text-white/80 font-medium">
-              Conte para a sua assistente para receber uma mensagem especial e turbinar seu turno!
+              Conte para a sua assistente e receba uma mensagem especial da IA para turbinar seu dia!
             </p>
           </div>
 
@@ -152,7 +174,7 @@ export function ModalCheckinHumor({
                       : "bg-white/[0.08] hover:bg-white/[0.14] border-white/20 hover:border-amber-300/60 shadow-lg hover:shadow-2xl"
                   }`}
                 >
-                  {/* Glow interno no topo */}
+                  {/* Ícone e Badge */}
                   <div className="flex items-center justify-between w-full">
                     <span className="text-4xl sm:text-5xl transition-transform duration-300 group-hover:scale-125 filter drop-shadow">
                       {opcao.emoji}
@@ -177,11 +199,21 @@ export function ModalCheckinHumor({
             })}
           </div>
 
-          {/* Feedback carinhoso imediato após escolha */}
-          {selecionado && (
-            <div className="mt-5 flex items-center justify-center gap-2 text-sm sm:text-base font-semibold text-amber-200 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <Heart className="w-5 h-5 fill-amber-300 text-amber-300 animate-bounce" />
-              <span>Maravilha! Sua assistente já está preparando seu dia com toda energia!</span>
+          {/* Resposta Falada da IA em Destaque */}
+          {respostaIaTexto && (
+            <div className="mt-6 p-4 rounded-2xl bg-amber-500/20 backdrop-blur-xl border border-amber-300/40 shadow-xl flex items-center justify-between gap-4 max-w-3xl mx-auto w-full animate-in fade-in slide-in-from-bottom-3 duration-400">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-400/30 flex items-center justify-center shrink-0 border border-amber-300">
+                  <Bot className="w-5 h-5 text-amber-200" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-300 block">Resposta da Assistente IA</span>
+                  <p className="text-sm sm:text-base font-semibold text-white tracking-tight leading-snug">
+                    "{respostaIaTexto}"
+                  </p>
+                </div>
+              </div>
+              <AnimacaoVozIa variante="ondas" />
             </div>
           )}
         </div>
@@ -197,7 +229,7 @@ export function ModalCheckinHumor({
             <ArrowRight className="w-4 h-4" />
           </button>
 
-          <span className="text-xs text-white/50">Toque em qualquer opção para interagir</span>
+          <span className="text-xs text-white/50">Toque em qualquer opção para ouvir a IA</span>
         </div>
       </div>
     </div>
