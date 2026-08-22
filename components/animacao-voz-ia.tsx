@@ -2,92 +2,63 @@
 
 import React from "react"
 import { useVozAtiva } from "@/lib/tts-audio"
-import { Sparkles, Bot } from "lucide-react"
 
 interface AnimacaoVozIaProps {
   className?: string
-  variante?: "badge" | "ondas" | "orb" | "completo"
-  label?: string
+  variante?: "bottom_bar" | "borda" | string
 }
 
-export function AnimacaoVozIa({
-  className = "",
-  variante = "completo",
-  label = "Assistente de Voz Ativa",
-}: AnimacaoVozIaProps) {
+/**
+ * Onda leve azul na borda inferior quando a voz estiver falando.
+ * Totalmente limpa: sem ícones de robô, sem badges, apenas a onda luminosa sutil azul/ciano.
+ */
+export function AnimacaoVozIa({ className = "", variante = "bottom_bar" }: AnimacaoVozIaProps) {
   const estaFalando = useVozAtiva()
 
   return (
-    <div className={`inline-flex items-center gap-2.5 transition-all duration-500 select-none ${className}`}>
-      {/* 1. Orbe / Ícone com Pulso de Energia Dourado & Ciano */}
-      <div className="relative flex items-center justify-center">
-        {estaFalando && (
-          <>
-            <span className="absolute -inset-1.5 rounded-full bg-gradient-to-r from-amber-400 via-teal-300 to-amber-500 opacity-75 blur-sm animate-pulse" />
-            <span className="absolute -inset-3 rounded-full bg-teal-400/20 blur-md animate-ping" />
-          </>
-        )}
-        <div
-          className={`relative z-10 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center backdrop-blur-xl border transition-all duration-300 ${
-            estaFalando
-              ? "bg-gradient-to-tr from-amber-500/40 via-teal-500/30 to-amber-300/40 border-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.6)] scale-105"
-              : "bg-white/10 border-white/20 text-white/70"
-          }`}
-        >
-          {estaFalando ? (
-            <Sparkles className="w-3.5 h-3.5 text-amber-200 animate-spin" style={{ animationDuration: "3s" }} />
-          ) : (
-            <Bot className="w-3.5 h-3.5 text-white/80" />
-          )}
-        </div>
+    <div
+      className={`fixed bottom-0 left-0 right-0 z-50 pointer-events-none transition-all duration-500 overflow-hidden ${
+        estaFalando ? "opacity-100" : "opacity-0"
+      } ${className}`}
+      aria-hidden="true"
+    >
+      {/* 1. Brilho ambiente difuso suave azul/ciano no rodapé */}
+      <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-cyan-500/25 via-blue-500/10 to-transparent blur-md" />
+
+      {/* 2. Barra de onda luminosa animada na borda inferior */}
+      <div className="relative w-full h-[3px] sm:h-[4px] bg-gradient-to-r from-transparent via-cyan-400 to-blue-500 shadow-[0_-2px_15px_rgba(34,211,238,0.8)]">
+        {/* Camada de onda pulsante */}
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-300 via-blue-400 to-sky-200 animate-pulse" />
       </div>
 
-      {/* 2. Visualizador de Ondas Sonoras Dinâmicas */}
-      <div className="flex items-center gap-1 h-5 px-1">
-        {[0, 1, 2, 3, 4].map((i) => (
+      {/* 3. Micro-ondas harmônicas dinâmicas de som centralizadas */}
+      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-end gap-1.5 h-6 px-4">
+        {[0.1, 0.3, 0.5, 0.7, 0.9, 0.6, 0.4, 0.2].map((delay, idx) => (
           <span
-            key={i}
-            className={`w-1 rounded-full transition-all duration-200 ${
-              estaFalando
-                ? "bg-gradient-to-t from-amber-400 to-teal-300 shadow-[0_0_6px_rgba(251,191,36,0.8)]"
-                : "bg-white/30 h-1.5"
-            }`}
-            style={
-              estaFalando
-                ? {
-                    animation: `soundWave 0.8s ease-in-out infinite alternate`,
-                    animationDelay: `${i * 0.15}s`,
-                    minHeight: "4px",
-                  }
-                : undefined
-            }
+            key={idx}
+            className="w-1 rounded-full bg-cyan-300/80 shadow-[0_0_8px_rgba(34,211,238,0.9)]"
+            style={{
+              animation: estaFalando ? `ondaAzulBottom 0.9s ease-in-out infinite alternate` : "none",
+              animationDelay: `${delay}s`,
+              height: estaFalando ? "16px" : "2px",
+            }}
           />
         ))}
       </div>
 
-      {/* 3. Badge de Texto Inteligente */}
-      {variante !== "ondas" && (
-        <span
-          className={`text-xs font-semibold tracking-wide transition-colors ${
-            estaFalando
-              ? "text-amber-200 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]"
-              : "text-white/60"
-          }`}
-        >
-          {estaFalando ? "Assistente Falando..." : label}
-        </span>
-      )}
-
       <style jsx>{`
-        @keyframes soundWave {
+        @keyframes ondaAzulBottom {
           0% {
-            height: 4px;
+            height: 3px;
+            opacity: 0.4;
           }
           50% {
             height: 18px;
+            opacity: 1;
           }
           100% {
-            height: 8px;
+            height: 6px;
+            opacity: 0.6;
           }
         }
       `}</style>

@@ -186,12 +186,9 @@ export function TelaPontoSucesso({
           }`}
         >
           <Image src="/logo.png" alt="Logo" width={150} height={75} priority style={{ height: "auto" }} />
-          <div className="flex items-center gap-4">
-            <AnimacaoVozIa variante="badge" />
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">
-              <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${cenario.statusDot}`} />
-              <span>Ponto Registrado</span>
-            </div>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">
+            <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${cenario.statusDot}`} />
+            <span>Ponto Registrado</span>
           </div>
         </div>
 
@@ -276,6 +273,9 @@ export function TelaPontoSucesso({
         {/* RODAPÉ */}
         <div className="relative z-10 h-4 shrink-0" />
       </div>
+
+      {/* Onda luminosa azul na borda bottom quando a voz fala */}
+      <AnimacaoVozIa />
     </div>
   )
 }

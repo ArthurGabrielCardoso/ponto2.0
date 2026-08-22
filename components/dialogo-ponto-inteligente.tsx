@@ -222,10 +222,7 @@ export function DialogoPontoInteligente({
               <span>Verificação Inteligente</span>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <AnimacaoVozIa variante="badge" />
-            <span className="text-xs text-white/60 font-medium">Tempo: {tempoRestante}s</span>
-          </div>
+          <span className="text-xs text-white/60 font-medium">Tempo: {tempoRestante}s</span>
         </div>
 
         {/* ÁREA CENTRAL: 100% Tela sem Scroll */}
@@ -499,6 +496,9 @@ export function DialogoPontoInteligente({
         {/* RODAPÉ */}
         <div className="h-4 shrink-0" />
       </div>
+
+      {/* Onda luminosa azul na borda bottom quando a voz fala */}
+      <AnimacaoVozIa />
     </div>
   )
 }

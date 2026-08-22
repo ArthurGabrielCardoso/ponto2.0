@@ -49,16 +49,17 @@ REGRAS INEGOCIÁVEIS DA CULTURA DA EMPRESA:
    - Se for Sexta-feira e ele trabalha no sábado (trabalhaSabado = true): pode dizer "Excelente descanso e até amanhã!".
 3. DIVERSÃO E CARINHO:
    - Seja caloroso(a), alegre e bem-humorado(a).
-   - Se for sexta-feira, pode brincar com "Sextou!", "🎶 Sextoou!", "Último gás!".
-   - Use o primeiro nome da pessoa ou apelidos carinhosos comuns em português (ex: Jéssica -> Jé, Gabriel -> Gabi, Arthur -> Artur / Tu, Rafael -> Rafa, etc.).
+   - Se for sexta-feira, pode brincar com "Sextou!", "Sextooou!", "Último gás!".
+   - Use o primeiro nome da pessoa ou apelidos carinhosos comuns em português (ex: Jéssica -> Jé, Gabriel -> Gabi, Arthur -> Artur / Tu, Rafael -> Rafa, Julliana -> Ju, etc.).
    - Se um humor de check-in foi informado (ex: "cafe", "sono", "excelente"), comente de forma carinhosa e encorajadora.
-4. TAMANHO DA RESPOSTA:
-   - A locução de voz deve ter entre 1 e 2 frases curtas e fluidas (15 a 30 palavras), ideais para serem lidas por voz humana (Google TTS).
+4. REGRA CRÍTICA DE VOZ (SEM EMOJIS):
+   - O campo "voz" NUNCA DEVE CONTER EMOJIS OU SÍMBOLOS MUSICAIS (nada de 🎶, 🚀, 😄, etc.), pois o sintetizador de voz do Google lê os emojis como palavras ("nota musical", "foguete"). No campo "voz", use APENAS texto falado natural e melódico em português!
+   - No campo "visual" você PODE usar emojis normalmente para ficar bonito na tela.
 5. FORMATO DE SAÍDA JSON OBRIGATÓRIO:
    Retorne estritamente um objeto JSON válido com dois campos:
    {
-     "visual": "Texto curto e nobre para exibir na tela (ex: 'Excelente dia, Jé!' ou 'Excelente final de semana, Arthur!')",
-     "voz": "Texto completo, envolvente e natural que será falado por áudio (ex: '🎶 Sextoou, Jé! Excelente dia e um último gás nessa semana maravilhosa!')"
+     "visual": "Texto curto e nobre com emoji para exibir na tela (ex: 'Excelente dia, Jé! 🚀' ou 'Excelente final de semana, Arthur! 🎉')",
+     "voz": "Texto apenas em palavras naturais sem emoji para o sintetizador de voz falar (ex: 'Sextou com sucesso, Jé! Excelente final de semana pra você!')"
    }`
 
   const userPrompt = `Contexto do Ponto:
@@ -117,6 +118,12 @@ Gere o JSON com "visual" e "voz" seguindo estritamente as regras da empresa.`
 
     // Validação extra de segurança da cultura (remover acidentalmente "Bom dia/boa tarde/boa noite" se o LLM alucinar)
     voz = sanitizarCulturaEmpresa(voz, ctx)
+    // Remove emojis e caracteres musicais para não serem soletrados pelo TTS
+    voz = voz
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}]/gu, "")
+      .replace(/[🎶🎵🎸🎤🎹🎷🎺✨⭐🌟💫🔥⚡🚀🎉🎊👏❤️💖]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
     visual = sanitizarCulturaEmpresa(visual, ctx)
 
     if (!voz) {
