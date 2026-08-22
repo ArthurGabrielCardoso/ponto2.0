@@ -29,7 +29,7 @@ export function TelaPontoSucesso({
   modoDemonstracao = false,
 }: TelaPontoSucessoProps) {
   // Fases da coreografia:
-  // 1. "centro": Ícone centralizado (0 a 800ms)
+  // 1. "centro": Ícone gigante centralizado (0 a 800ms)
   // 2. "deslizando": Ícone desliza para o lado direito (800ms a 1400ms)
   // 3. "revelar": Ícone 100% ancorado -> surge a logo, badge e lado esquerdo (1500ms+)
   const [fase, setFase] = useState<"centro" | "deslizando" | "revelar">("centro")
@@ -75,94 +75,94 @@ export function TelaPontoSucesso({
   const iconeAncorado = fase === "deslizando" || fase === "revelar"
   const conteudoVisivel = fase === "revelar"
 
-  // Configuração dos 4 Cenários em MODO LIGHT GLASSMORPHISM com cores corporativas
+  // Configuração dos 4 Cenários de Glassmorphism com Dourado Puro e Ícones Ampliados
   const getCenario = () => {
     const t = (tipo || "").toLowerCase().trim()
 
-    // 1. RETORNO ALMOÇO - Light Glassmorphism Teal Signature
+    // 1. RETORNO ALMOÇO - Full-Screen Glassmorphism Teal Signature
     if (t.includes("retorno")) {
       return {
-        baseBg: "bg-teal-50/40",
+        baseBg: "bg-slate-950",
         orb1: "bg-[#14b8a6]",
         orb2: "bg-[#0d9488]",
         orb3: "bg-[#2dd4bf]",
-        glassTint: "bg-white/60",
-        cardClass: "bg-white/90 backdrop-blur-xl border border-teal-200/80 shadow-md text-slate-900",
-        cardDivider: "border-slate-200",
-        cardLabel: "text-teal-800/80",
-        timeText: "text-slate-900",
-        dateText: "text-slate-700",
-        tagClass: "bg-teal-100 text-teal-900 border border-teal-300",
-        greetingColor: "#0f766e",
-        trackBg: "bg-slate-200",
-        statusDot: "bg-teal-600",
-        btnGrad: "linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)",
-        textMuted: "text-slate-600",
+        glassTint: "bg-teal-950/40",
+        cardClass: "bg-white/[0.08] backdrop-blur-2xl border border-white/20 shadow-[0_16px_40px_-10px_rgba(0,0,0,0.5)] text-white",
+        cardDivider: "border-white/15",
+        cardLabel: "text-teal-200/80",
+        timeText: "text-white",
+        dateText: "text-teal-100",
+        tagClass: "bg-teal-300/25 text-teal-100 border border-teal-300/40",
+        greetingColor: "#ffffff",
+        trackBg: "bg-black/30",
+        statusDot: "bg-teal-300",
+        btnGrad: "linear-gradient(135deg, #1db9b3 0%, #0d8488 100%)",
+        textMuted: "text-teal-200/80",
       }
     }
 
-    // 2. ENTRADA / DIA - Light Glassmorphism DOURADO NOBRE PURO
+    // 2. ENTRADA / DIA - Full-Screen Glassmorphism DOURADO NOBRE PURO (Sem tons laranjas)
     if (t.includes("entrada")) {
       return {
-        baseBg: "bg-amber-50/30",
-        orb1: "bg-[#f59e0b]",
-        orb2: "bg-[#c69e6b]",
-        orb3: "bg-[#fde68a]",
-        glassTint: "bg-white/60",
-        cardClass: "bg-white/90 backdrop-blur-xl border border-amber-200/90 shadow-md text-slate-900",
-        cardDivider: "border-slate-200",
-        cardLabel: "text-amber-900/80",
-        timeText: "text-slate-900",
-        dateText: "text-slate-700",
-        tagClass: "bg-amber-100 text-amber-900 border border-amber-300",
-        greetingColor: "#b45309",
-        trackBg: "bg-slate-200",
-        statusDot: "bg-[#c69e6b]",
-        btnGrad: "linear-gradient(135deg, #c69e6b 0%, #b38850 100%)",
-        textMuted: "text-slate-600",
+        baseBg: "bg-[#0f0c05]",
+        orb1: "bg-[#eab308]",
+        orb2: "bg-[#ca8a04]",
+        orb3: "bg-[#fef08a]",
+        glassTint: "bg-yellow-950/30",
+        cardClass: "bg-white/[0.08] backdrop-blur-2xl border border-amber-200/30 shadow-[0_16px_40px_-10px_rgba(0,0,0,0.5)] text-white",
+        cardDivider: "border-white/15",
+        cardLabel: "text-amber-200/90",
+        timeText: "text-white",
+        dateText: "text-amber-100",
+        tagClass: "bg-amber-400/25 text-amber-100 border border-amber-300/50",
+        greetingColor: "#ffffff",
+        trackBg: "bg-black/30",
+        statusDot: "bg-amber-300",
+        btnGrad: "linear-gradient(135deg, #eab308 0%, #ca8a04 100%)",
+        textMuted: "text-amber-200/80",
       }
     }
 
-    // 3. SAÍDA ALMOÇO - Light Glassmorphism Âmbar Gastronômico
+    // 3. SAÍDA ALMOÇO - Full-Screen Glassmorphism Âmbar Gastronômico
     if (t.includes("almoço") || t.includes("almoco")) {
       return {
-        baseBg: "bg-orange-50/40",
+        baseBg: "bg-[#1c0c05]",
         orb1: "bg-[#f97316]",
         orb2: "bg-[#ea580c]",
-        orb3: "bg-[#fed7aa]",
-        glassTint: "bg-white/60",
-        cardClass: "bg-white/90 backdrop-blur-xl border border-orange-200/80 shadow-md text-slate-900",
-        cardDivider: "border-slate-200",
-        cardLabel: "text-orange-900/80",
-        timeText: "text-slate-900",
-        dateText: "text-slate-700",
-        tagClass: "bg-orange-100 text-orange-900 border border-orange-300",
-        greetingColor: "#c2410c",
-        trackBg: "bg-slate-200",
-        statusDot: "bg-orange-600",
+        orb3: "bg-[#fb923c]",
+        glassTint: "bg-orange-950/40",
+        cardClass: "bg-white/[0.08] backdrop-blur-2xl border border-white/20 shadow-[0_16px_40px_-10px_rgba(0,0,0,0.5)] text-white",
+        cardDivider: "border-white/15",
+        cardLabel: "text-orange-200/80",
+        timeText: "text-white",
+        dateText: "text-orange-100",
+        tagClass: "bg-orange-300/25 text-orange-100 border border-orange-300/40",
+        greetingColor: "#ffffff",
+        trackBg: "bg-black/30",
+        statusDot: "bg-orange-300",
         btnGrad: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
-        textMuted: "text-slate-600",
+        textMuted: "text-orange-200/80",
       }
     }
 
-    // 4. NOITE / FIM DE EXPEDIENTE - Light Glassmorphism Azul com Dourado
+    // 4. NOITE / FIM DE EXPEDIENTE - Full-Screen Glassmorphism Azul Marinho com Dourado
     return {
-      baseBg: "bg-slate-100",
-      orb1: "bg-[#93c5fd]",
-      orb2: "bg-[#60a5fa]",
+      baseBg: "bg-[#030712]",
+      orb1: "bg-[#1e293b]",
+      orb2: "bg-[#3b82f6]",
       orb3: "bg-[#c69e6b]",
-      glassTint: "bg-white/70",
-      cardClass: "bg-white/90 backdrop-blur-xl border border-slate-200/90 shadow-md text-slate-900",
-      cardDivider: "border-slate-200",
-      cardLabel: "text-slate-600",
-      timeText: "text-slate-900",
-      dateText: "text-slate-700",
-      tagClass: "bg-blue-100 text-blue-900 border border-blue-300",
-      greetingColor: "#1e3a8a",
-      trackBg: "bg-slate-200",
-      statusDot: "bg-blue-600",
-      btnGrad: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
-      textMuted: "text-slate-600",
+      glassTint: "bg-slate-950/50",
+      cardClass: "bg-slate-900/60 backdrop-blur-2xl border border-amber-400/25 shadow-[0_16px_50px_-10px_rgba(0,0,0,0.7)] text-white",
+      cardDivider: "border-slate-800/80",
+      cardLabel: "text-slate-400",
+      timeText: "text-amber-200",
+      dateText: "text-slate-300",
+      tagClass: "bg-amber-400/20 text-amber-300 border border-amber-400/40",
+      greetingColor: "#c69e6b", // Dourado Signature
+      trackBg: "bg-slate-800/80",
+      statusDot: "bg-amber-400",
+      btnGrad: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)",
+      textMuted: "text-slate-400",
     }
   }
 
@@ -170,25 +170,25 @@ export function TelaPontoSucesso({
 
   return (
     <div className={`absolute inset-0 z-40 h-screen w-full select-none overflow-hidden ${cenario.baseBg}`}>
-      {/* 1. CAMADA DE LUZES / ESFERAS AMBIENTES COLORIDAS NO FUNDO */}
+      {/* 1. CAMADA DE LUZES / ESFERAS AMBIENTES FLUIDAS NO FUNDO */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className={`absolute -top-24 right-0 w-[550px] h-[550px] rounded-full ${cenario.orb1} blur-[130px] opacity-35 animate-pulse`} />
-        <div className={`absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full ${cenario.orb2} blur-[120px] opacity-30`} />
-        <div className={`absolute top-1/3 left-1/3 w-[380px] h-[380px] rounded-full ${cenario.orb3} blur-[110px] opacity-25`} />
+        <div className={`absolute -top-24 right-0 w-[550px] h-[550px] rounded-full ${cenario.orb1} blur-[120px] opacity-75 animate-pulse`} />
+        <div className={`absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full ${cenario.orb2} blur-[110px] opacity-65`} />
+        <div className={`absolute top-1/3 left-1/3 w-[380px] h-[380px] rounded-full ${cenario.orb3} blur-[100px] opacity-45`} />
       </div>
 
-      {/* 2. SUPERFÍCIE DE GLASSMORPHISM LIGHT DE TELA INTEIRA */}
+      {/* 2. SUPERFÍCIE DE GLASSMORPHISM DE TELA INTEIRA (100% LARGURA/ALTURA, SEM BORDAS) */}
       <div
-        className={`absolute inset-0 w-full h-full backdrop-blur-[45px] backdrop-saturate-[160%] ${cenario.glassTint} border-none flex flex-col justify-between p-4 sm:p-8 lg:p-10 transition-all duration-700`}
+        className={`absolute inset-0 w-full h-full backdrop-blur-[60px] backdrop-saturate-[180%] ${cenario.glassTint} border-none flex flex-col justify-between p-4 sm:p-8 lg:p-10 transition-all duration-700`}
       >
-        {/* TOPO: Logo e Indicador de "Ponto Registrado" */}
+        {/* TOPO: Logo flutuante limpa e Texto "Ponto Registrado" flutuante */}
         <div
           className={`relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0 transition-opacity duration-500 ease-out ${
             conteudoVisivel ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
           <Image src="/logo.png" alt="Logo" width={150} height={75} priority style={{ height: "auto" }} />
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 bg-white/80 border border-slate-200/80 px-3 py-1 rounded-md shadow-xs">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">
             <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${cenario.statusDot}`} />
             <span>Ponto Registrado</span>
           </div>
@@ -204,27 +204,25 @@ export function TelaPontoSucesso({
                 : "opacity-0 -translate-x-6 md:-translate-y-2 pointer-events-none"
             }`}
           >
-            {/* Saudação com Nome e Fala da IA */}
+            {/* Saudação com Nome e Fala Falada pela IA */}
             <div className="space-y-2">
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight text-slate-900">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight drop-shadow-sm">
                 <span style={{ color: cenario.greetingColor }}>
-                  {mensagem || `Excelente dia, ${nome.split(" ")[0]}!`}
+                  {mensagem || `Excelente trabalho, ${nome.split(" ")[0]}!`}
                 </span>
               </h1>
               {falaVoz && (
-                <div className="bg-white/80 border border-slate-200/90 rounded-md p-3 shadow-xs">
-                  <p className="text-xs sm:text-sm text-slate-700 font-medium leading-relaxed">
-                    "{falaVoz}"
-                  </p>
-                </div>
+                <p className="text-sm sm:text-base text-white/90 font-medium leading-relaxed drop-shadow-sm animate-in fade-in slide-in-from-top-1 duration-500">
+                  "{falaVoz}"
+                </p>
               )}
             </div>
 
-            {/* Card de Informações Retangular com Bordas Quadradas */}
-            <div className={`rounded-lg p-5 sm:p-6 space-y-3.5 ${cenario.cardClass}`}>
+            {/* Card de Informações Retangular */}
+            <div className={`rounded-2xl p-5 sm:p-6 space-y-3.5 ${cenario.cardClass}`}>
               <div className={`flex items-center justify-between border-b pb-2.5 ${cenario.cardDivider}`}>
                 <span className={`text-xs uppercase font-bold tracking-wider ${cenario.cardLabel}`}>Tipo</span>
-                <span className={`font-bold text-xs px-3 py-1 rounded-md ${cenario.tagClass}`}>
+                <span className={`font-bold text-sm px-3.5 py-1 rounded-md ${cenario.tagClass}`}>
                   {tipo}
                 </span>
               </div>
@@ -248,24 +246,24 @@ export function TelaPontoSucesso({
                   className="h-full rounded-full transition-all duration-1000 ease-linear"
                   style={{
                     width: `${(timeLeft / Math.round(durationMs / 1000)) * 100}%`,
-                    background: "linear-gradient(90deg, #c69e6b 0%, #14b8a6 100%)",
+                    background: "linear-gradient(90deg, #c69e6b 0%, #1db9b3 100%)",
                   }}
                 />
               </div>
               <div className={`flex items-center justify-between text-xs ${cenario.textMuted}`}>
                 <button
                   onClick={() => onVoltarRef.current()}
-                  className="px-4 py-2 rounded-md font-bold text-white transition-all shadow-sm active:scale-95 text-xs sm:text-sm cursor-pointer"
+                  className="px-5 py-2 rounded-lg font-bold text-white transition-all shadow-md hover:shadow-lg active:scale-95 text-xs sm:text-sm"
                   style={{ background: cenario.btnGrad }}
                 >
                   Voltar ao Início
                 </button>
-                <span className="font-medium text-slate-500">Retornando em {timeLeft}s...</span>
+                <span>Retornando em {timeLeft}s...</span>
               </div>
             </div>
           </div>
 
-          {/* LADO DIREITO: Ícone Animado Gigante */}
+          {/* LADO DIREITO: Ícone Animado Gigante Expandido */}
           <div
             className={`w-full md:w-[54%] flex items-center justify-center transition-all duration-700 cubic-bezier(0.2, 0.8, 0.2, 1) ${
               iconeAncorado
@@ -283,7 +281,7 @@ export function TelaPontoSucesso({
         <div className="relative z-10 h-4 shrink-0" />
       </div>
 
-      {/* Onda luminosa azul sutil na base */}
+      {/* Onda luminosa azul na borda bottom quando a voz fala */}
       <AnimacaoVozIa />
     </div>
   )
