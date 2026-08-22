@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Volume2, LayoutDashboard } from "lucide-react"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import { DialogoPontoInteligente } from "@/components/dialogo-ponto-inteligente"
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
+import { ModalCheckinHumor } from "@/components/modal-checkin-humor"
 import type { DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 
 interface SlideItem {
@@ -13,7 +14,7 @@ interface SlideItem {
   titulo: string
   categoria: string
   vozTexto: string
-  tipo: "ponto_batido" | "dialogo"
+  tipo: "ponto_batido" | "dialogo" | "checkin_humor"
   dadosPonto?: {
     nome: string
     tipo: string
@@ -74,7 +75,7 @@ const SLIDES: SlideItem[] = [
     id: "saida_fim",
     titulo: "Ponto Batido: Saída Fim de Expediente",
     categoria: "Design Ponto Registrado",
-    vozTexto: "Excelente noite e bom descanso, Arthur! Dever cumprido, até amanhã!",
+    vozTexto: "Excelente noite e excelente descanso, Arthur! Dever cumprido, até amanhã!",
     tipo: "ponto_batido",
     dadosPonto: {
       nome: "Arthur Gabriel",
@@ -82,6 +83,34 @@ const SLIDES: SlideItem[] = [
       hora: "18:01:10",
       data: "20/08/2026",
       mensagem: "Excelente noite, Arthur!",
+    },
+  },
+  {
+    id: "saida_sextou",
+    titulo: "Ponto Batido: Sextou! (Final de Semana)",
+    categoria: "Design Ponto Registrado",
+    vozTexto: "🎶 Sextoou com sucesso, Jé! Dever cumprido! Excelente final de semana pra você!",
+    tipo: "ponto_batido",
+    dadosPonto: {
+      nome: "Jéssica Ferreira",
+      tipo: "Saída",
+      hora: "18:00:00",
+      data: "22/08/2026",
+      mensagem: "Excelente final de semana, Jéssica!",
+    },
+  },
+  {
+    id: "checkin_humor",
+    titulo: "Check-in Ocasional de Humor & IA",
+    categoria: "Experiência Inteligente",
+    vozTexto: "Olá Jéssica! Como você está se sentindo hoje? Conte para sua assistente para receber uma mensagem especial!",
+    tipo: "checkin_humor",
+    dadosPonto: {
+      nome: "Jéssica Ferreira",
+      tipo: "Entrada",
+      hora: "08:00:00",
+      data: "22/08/2026",
+      mensagem: "Excelente dia, Jéssica!",
     },
   },
   {
@@ -334,6 +363,16 @@ export function ShowcaseCarrossel() {
             durationMs={15000}
             onVoltar={avancarSlide}
             modoDemonstracao={true}
+          />
+        )}
+
+        {current.tipo === "checkin_humor" && (
+          <ModalCheckinHumor
+            key={current.id}
+            nome={current.dadosPonto?.nome || "Jéssica Ferreira"}
+            onConfirmar={() => setSlideAtual((prev) => (prev + 1) % totalSlides)}
+            onFechar={() => setSlideAtual((prev) => (prev + 1) % totalSlides)}
+            duracaoSegundos={15}
           />
         )}
 

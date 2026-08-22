@@ -1,10 +1,43 @@
 "use client"
 
+import { useState, useEffect } from "react"
+
 // Cache em memoria de audio sintetizado por texto (0ms de latencia para frases repetidas)
 const cacheAudioBlobs = new Map<string, string>()
 
 // Instancia de Audio ativa para evitar sobreposicao de falas
 let audioAtual: HTMLAudioElement | null = null
+
+// Observadores de estado de voz para animacoes de IA
+type ListenerVoz = (falando: boolean) => void
+const ouvintesVoz = new Set<ListenerVoz>()
+let falandoAtual = false
+
+function notificarEstadoVoz(falando: boolean) {
+  falandoAtual = falando
+  ouvintesVoz.forEach((cb) => {
+    try {
+      cb(falando)
+    } catch {}
+  })
+}
+
+/**
+ * Hook React para componentes saberem em tempo real quando a IA esta falando
+ */
+export function useVozAtiva(): boolean {
+  const [estaFalando, setEstaFalando] = useState(falandoAtual)
+
+  useEffect(() => {
+    const handler = (f: boolean) => setEstaFalando(f)
+    ouvintesVoz.add(handler)
+    return () => {
+      ouvintesVoz.delete(handler)
+    }
+  }, [])
+
+  return estaFalando
+}
 
 /**
  * Fallback nativo: usa a API de fala do navegador caso o Google TTS esteja sem chave ou offline
@@ -19,6 +52,10 @@ function falarComNavegador(texto: string) {
     utterance.rate = 1.05 // Levemente mais agil e natural
     utterance.pitch = 1.0
 
+    utterance.onstart = () => notificarEstadoVoz(true)
+    utterance.onend = () => notificarEstadoVoz(false)
+    utterance.onerror = () => notificarEstadoVoz(false)
+
     // Tentar selecionar uma voz de qualidade em portugues se disponivel
     const vozes = window.speechSynthesis.getVoices()
     const vozPt =
@@ -31,8 +68,24 @@ function falarComNavegador(texto: string) {
 
     window.speechSynthesis.speak(utterance)
   } catch (err) {
+    notificarEstadoVoz(false)
     console.warn("Falha no fallback de voz do navegador:", err)
   }
+}
+
+function tocarElementoAudio(audio: HTMLAudioElement): Promise<void> {
+  audio.onplay = () => notificarEstadoVoz(true)
+  audio.onended = () => {
+    notificarEstadoVoz(false)
+    audioAtual = null
+  }
+  audio.onpause = () => notificarEstadoVoz(false)
+  audio.onerror = () => {
+    notificarEstadoVoz(false)
+    audioAtual = null
+  }
+  audioAtual = audio
+  return audio.play()
 }
 
 /**
@@ -53,14 +106,17 @@ export async function reproduzirVozSaudacao(texto?: string): Promise<void> {
     } catch {}
     audioAtual = null
   }
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel()
+  }
+  notificarEstadoVoz(false)
 
   // 1. Verificar se ja temos o audio em cache local
   const urlEmCache = cacheAudioBlobs.get(textoLimpo)
   if (urlEmCache) {
     try {
       const audio = new Audio(urlEmCache)
-      audioAtual = audio
-      await audio.play()
+      await tocarElementoAudio(audio)
       return
     } catch {
       // Se o play falhar por permissao de auto-play, tenta via navegador
@@ -88,8 +144,7 @@ export async function reproduzirVozSaudacao(texto?: string): Promise<void> {
       cacheAudioBlobs.set(textoLimpo, audioUrl)
 
       const audio = new Audio(audioUrl)
-      audioAtual = audio
-      await audio.play()
+      await tocarElementoAudio(audio)
       return
     }
 

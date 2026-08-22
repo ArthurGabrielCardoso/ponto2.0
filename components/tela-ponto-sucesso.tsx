@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
+import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 
 interface TelaPontoSucessoProps {
   nome: string
@@ -185,9 +186,12 @@ export function TelaPontoSucesso({
           }`}
         >
           <Image src="/logo.png" alt="Logo" width={150} height={75} priority style={{ height: "auto" }} />
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">
-            <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${cenario.statusDot}`} />
-            <span>Ponto Registrado</span>
+          <div className="flex items-center gap-4">
+            <AnimacaoVozIa variante="badge" />
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">
+              <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${cenario.statusDot}`} />
+              <span>Ponto Registrado</span>
+            </div>
           </div>
         </div>
 

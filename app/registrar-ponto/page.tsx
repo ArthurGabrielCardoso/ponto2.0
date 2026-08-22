@@ -20,8 +20,10 @@ import type { Funcionario } from "@/lib/types"
 import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/dialogo-ponto-inteligente"
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
+import { ModalCheckinHumor } from "@/components/modal-checkin-humor"
 import { OndaOrganicaDourada } from "@/components/onda-organica-dourada"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
+import { obterSaudacaoInteligente } from "@/lib/ia-saudacao"
 import { agendarLembretesAlmoco, cancelarLembretesAlmoco, sincronizarSessoesAlmocoDoDia, type InfoAlmocoAtivo } from "@/lib/lembretes-almoco"
 import "../ponto-registrado/ponto-batido.css"
 import {
@@ -353,6 +355,8 @@ export default function RegistrarPonto() {
   } | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const showSuccessRef = useRef(false)
+  const [mostrarCheckinHumor, setMostrarCheckinHumor] = useState(false)
+  const [humorSelecionado, setHumorSelecionado] = useState<string | null>(null)
   const lastFaceSeenRef = useRef<number>(0)
   const isRegisteringRef = useRef(false)
   const isProcessingRef = useRef(false)
@@ -584,31 +588,30 @@ export default function RegistrarPonto() {
       const res = await registrarPonto(person.id, person.nome, diag.proximoTipoSugerido, localizacao)
       const tipo = res.tipo || diag.proximoTipoSugerido
 
-      const getMensagemVisual = (t: string) => {
-        const tl = t.toLowerCase().trim()
-        if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
-        if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
-        if (tl.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
-        if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite, ${primeiroNome}!`
-        return `Excelente trabalho, ${primeiroNome}!`
-      }
-
-      const getMensagemVoz = (t: string) => {
-        const tl = t.toLowerCase().trim()
-        if (tl.includes("entrada")) return `Excelente dia, ${primeiroNome}! Tenha um ótimo e produtivo dia de trabalho!`
-        if (tl.includes("saída") && tl.includes("almoço")) return `Excelente almoço, ${primeiroNome}! Aproveite seu almoço e bom descanso!`
-        if (tl.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}! Bom trabalho nesta tarde!`
-        if (tl.includes("saída") || tl.includes("saida")) return `Excelente noite e bom descanso, ${primeiroNome}! Dever cumprido, até amanhã!`
-        return `Excelente trabalho, ${primeiroNome}!`
-      }
+      // Obter saudação super inteligente com IA do Groq + Fallback local com 120+ variações
+      const trabalhaSabado = !!funcObj.horarios?.sabado?.ativo
+      const saudacaoIa = await obterSaudacaoInteligente({
+        nome: person.nome,
+        tipoPonto: tipo,
+        dataHora: now,
+        trabalhaSabado,
+      })
 
       const mensagemVisual = res.emCooldown
         ? `Olá, ${primeiroNome}! Seu ponto (${tipo}) já foi registrado recentemente.`
-        : getMensagemVisual(tipo)
+        : saudacaoIa.visual
 
       const mensagemVoz = res.emCooldown
         ? `Olá, ${primeiroNome}! Seu ponto (${tipo}) já foi registrado recentemente.`
-        : getMensagemVoz(tipo)
+        : saudacaoIa.voz
+
+      // Ativar check-in de humor ocasional (ex: ~35% das vezes na entrada sem cooldown)
+      const ehEntrada = tipo.toLowerCase().includes("entrada")
+      if (ehEntrada && !res.emCooldown) {
+        setMostrarCheckinHumor(Math.random() < 0.35)
+      } else {
+        setMostrarCheckinHumor(false)
+      }
 
       const completed: RecognizedPerson = {
         ...person,
@@ -656,6 +659,28 @@ export default function RegistrarPonto() {
     }
   }
 
+  // Resposta carinhosa por voz quando o usuário seleciona seu humor
+  const handleSelecionarHumor = async (humorId: string, label: string) => {
+    setHumorSelecionado(humorId)
+    if (!recognizedPerson) return
+
+    try {
+      const funcionario = await buscarFuncionarioPorId(recognizedPerson.id).catch(() => null)
+      const trabalhaSabado = !!funcionario?.horarios?.sabado?.ativo
+      const respostaHumor = await obterSaudacaoInteligente({
+        nome: recognizedPerson.nome,
+        tipoPonto: "Entrada",
+        dataHora: new Date(),
+        trabalhaSabado,
+        humor: humorId,
+      })
+
+      if (respostaHumor?.voz) {
+        reproduzirVozSaudacao(respostaHumor.voz)
+      }
+    } catch {}
+  }
+
   // Confirmação do diálogo inteligente (insere múltiplos pontos ou ponto específico)
   const handleConfirmarDialogoInteligente = async (
     pontos: PontoRegularizacao[],
@@ -672,22 +697,31 @@ export default function RegistrarPonto() {
       const localizacao = await obterLocalizacaoAtual().catch(() => null)
       await registrarMultiplosPontos(person.id, person.nome, pontos, localizacao)
 
+      const funcionario = await buscarFuncionarioPorId(person.id).catch(() => null)
+      const funcObj: Funcionario = funcionario || { id: person.id, nome: person.nome, descritores: [] }
+      const trabalhaSabado = !!funcObj.horarios?.sabado?.ativo
+
+      const saudacaoIa = await obterSaudacaoInteligente({
+        nome: person.nome,
+        tipoPonto: tipoExibicao,
+        dataHora: now,
+        trabalhaSabado,
+      })
+
       const completed: RecognizedPerson = {
         ...person,
         registroCompleto: true,
         tipo: tipoExibicao,
         hora: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
         data: now.toLocaleDateString(),
-        mensagem: mensagemPersonalizada,
+        mensagem: saudacaoIa.visual || mensagemPersonalizada,
       }
 
       setRecognizedPerson(completed)
       setShowSuccess(true)
-      reproduzirVozSaudacao(completed.mensagem)
+      reproduzirVozSaudacao(saudacaoIa.voz || completed.mensagem)
 
       // Gerenciar lembretes automáticos de almoço por voz na regularização inteligente
-      const funcionario = await buscarFuncionarioPorId(person.id).catch(() => null)
-      const funcObj: Funcionario = funcionario || { id: person.id, nome: person.nome, descritores: [] }
       const tl = tipoExibicao.toLowerCase()
       if (tl.includes("saída") && tl.includes("almoço")) {
         agendarLembretesAlmoco(funcObj, now)
@@ -711,6 +745,8 @@ export default function RegistrarPonto() {
       setScreensaver(true)
       setRecognizedPerson(null)
       setDialogoInteligente(null)
+      setMostrarCheckinHumor(false)
+      setHumorSelecionado(null)
     }, 5 * 60 * 1000) // 5 minutos
   }
 
@@ -724,6 +760,8 @@ export default function RegistrarPonto() {
     setShowSuccess(false)
     setRecognizedPerson(null)
     setDialogoInteligente(null)
+    setMostrarCheckinHumor(false)
+    setHumorSelecionado(null)
     isProcessingRef.current = false
     setScreensaver(true)
   }
@@ -834,6 +872,16 @@ export default function RegistrarPonto() {
           mensagem={completedPerson.mensagem || ""}
           durationMs={30000}
           onVoltar={resetToInitialState}
+        />
+      )}
+
+      {/* Modal / Tela de Check-in de Humor no Padrão Ponto Batido (Ocasional) */}
+      {mostrarCheckinHumor && completedPerson && (
+        <ModalCheckinHumor
+          nome={completedPerson.nome}
+          onConfirmar={handleSelecionarHumor}
+          onFechar={() => setMostrarCheckinHumor(false)}
+          duracaoSegundos={12}
         />
       )}
 
