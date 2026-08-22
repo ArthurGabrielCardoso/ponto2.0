@@ -204,18 +204,13 @@ export function TelaPontoSucesso({
                 : "opacity-0 -translate-x-6 md:-translate-y-2 pointer-events-none"
             }`}
           >
-            {/* Saudação com Nome e Fala Falada pela IA */}
+            {/* Saudação com Nome */}
             <div className="space-y-2">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight drop-shadow-sm">
                 <span style={{ color: cenario.greetingColor }}>
                   {mensagem || `Excelente trabalho, ${nome.split(" ")[0]}!`}
                 </span>
               </h1>
-              {falaVoz && (
-                <p className="text-sm sm:text-base text-white/90 font-medium leading-relaxed drop-shadow-sm animate-in fade-in slide-in-from-top-1 duration-500">
-                  "{falaVoz}"
-                </p>
-              )}
             </div>
 
             {/* Card de Informações Retangular */}
