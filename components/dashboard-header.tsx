@@ -22,15 +22,15 @@ export function DashboardHeader({ onLogout }: DashboardHeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <header className="relative z-40 bg-slate-950/80 backdrop-blur-2xl border-b border-white/10 text-white">
+    <header className="relative z-40 bg-white border-b border-slate-200 text-slate-900 shadow-sm">
       <div className="container mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-16 sm:h-20">
-          {/* Logo Nobre */}
+        <div className="flex items-center justify-between h-16 sm:h-18">
+          {/* Logo e Badge */}
           <div className="flex items-center gap-3">
             <Link href="/dashboard" className="transition-opacity hover:opacity-90">
               <Image src="/logo.png" alt="Vitall Check-Up" width={130} height={65} priority style={{ height: "auto" }} />
             </Link>
-            <span className="hidden sm:inline-block text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-[#c69e6b]/20 text-amber-200 border border-[#c69e6b]/40">
+            <span className="hidden sm:inline-block text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-sm bg-amber-50 text-[#a67c4e] border border-amber-200">
               Ponto 2.0
             </span>
           </div>
@@ -39,51 +39,51 @@ export function DashboardHeader({ onLogout }: DashboardHeaderProps) {
           <nav className="hidden md:flex items-center gap-2">
             <Link
               href="/registrar-ponto"
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all active:scale-95 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition-all active:scale-95 shadow-sm"
             >
-              <Camera className="h-4 w-4" />
+              <Camera className="h-4 w-4 text-emerald-700" />
               <span>Abrir Câmera do Ponto</span>
             </Link>
 
             <Link
               href="/dashboard/showcase"
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-slate-950 text-xs font-extrabold transition-all active:scale-95 shadow-[0_0_15px_rgba(198,158,107,0.5)] hover:brightness-110"
-              style={{ background: "linear-gradient(135deg, #c69e6b 0%, #d4af37 100%)" }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md text-white text-xs font-bold transition-all active:scale-95 shadow-sm hover:brightness-105"
+              style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
             >
-              <Sparkles className="h-4 w-4 fill-slate-950" />
-              <span>Showcase IA & Telas</span>
+              <Sparkles className="h-4 w-4" />
+              <span>Showcase IA</span>
             </Link>
 
             <Link
               href="/dashboard"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/10 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold border border-slate-200 transition-colors"
             >
-              <BarChart3 className="h-4 w-4" />
+              <BarChart3 className="h-4 w-4 text-slate-600" />
               <span>Painel</span>
             </Link>
 
             <Link
               href="/relatorios"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/15 text-white/80 hover:text-white text-xs font-semibold border border-white/10 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-transparent hover:border-slate-200 transition-colors"
             >
-              <FileSpreadsheet className="h-4 w-4" />
+              <FileSpreadsheet className="h-4 w-4 text-slate-600" />
               <span>Relatórios</span>
             </Link>
 
             <Link
               href="/cadastrar"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/15 text-white/80 hover:text-white text-xs font-semibold border border-white/10 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-transparent hover:border-slate-200 transition-colors"
             >
-              <UserPlus className="h-4 w-4" />
+              <UserPlus className="h-4 w-4 text-slate-600" />
               <span>Cadastrar</span>
             </Link>
 
             <button
               type="button"
               onClick={onLogout}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-300 hover:text-red-200 text-xs font-semibold border border-red-500/30 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold border border-red-200 transition-all cursor-pointer"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-4 w-4 text-red-600" />
               <span>Sair</span>
             </button>
           </nav>
@@ -93,9 +93,9 @@ export function DashboardHeader({ onLogout }: DashboardHeaderProps) {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
+              className="p-2 rounded-md bg-slate-100 text-slate-800 hover:bg-slate-200 transition-colors"
             >
-              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
         </div>
@@ -103,39 +103,39 @@ export function DashboardHeader({ onLogout }: DashboardHeaderProps) {
 
       {/* Menu Mobile */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-slate-900/95 border-t border-white/10 p-4 space-y-2.5 animate-in slide-in-from-top duration-200">
+        <div className="md:hidden bg-white border-t border-slate-200 p-4 space-y-2 animate-in slide-in-from-top duration-200">
           <Link
             href="/registrar-ponto"
-            className="flex items-center gap-2 w-full p-3 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold text-xs"
+            className="flex items-center gap-2 w-full p-2.5 rounded-md bg-emerald-50 text-emerald-800 font-bold text-xs border border-emerald-200"
           >
-            <Camera className="h-4 w-4" />
+            <Camera className="h-4 w-4 text-emerald-700" />
             <span>Abrir Câmera de Ponto</span>
           </Link>
           <Link
             href="/dashboard/showcase"
-            className="flex items-center gap-2 w-full p-3 rounded-xl text-slate-950 font-bold text-xs"
-            style={{ background: "linear-gradient(135deg, #c69e6b 0%, #d4af37 100%)" }}
+            className="flex items-center gap-2 w-full p-2.5 rounded-md text-white font-bold text-xs"
+            style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
           >
-            <Sparkles className="h-4 w-4 fill-slate-950" />
+            <Sparkles className="h-4 w-4" />
             <span>Visualizar Showcase & Vozes</span>
           </Link>
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 w-full p-3 rounded-xl bg-white/10 text-white font-semibold text-xs"
+            className="flex items-center gap-2 w-full p-2.5 rounded-md bg-slate-100 text-slate-900 font-semibold text-xs"
           >
             <BarChart3 className="h-4 w-4" />
             <span>Painel</span>
           </Link>
           <Link
             href="/relatorios"
-            className="flex items-center gap-2 w-full p-3 rounded-xl bg-white/5 text-white/80 font-semibold text-xs"
+            className="flex items-center gap-2 w-full p-2.5 rounded-md text-slate-700 hover:bg-slate-50 font-semibold text-xs"
           >
             <FileSpreadsheet className="h-4 w-4" />
             <span>Relatórios</span>
           </Link>
           <Link
             href="/cadastrar"
-            className="flex items-center gap-2 w-full p-3 rounded-xl bg-white/5 text-white/80 font-semibold text-xs"
+            className="flex items-center gap-2 w-full p-2.5 rounded-md text-slate-700 hover:bg-slate-50 font-semibold text-xs"
           >
             <UserPlus className="h-4 w-4" />
             <span>Cadastrar Funcionário</span>
@@ -143,7 +143,7 @@ export function DashboardHeader({ onLogout }: DashboardHeaderProps) {
           <button
             type="button"
             onClick={onLogout}
-            className="flex items-center gap-2 w-full p-3 rounded-xl bg-red-500/20 text-red-300 font-semibold text-xs"
+            className="flex items-center gap-2 w-full p-2.5 rounded-md bg-red-50 text-red-700 font-semibold text-xs border border-red-200"
           >
             <LogOut className="h-4 w-4" />
             <span>Sair do Sistema</span>

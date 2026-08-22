@@ -10,12 +10,11 @@ import {
   Eye,
   EyeOff,
   ArrowLeft,
-  Sparkles,
   ShieldCheck,
   AlertCircle,
   Camera,
+  Sparkles,
 } from "lucide-react"
-import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 
 export default function Login() {
   const router = useRouter()
@@ -36,12 +35,12 @@ export default function Login() {
         document.cookie = "authenticated=true; path=/; max-age=86400" // 24 horas
         localStorage.setItem("authenticated", "true")
         router.push("/dashboard")
-      }, 700)
+      }, 600)
     } else {
       setTimeout(() => {
         setError("Usuário ou senha incorretos. Verifique suas credenciais.")
         setIsLoading(false)
-      }, 500)
+      }, 400)
     }
   }
 
@@ -53,65 +52,57 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#050811] text-white flex flex-col justify-between items-center p-4 sm:p-6 relative select-none overflow-hidden">
-      {/* 1. LUZES AMBIENTES DIFUSAS NO FUNDO */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[650px] h-[650px] rounded-full bg-[#c69e6b] blur-[180px] opacity-35 animate-pulse" />
-        <div className="absolute bottom-0 -left-20 w-[500px] h-[500px] rounded-full bg-[#14b8a6] blur-[160px] opacity-25" />
-        <div className="absolute -bottom-20 -right-20 w-[500px] h-[500px] rounded-full bg-[#3b82f6] blur-[160px] opacity-25" />
-      </div>
-
+    <div className="min-h-screen w-full bg-slate-100 text-slate-900 flex flex-col justify-between items-center p-4 sm:p-6 relative select-none">
       {/* TOPO: Botão de Voltar para a Câmera de Ponto */}
       <header className="relative z-10 w-full max-w-5xl flex items-center justify-between py-2">
         <Link
           href="/registrar-ponto"
-          className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold text-white transition-all active:scale-95 shadow-lg"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-md bg-white hover:bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-700 shadow-sm transition-all active:scale-95"
         >
-          <ArrowLeft className="w-4 h-4 text-amber-300" />
+          <ArrowLeft className="w-4 h-4 text-[#c69e6b]" />
           <span>Voltar para Registro de Ponto</span>
         </Link>
 
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-white/60">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span className="hidden sm:inline">Ambiente Seguro & Criptografado</span>
+        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+          <span className="hidden sm:inline">Ambiente Seguro & Autenticado</span>
         </div>
       </header>
 
-      {/* CENTRO: Card de Login em Dark Glassmorphism de Luxo */}
-      <main className="relative z-10 w-full max-w-md my-auto py-6 animate-in fade-in zoom-in-95 duration-500">
-        <div className="relative backdrop-blur-3xl bg-slate-950/70 border border-white/20 rounded-3xl p-7 sm:p-9 shadow-[0_25px_70px_rgba(0,0,0,0.8)] space-y-6">
-          {/* Logo e Cabeçalho do Card */}
+      {/* CENTRO: Card de Login em MODO LIGHT com Bordas Quadradas Modernas */}
+      <main className="relative z-10 w-full max-w-md my-auto py-6 animate-in fade-in duration-300">
+        <div className="bg-white border border-slate-200 rounded-lg p-7 sm:p-9 shadow-md space-y-6">
+          {/* Logo e Cabeçalho */}
           <div className="text-center space-y-3">
             <div className="flex justify-center">
               <Image
                 src="/logo.png"
                 alt="Vitall Check-Up"
-                width={150}
-                height={75}
+                width={160}
+                height={80}
                 priority
                 style={{ height: "auto" }}
-                className="filter drop-shadow-[0_4px_15px_rgba(0,0,0,0.5)]"
               />
             </div>
 
             <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#c69e6b]/20 border border-[#c69e6b]/40 text-amber-300 text-[10px] uppercase font-bold tracking-wider">
-                <Sparkles className="w-3 h-3 fill-amber-300" />
+              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-sm bg-amber-50 border border-amber-200 text-[#a67c4e] text-[11px] uppercase font-bold tracking-wider">
+                <Sparkles className="w-3 h-3 text-[#c69e6b]" />
                 <span>Painel de Gestão</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
                 Acesso Administrativo
               </h1>
-              <p className="text-xs text-white/70">
-                Entre com suas credenciais para gerenciar jornadas e relatórios
+              <p className="text-xs text-slate-500">
+                Entre com suas credenciais para gerenciar colaboradores e relatórios
               </p>
             </div>
           </div>
 
-          {/* Mensagem de Erro com Animação */}
+          {/* Mensagem de Erro */}
           {error && (
-            <div className="flex items-center gap-2.5 p-3.5 rounded-2xl bg-red-500/20 border border-red-500/40 text-red-200 text-xs animate-in fade-in shake duration-300">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+            <div className="flex items-center gap-2 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
               <span>{error}</span>
             </div>
           )}
@@ -120,11 +111,11 @@ export default function Login() {
           <form onSubmit={handleLogin} className="space-y-4">
             {/* Campo Usuário */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-white/80 uppercase tracking-wider text-[10px] flex items-center justify-between">
-                <span>Usuário</span>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
+                Usuário
               </label>
               <div className="relative flex items-center">
-                <User className="w-4 h-4 text-white/50 absolute left-3.5 pointer-events-none" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <input
                   id="username"
                   type="text"
@@ -133,18 +124,18 @@ export default function Login() {
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="admin"
                   autoComplete="username"
-                  className="w-full bg-white/[0.08] hover:bg-white/[0.12] focus:bg-slate-900 border border-white/20 focus:border-amber-400 rounded-2xl pl-10 pr-4 py-3 text-sm text-white font-medium placeholder-white/30 outline-none focus:ring-2 focus:ring-amber-400/40 transition-all"
+                  className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-[#c69e6b] rounded-md pl-9 pr-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-1 focus:ring-[#c69e6b] transition-all"
                 />
               </div>
             </div>
 
             {/* Campo Senha */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-white/80 uppercase tracking-wider text-[10px] flex items-center justify-between">
-                <span>Senha</span>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
+                Senha
               </label>
               <div className="relative flex items-center">
-                <Lock className="w-4 h-4 text-white/50 absolute left-3.5 pointer-events-none" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <input
                   id="password"
                   type={mostrarSenha ? "text" : "password"}
@@ -153,12 +144,12 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="w-full bg-white/[0.08] hover:bg-white/[0.12] focus:bg-slate-900 border border-white/20 focus:border-amber-400 rounded-2xl pl-10 pr-11 py-3 text-sm text-white font-medium placeholder-white/30 outline-none focus:ring-2 focus:ring-amber-400/40 transition-all"
+                  className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-[#c69e6b] rounded-md pl-9 pr-10 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-1 focus:ring-[#c69e6b] transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setMostrarSenha(!mostrarSenha)}
-                  className="absolute right-3.5 text-white/50 hover:text-white transition-colors cursor-pointer p-1"
+                  className="absolute right-3 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer p-1"
                   tabIndex={-1}
                 >
                   {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -166,55 +157,50 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Botão de Submissão Dourado de Luxo */}
+            {/* Botão de Submissão */}
             <div className="pt-2">
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-[#c69e6b] to-amber-500 hover:from-amber-400 hover:to-amber-600 text-slate-950 text-sm font-extrabold shadow-[0_0_25px_rgba(198,158,107,0.5)] transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-md bg-gradient-to-r from-[#c69e6b] to-[#b38850] hover:from-[#b38850] hover:to-[#9e7542] text-white text-sm font-bold shadow-sm transition-all active:scale-98 cursor-pointer disabled:opacity-50"
               >
                 {isLoading ? (
-                  <div className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <>
-                    <span>Entrar no Painel</span>
-                  </>
+                  <span>Entrar no Painel</span>
                 )}
               </button>
             </div>
           </form>
 
           {/* Dica de Acesso Rápido */}
-          <div className="pt-3 border-t border-white/10 text-center">
+          <div className="pt-3 border-t border-slate-200 text-center">
             <button
               type="button"
               onClick={preencherAdmin}
-              className="text-[11px] text-white/60 hover:text-amber-300 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              className="text-xs text-slate-500 hover:text-[#a67c4e] transition-colors cursor-pointer inline-flex items-center gap-1"
             >
-              <span>🔑 Preencher credenciais padrão</span>
-              <span className="font-mono font-bold text-amber-200">(admin / admin)</span>
+              <span>Preencher credenciais padrão</span>
+              <span className="font-mono font-bold text-slate-700">(admin / admin)</span>
             </button>
           </div>
         </div>
       </main>
 
       {/* RODAPÉ */}
-      <footer className="relative z-10 w-full max-w-5xl py-2 flex flex-col sm:flex-row items-center justify-between text-xs text-white/50 gap-2">
-        <span>© Vitall Check-Up • Ponto 2.0 com IA</span>
+      <footer className="relative z-10 w-full max-w-5xl py-2 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+        <span>© Vitall Check-Up • Ponto 2.0</span>
         <div className="flex items-center gap-4">
-          <Link href="/registrar-ponto" className="hover:text-white transition-colors flex items-center gap-1">
-            <Camera className="w-3.5 h-3.5 text-amber-300" />
+          <Link href="/registrar-ponto" className="hover:text-slate-800 transition-colors flex items-center gap-1">
+            <Camera className="w-3.5 h-3.5 text-[#c69e6b]" />
             Câmera do Ponto
           </Link>
-          <Link href="/dashboard/showcase" className="hover:text-white transition-colors flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+          <Link href="/dashboard/showcase" className="hover:text-slate-800 transition-colors flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-[#c69e6b]" />
             Showcase
           </Link>
         </div>
       </footer>
-
-      {/* ONDA LUMINOSA AZUL FLUIDA NA BORDA BOTTOM */}
-      <AnimacaoVozIa />
     </div>
   )
 }

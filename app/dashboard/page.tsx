@@ -9,7 +9,6 @@ import { CalendarioDetalhado } from "@/components/calendario-detalhado"
 import { CalendarioSemanal } from "@/components/calendario-semanal"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { ModalEditarHorarios } from "@/components/modal-editar-horarios"
-import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 import { buscarFuncionarios, buscarRegistrosPorPeriodo } from "@/lib/supabase"
 import type { Funcionario, RegistroPonto, ResumoHoras, HorariosSemana } from "@/lib/types"
 import {
@@ -20,7 +19,6 @@ import {
   Settings2,
   Sparkles,
   ChevronDown,
-  UserCheck,
   CheckCircle2,
   TrendingUp,
   AlertCircle,
@@ -35,7 +33,7 @@ export default function Dashboard() {
   const [registros, setRegistros] = useState<RegistroPonto[]>([])
   const [mesAtual] = useState(new Date())
   const [, setDiaSelecionado] = useState<ResumoHoras | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("calendario")
   const [semFuncionarios, setSemFuncionarios] = useState(false)
   const [modalHorariosAberto, setModalHorariosAberto] = useState(false)
@@ -140,20 +138,20 @@ export default function Dashboard() {
 
   if (semFuncionarios) {
     return (
-      <div className="flex min-h-screen flex-col bg-[#050811] text-white">
+      <div className="flex min-h-screen flex-col bg-slate-100 text-slate-900">
         <DashboardHeader onLogout={handleLogout} />
         <div className="container mx-auto p-6 flex-1 flex items-center justify-center">
-          <div className="max-w-md w-full bg-slate-900/80 border border-white/15 rounded-3xl p-8 text-center space-y-4 shadow-2xl backdrop-blur-xl">
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
-              <AlertCircle className="w-7 h-7" />
+          <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg p-8 text-center space-y-4 shadow-sm">
+            <div className="w-12 h-12 mx-auto rounded-md bg-amber-50 border border-amber-200 flex items-center justify-center text-[#c69e6b]">
+              <AlertCircle className="w-6 h-6" />
             </div>
-            <h2 className="text-xl font-bold text-white">Nenhum funcionário cadastrado</h2>
-            <p className="text-xs text-white/70">
+            <h2 className="text-xl font-bold text-slate-900">Nenhum funcionário cadastrado</h2>
+            <p className="text-xs text-slate-600">
               Cadastre seus colaboradores para gerenciar jornadas, bater ponto com IA e emitir relatórios.
             </p>
             <Link
               href="/cadastrar"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-[#c69e6b] to-amber-500 text-slate-950 font-bold text-xs shadow-lg hover:brightness-110 transition-all"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-gradient-to-r from-[#c69e6b] to-[#b38850] text-white font-bold text-xs shadow-sm hover:brightness-105 transition-all"
             >
               <UserPlus className="w-4 h-4" />
               Cadastrar Primeiro Funcionário
@@ -165,36 +163,28 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#050811] text-white select-none relative overflow-x-hidden">
-      {/* 1. LUZES AMBIENTES DIFUSAS NO FUNDO */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 right-10 w-[600px] h-[600px] rounded-full bg-[#c69e6b] blur-[170px] opacity-25" />
-        <div className="absolute top-1/2 -left-20 w-[500px] h-[500px] rounded-full bg-[#14b8a6] blur-[160px] opacity-20" />
-      </div>
-
-      {/* 2. HEADER NOBRE */}
+    <div className="flex min-h-screen flex-col bg-slate-100 text-slate-900 select-none">
+      {/* 1. HEADER MODO LIGHT */}
       <DashboardHeader onLogout={handleLogout} />
 
-      {/* 3. CONTEÚDO PRINCIPAL DO PAINEL */}
-      <main className="relative z-10 container mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 max-w-7xl flex-1">
+      {/* 2. CONTEÚDO PRINCIPAL DO PAINEL */}
+      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 max-w-7xl flex-1">
         {/* CARD PRINCIPAL DO COLABORADOR COM SELETOR E AJUSTE DE HORÁRIOS */}
-        <section className="backdrop-blur-2xl bg-slate-900/60 border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 border-b border-white/10 pb-5">
+        <section className="bg-white border border-slate-200 rounded-lg p-5 sm:p-6 shadow-sm space-y-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 pb-5">
             {/* Seletor do Colaborador */}
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#c69e6b] to-amber-600 p-[2px] shadow-[0_0_20px_rgba(198,158,107,0.4)] shrink-0">
-                <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-amber-200 font-bold text-xl">
-                  {funcionarioSelecionado?.nome?.charAt(0) || "U"}
-                </div>
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-md bg-[#c69e6b] flex items-center justify-center text-white font-bold text-lg shadow-sm shrink-0">
+                {funcionarioSelecionado?.nome?.charAt(0) || "U"}
               </div>
 
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-amber-400/15 text-amber-300 border border-amber-400/30">
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-sm bg-amber-50 text-[#a67c4e] border border-amber-200">
                     Colaborador Ativo
                   </span>
-                  <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-600" />
                     Ativo
                   </span>
                 </div>
@@ -203,30 +193,30 @@ export default function Dashboard() {
                   <select
                     value={funcionarioId}
                     onChange={(e) => handleChangeFuncionario(e.target.value)}
-                    className="appearance-none bg-white/10 hover:bg-white/15 border border-white/20 rounded-2xl px-4 py-2 pr-10 text-base sm:text-lg font-bold text-white outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer transition-all"
+                    className="appearance-none bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-md px-3.5 py-1.5 pr-8 text-base font-bold text-slate-900 outline-none focus:border-[#c69e6b] cursor-pointer transition-all"
                   >
                     {funcionarios.map((f) => (
-                      <option key={f.id} value={f.id} className="bg-slate-900 text-white font-medium">
+                      <option key={f.id} value={f.id} className="text-slate-900 font-medium">
                         {f.nome}
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-white/70 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
             </div>
 
             {/* Resumo da Jornada Atual e Botão de Ajustar Horários */}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               {/* Badge de Horários Vigentes */}
-              <div className="bg-white/5 border border-white/10 rounded-2xl px-4 py-2 text-xs space-y-0.5">
-                <div className="flex items-center gap-1.5 text-white/60 font-semibold text-[10px] uppercase tracking-wider">
-                  <Clock className="w-3.5 h-3.5 text-amber-300" />
+              <div className="bg-slate-50 border border-slate-200 rounded-md px-3.5 py-1.5 text-xs space-y-0.5">
+                <div className="flex items-center gap-1.5 text-slate-500 font-semibold text-[10px] uppercase tracking-wider">
+                  <Clock className="w-3.5 h-3.5 text-[#c69e6b]" />
                   <span>Jornada Cadastrada</span>
                 </div>
-                <div className="font-mono font-bold text-amber-200 text-xs">
+                <div className="font-mono font-bold text-slate-800 text-xs">
                   {horariosAtuais.entrada} – {horariosAtuais.saida}
-                  <span className="text-white/40 ml-1.5">
+                  <span className="text-slate-500 ml-1.5 font-normal">
                     ({trabalhaSabado ? "Sáb: Ativo" : "Sáb: Folga"})
                   </span>
                 </div>
@@ -236,91 +226,91 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={() => setModalHorariosAberto(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold transition-all shadow-lg active:scale-95 cursor-pointer hover:border-amber-400/50"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold transition-all shadow-sm active:scale-95 cursor-pointer hover:border-slate-400"
               >
-                <Settings2 className="w-4 h-4 text-amber-300" />
+                <Settings2 className="w-4 h-4 text-[#c69e6b]" />
                 <span>Mudar Horários da Jornada</span>
               </button>
 
               {/* Botão de Showcase */}
               <Link
                 href="/dashboard/showcase"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-slate-950 text-xs font-extrabold shadow-[0_0_15px_rgba(198,158,107,0.4)] transition-all active:scale-95 hover:brightness-110"
-                style={{ background: "linear-gradient(135deg, #c69e6b 0%, #d4af37 100%)" }}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-md text-white text-xs font-bold shadow-sm transition-all active:scale-95 hover:brightness-105"
+                style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
               >
-                <Sparkles className="w-4 h-4 fill-slate-950" />
+                <Sparkles className="w-4 h-4" />
                 <span>Showcase IA</span>
               </Link>
             </div>
           </div>
 
           {/* KPIS / RESUMO RÁPIDO DO MÊS */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-white/60 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-amber-300" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-[#c69e6b]" />
                 Dias Trabalhados
               </span>
-              <p className="text-xl sm:text-2xl font-bold font-mono text-white">
-                {diasComRegistro} <span className="text-xs text-white/50 font-normal">dias</span>
+              <p className="text-xl font-bold font-mono text-slate-900">
+                {diasComRegistro} <span className="text-xs text-slate-500 font-normal">dias</span>
               </p>
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-white/60 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+            <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                 Total de Batidas
               </span>
-              <p className="text-xl sm:text-2xl font-bold font-mono text-emerald-300">
-                {totalRegistrosMes} <span className="text-xs text-white/50 font-normal">registros</span>
+              <p className="text-xl font-bold font-mono text-emerald-700">
+                {totalRegistrosMes} <span className="text-xs text-slate-500 font-normal">registros</span>
               </p>
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-white/60 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-cyan-300" />
+            <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-cyan-600" />
                 Almoço Padrão
               </span>
-              <p className="text-base sm:text-lg font-bold font-mono text-cyan-200">
+              <p className="text-base font-bold font-mono text-cyan-800">
                 {horariosAtuais.saida_almoco} – {horariosAtuais.retorno_almoco}
               </p>
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-white/60 flex items-center gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5 text-purple-300" />
+            <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-purple-600" />
                 Saudação Inteligente
               </span>
-              <p className="text-xs sm:text-sm font-bold text-amber-200 truncate">
+              <p className="text-xs font-bold text-slate-800 truncate">
                 Groq IA Llama 3.3 70B
               </p>
             </div>
           </div>
         </section>
 
-        {/* 4. VISUALIZADORES DE PONTO (CALENDÁRIO & SEMANA) */}
-        <section className="backdrop-blur-2xl bg-slate-900/60 border border-white/15 rounded-3xl overflow-hidden shadow-2xl">
+        {/* 3. VISUALIZADORES DE PONTO (CALENDÁRIO & SEMANA) */}
+        <section className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col w-full">
             {/* Barra de Abas */}
-            <div className="border-b border-white/10 p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="border-b border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-amber-300" />
-                <h3 className="text-base font-bold text-white">Espelho de Ponto & Registros</h3>
+                <Users className="w-5 h-5 text-[#c69e6b]" />
+                <h3 className="text-base font-bold text-slate-900">Espelho de Ponto & Registros</h3>
               </div>
 
-              <TabsList className="grid grid-cols-2 w-full sm:w-72 bg-slate-950/80 border border-white/15 p-1 rounded-2xl">
+              <TabsList className="grid grid-cols-2 w-full sm:w-64 bg-slate-100 border border-slate-200 p-1 rounded-md">
                 <TabsTrigger
                   value="calendario"
-                  className="flex items-center gap-2 text-xs font-bold py-2 rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#c69e6b] data-[state=active]:to-amber-500 data-[state=active]:text-slate-950 text-white/70 transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 text-xs font-bold py-1.5 rounded-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm text-slate-600 transition-all cursor-pointer"
                 >
-                  <Calendar className="w-4 h-4" />
+                  <Calendar className="w-3.5 h-3.5" />
                   <span>Calendário</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="semana"
-                  className="flex items-center gap-2 text-xs font-bold py-2 rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#c69e6b] data-[state=active]:to-amber-500 data-[state=active]:text-slate-950 text-white/70 transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 text-xs font-bold py-1.5 rounded-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm text-slate-600 transition-all cursor-pointer"
                 >
-                  <CalendarCheck className="w-4 h-4" />
+                  <CalendarCheck className="w-3.5 h-3.5" />
                   <span>Visão Semanal</span>
                 </TabsTrigger>
               </TabsList>
@@ -350,16 +340,13 @@ export default function Dashboard() {
         </section>
       </main>
 
-      {/* 5. MODAL DE AJUSTE DE HORÁRIOS DA JORNADA */}
+      {/* 4. MODAL DE AJUSTE DE HORÁRIOS DA JORNADA */}
       <ModalEditarHorarios
         funcionario={funcionarioSelecionado}
         aberto={modalHorariosAberto}
         onFechar={() => setModalHorariosAberto(false)}
         onSalvo={handleHorariosSalvos}
       />
-
-      {/* 6. ONDA LUMINOSA AZUL FLUIDA NA BORDA BOTTOM ENQUANTO A VOZ FALA */}
-      <AnimacaoVozIa />
     </div>
   )
 }
