@@ -12,8 +12,12 @@ export interface ContextoSaudacao {
   climaFrase?: string
   /** Emoji do tempo de hoje, para a mensagem visual. Ex: "🌧️" */
   climaEmoji?: string
-  /** Ex: "Hoje é feriado municipal: Aniversário de Mogi das Cruzes" */
+  /** INSTRUÇÃO para a IA, nunca falada literalmente. Ex: "Amanhã é feriado (X). Deseje..." */
   feriadoResumo?: string
+  /** Frase pronta e natural, essa sim para o catálogo local falar. */
+  feriadoFrase?: string
+  /** Amanhã é feriado — o catálogo local não pode se despedir com "até amanhã". */
+  vesperaDeFeriado?: boolean
 }
 
 // Mapeamento e motor inteligente de apelidos carinhosos
@@ -33,7 +37,7 @@ const APELIDOS_CONHECIDOS: Record<string, string[]> = {
   daniela: ["Dani", "Daniela"],
   daniel: ["Dani", "Daniel"],
   juliana: ["Ju", "Juli", "Juliana"],
-  julliana: ["Ju", "Juli", "Julliana"],
+  julliana: ["Ju", "Julliana"],
   julio: ["Ju", "Julio"],
   juliano: ["Ju", "Juliano"],
   leonardo: ["Léo", "Leonardo"],
@@ -476,28 +480,48 @@ export function gerarSaudacaoLocal(ctx: ContextoSaudacao): { visual: string; voz
     }
   }
 
-  // Tempero do dia: no máximo UM assunto por saudação, e nem sempre. Juntar
-  // clima e feriado na mesma fala transforma a saudação em boletim, que é
-  // justamente o que a regra do prompt da IA proíbe.
-  const feriadoEhHoje = !!ctx.feriadoResumo && /^(Hoje|Amanhã)/.test(ctx.feriadoResumo)
-  let tempero: string | undefined
-
-  if (feriadoEhHoje) {
-    // Feriado hoje ou amanhã é notícia: sempre vale falar.
-    tempero = ctx.feriadoResumo
-  } else if (Math.random() > 0.5) {
-    // Fora isso, alterna entre o tempo e o próximo feriado, com moderação.
-    const candidatos = [ctx.climaFrase, ctx.feriadoResumo].filter(Boolean) as string[]
-    if (candidatos.length > 0) {
-      tempero = candidatos[Math.floor(Math.random() * candidatos.length)]
-    }
-  }
-
+  // Tempero do dia: no máximo UM assunto por saudação. Clima e feriado já
+  // chegam aqui filtrados — o clima só quando merece comentário, o feriado só
+  // na véspera e no retorno. Se veio, é porque vale falar.
+  // feriadoFrase, não feriadoResumo: o resumo é a instrução que vai para a IA e
+  // sairia falada ao pé da letra ("Deseje um excelente feriado ao se despedir").
+  const tempero = ctx.feriadoFrase || ctx.climaFrase
   if (tempero) {
     templateVoz = `${templateVoz} ${tempero}`
   }
-  if (ctx.climaEmoji && !textoVisual.includes(ctx.climaEmoji) && Math.random() > 0.5) {
-    textoVisual = `${textoVisual} ${ctx.climaEmoji}`
+
+  // A mensagem visual SEMPRE termina com emoji: são eles que sobem animados na
+  // tela quando a IA fala. Sem emoji na frase, não há nada para subir.
+  const EMOJIS_POR_TIPO: Record<string, string[]> = {
+    Entrada: ["☀️", "🚀", "💪", "✨", "🌤️", "😄", "⭐"],
+    "Saída Almoço": ["🍽️", "😋", "🥗", "☕", "🍴"],
+    "Retorno Almoço": ["💼", "⚡", "🔥", "💪", "🎯"],
+    Saída: ["🌙", "⭐", "👏", "🎉", "❤️", "✨"],
+  }
+  const paleta = EMOJIS_POR_TIPO[tipo] || ["✨", "💪", "🎉"]
+  const sorteados = new Set<string>()
+  sorteados.add(sortearItem(paleta))
+  if (Math.random() < 0.6) sorteados.add(sortearItem(paleta))
+  // O emoji do tempo só entra se o clima foi de fato o assunto da fala. Quando
+  // o feriado ganha a vez, uma nuvem solta na tela não quer dizer nada.
+  if (ctx.climaEmoji && tempero && tempero === ctx.climaFrase) {
+    sorteados.add(ctx.climaEmoji)
+  }
+
+  textoVisual = `${textoVisual} ${[...sorteados].join("")}`
+
+  // Véspera de feriado: "até amanhã" seguido de "amanhã é feriado" se contradiz.
+  if (ctx.vesperaDeFeriado) {
+    // Sem \b no fim: "ã" não é caractere de palavra em regex JS, então a borda
+    // nunca casaria e a despedida contraditória passava batido.
+    templateVoz = templateVoz
+      .replace(/[,\s]*\be\s+at[ée]\s+amanh[ãa]\s*[!.]?/gi, "!")
+      .replace(/\s*,?\s*at[ée]\s+amanh[ãa]\s*[!.]?/gi, "")
+      .replace(/\s+/g, " ")
+      .replace(/[\s,;]+$/, "")
+      .trim()
+    // Tirar a despedida pode deixar a frase sem pontuação no fim.
+    if (templateVoz && !/[!?.]$/.test(templateVoz)) templateVoz += "!"
   }
 
   const vozBruta = aplicarNomes(templateVoz, nome, apelido)

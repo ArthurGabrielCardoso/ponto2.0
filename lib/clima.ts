@@ -28,8 +28,14 @@ export interface InfoClima {
   chanceDeChuva: number
   /** Resumo com todos os números — vai no prompt da IA, que precisa deles para não inventar. */
   resumo: string
-  /** Uma frase curta e falável, para o catálogo local usar na voz sem virar boletim. */
-  frase: string
+  /**
+   * Frase curta e falável — só existe quando o tempo merece comentário.
+   * Dia ameno não vira assunto: ninguém quer ouvir "faz 22 graus" toda vez que
+   * bate o ponto.
+   */
+  frase: string | null
+  /** Se o tempo de hoje merece ser mencionado (chuva forte, frio ou calor forte). */
+  relevante: boolean
 }
 
 /**
@@ -112,20 +118,23 @@ async function buscarDaApi(): Promise<InfoClima | null> {
       `mínima de ${minima}°C e máxima de ${maxima}°C, ` +
       `${chanceDeChuva}% de chance de chuva`
 
-    // A voz precisa de uma frase, não de uma tabela. Um detalhe só, o mais
-    // útil do momento: chuva a caminho, frio, calor ou o tempo bonito.
-    let frase: string
-    if (chanceDeChuva >= 60) {
-      frase = `Hoje tem ${chanceDeChuva}% de chance de chuva, vale levar guarda-chuva.`
+    // A voz só comenta o tempo quando há o que comentar: chuva forte a caminho,
+    // frio de verdade ou calor forte. Dia ameno não rende frase — vira ruído
+    // repetido a cada batida.
+    const tempestade = [95, 96, 99, 82].includes(codigoDia)
+    let frase: string | null = null
+
+    if (chanceDeChuva >= 60 || tempestade) {
+      frase = tempestade
+        ? `Tem tempestade prevista para hoje, se puder já leve guarda-chuva.`
+        : `Hoje tem ${chanceDeChuva}% de chance de chuva, vale levar guarda-chuva.`
     } else if (minima <= 12) {
       frase = `A mínima hoje é de ${minima} graus, capriche no agasalho.`
     } else if (maxima >= 30) {
       frase = `A máxima hoje chega a ${maxima} graus, beba bastante água.`
-    } else if (codigoDia === 0 || codigoDia === 1) {
-      frase = `O dia está bonito lá fora, ${temperaturaAtual} graus agora.`
-    } else {
-      frase = `Faz ${temperaturaAtual} graus agora, com ${descricao}.`
     }
+
+    const relevante = frase !== null
 
     return {
       temperaturaAtual,
@@ -137,6 +146,7 @@ async function buscarDaApi(): Promise<InfoClima | null> {
       chanceDeChuva,
       resumo,
       frase,
+      relevante,
     }
   } catch (e) {
     console.warn("[clima] falha ao consultar Open-Meteo:", e)

@@ -175,7 +175,32 @@ function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
   )
 }
 
-function Screensaver({ onTap }: { onTap: () => void }) {
+function Screensaver({ onTap, onSegredo }: { onTap: () => void; onSegredo: () => void }) {
+  // Gesto escondido: 10 toques no canto inferior direito abrem o modo teste.
+  // Fica no canto e exige repetição justamente para ninguém cair nele sem querer.
+  const toquesRef = useRef(0)
+  const prazoRef = useRef<number | null>(null)
+  const [toquesVisiveis, setToquesVisiveis] = useState(0)
+
+  const tocarCanto = () => {
+    toquesRef.current += 1
+    setToquesVisiveis(toquesRef.current)
+
+    if (prazoRef.current) clearTimeout(prazoRef.current)
+    // A sequência precisa ser contínua: parou, zera.
+    prazoRef.current = window.setTimeout(() => {
+      toquesRef.current = 0
+      setToquesVisiveis(0)
+    }, 2500)
+
+    if (toquesRef.current >= 10) {
+      if (prazoRef.current) clearTimeout(prazoRef.current)
+      toquesRef.current = 0
+      setToquesVisiveis(0)
+      onSegredo()
+    }
+  }
+
   const [time, setTime] = useState("")
   const [periodo, setPeriodo] = useState("Excelente dia")
   const [nomes, setNomes] = useState<string[]>([])
@@ -285,6 +310,23 @@ function Screensaver({ onTap }: { onTap: () => void }) {
         </p>
       </div>
 
+      {/* Canto inferior direito: área invisível do gesto do modo teste.
+          stopPropagation é obrigatório — sem ele o toque também dispensaria a
+          proteção de tela e a contagem nunca chegaria a 10. */}
+      <div
+        className="absolute bottom-0 right-0 z-50 h-24 w-24 cursor-default"
+        onClick={(e) => {
+          e.stopPropagation()
+          tocarCanto()
+        }}
+      >
+        {toquesVisiveis >= 3 && (
+          <span className="absolute bottom-3 right-3 rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-semibold text-white/70">
+            {toquesVisiveis}/10
+          </span>
+        )}
+      </div>
+
       {/* Canto Inferior: Cards de Almoço Horizontais com Scroll */}
       {funcionariosEmAlmoco.length > 0 && (
         <div
@@ -367,8 +409,15 @@ interface TelaRegistrarPontoProps {
   modoTeste?: boolean
 }
 
-export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProps) {
+export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: TelaRegistrarPontoProps) {
   const router = useRouter()
+  // Ligado pelo gesto na proteção de tela. O ref existe porque o loop de
+  // reconhecimento é criado uma vez e enxergaria o valor da primeira render.
+  const [modoTeste, setModoTeste] = useState(modoTesteInicial)
+  const modoTesteRef = useRef(modoTesteInicial)
+  useEffect(() => {
+    modoTesteRef.current = modoTeste
+  }, [modoTeste])
   const videoRef = useRef<HTMLVideoElement>(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [screensaver, setScreensaver] = useState(true)
@@ -421,6 +470,7 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
   const [gravarNoBanco, setGravarNoBanco] = useState(false)
   const [forcarHumor, setForcarHumor] = useState(false)
   const [batidasTeste, setBatidasTeste] = useState(0)
+  const [barraAberta, setBarraAberta] = useState(true)
   const tipoTesteRef = useRef("auto")
   const gravarNoBancoRef = useRef(false)
   const forcarHumorRef = useRef(false)
@@ -595,7 +645,7 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
     // Assim que os registros chegam já dá para saber qual será a batida, e com
     // isso pedir a saudação da IA adiantado. Ela leva até 1,8s; pedir só depois
     // do sorriso jogaria essa espera inteira na cara da pessoa.
-    if (modoTeste) {
+    if (modoTesteRef.current) {
       // No teste o tipo não depende do banco: dá para pedir a saudação já.
       const func = funcionariosMapRef.current.get(funcionarioId)
       if (func) prefetchSaudacao(func, espiarTipoTeste())
@@ -859,7 +909,7 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
       let tipo: string
       let emCooldown = false
 
-      if (modoTeste) {
+      if (modoTesteRef.current) {
         // Modo teste: nenhuma das três travas do ponto real se aplica — nem o
         // cooldown de 60s, nem o teto de 4 batidas no dia, nem o diálogo de
         // regularização. O tipo vem do seletor da barra ou do ciclo
@@ -916,7 +966,7 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
 
       // Ativar check-in de humor ocasional (ex: ~35% das vezes na entrada sem cooldown)
       const ehEntrada = tipo.toLowerCase().includes("entrada")
-      if (modoTeste && forcarHumorRef.current) {
+      if (modoTesteRef.current && forcarHumorRef.current) {
         setMostrarCheckinHumor(true)
       } else if (ehEntrada && !emCooldown) {
         setMostrarCheckinHumor(Math.random() < CHANCE_CHECKIN_HUMOR)
@@ -945,7 +995,7 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
       // A localização sai do cache do rastreamento, sem esperar fix novo de GPS.
       // No modo teste a gravação é opcional e vem desligada: bater ponto de
       // mentira não pode sujar o registro real de ninguém.
-      const deveGravar = modoTeste ? gravarNoBancoRef.current : !emCooldown
+      const deveGravar = modoTesteRef.current ? gravarNoBancoRef.current : !emCooldown
       if (deveGravar) {
         // Com a gravação ligada no teste, os registros do dia vão vazios de
         // propósito: o registrarPonto deriva o cooldown de 60s justamente dessa
@@ -955,7 +1005,7 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
           person,
           tipo,
           obterLocalizacaoEmCache(),
-          modoTeste ? [] : registrosHoje
+          modoTesteRef.current ? [] : registrosHoje
         )
       }
 
@@ -1191,7 +1241,16 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
       )}
 
       {/* Proteção de tela */}
-      {screensaver && <Screensaver onTap={() => { screensaverRef.current = false; setScreensaver(false); resetInactivityTimer() }} />}
+      {screensaver && (
+        <Screensaver
+          onTap={() => {
+            screensaverRef.current = false
+            setScreensaver(false)
+            resetInactivityTimer()
+          }}
+          onSegredo={() => setModoTeste(true)}
+        />
+      )}
 
       {/* Tela de sucesso de Ponto Registrado — Zero Scroll, Animação do Centro para Direita & Dourado */}
       {showSuccess && recognizedPerson && (
@@ -1232,13 +1291,36 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
 
       {/* Barra de controle do modo teste — fica acima de tudo, inclusive da
           tela de sucesso, para dar para trocar o tipo entre uma batida e outra. */}
-      {modoTeste && (
+      {/* Recolhida: só um ponto discreto, para dar para ver a tela inteira sem
+          sair do modo teste. */}
+      {modoTeste && !barraAberta && (
+        <button
+          type="button"
+          onClick={() => setBarraAberta(true)}
+          aria-label="Abrir controles do modo teste"
+          className="fixed top-3 right-3 z-[60] flex h-7 w-7 items-center justify-center rounded-full border border-fuchsia-400/60 bg-slate-950/70 text-[11px] font-bold text-fuchsia-300 shadow-lg backdrop-blur-md"
+        >
+          T
+        </button>
+      )}
+
+      {modoTeste && barraAberta && (
         <div className="fixed top-3 right-3 z-[60] w-[248px] rounded-xl border border-fuchsia-400/50 bg-slate-950/85 p-3 text-white shadow-2xl backdrop-blur-xl">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <span className="rounded-md bg-fuchsia-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
               Modo teste
             </span>
-            <span className="text-[11px] text-white/60">{batidasTeste} batida(s)</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-white/60">{batidasTeste}</span>
+              <button
+                type="button"
+                onClick={() => setBarraAberta(false)}
+                aria-label="Recolher controles"
+                className="rounded-md border border-white/20 px-1.5 py-0.5 text-[11px] leading-none text-white/70 hover:bg-white/10"
+              >
+                –
+              </button>
+            </div>
           </div>
 
           <p className="mb-2 text-[11px] leading-snug text-white/70">
@@ -1294,6 +1376,21 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
               ? "Atenção: as batidas estão indo para o registro real."
               : "Nada é gravado. O ponto real não é afetado."}
           </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              setModoTeste(false)
+              setGravarNoBanco(false)
+              setForcarHumor(false)
+              setBatidasTeste(0)
+              cicloTesteRef.current = 0
+              setBarraAberta(true)
+            }}
+            className="mt-2 w-full rounded-md border border-white/20 px-2 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10"
+          >
+            Sair do modo teste
+          </button>
         </div>
       )}
 </div>

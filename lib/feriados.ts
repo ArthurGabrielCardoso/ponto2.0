@@ -26,8 +26,10 @@ export interface InfoFeriado {
 export interface ContextoFeriados {
   /** Feriado de hoje, se houver. */
   hoje: InfoFeriado | null
-  /** Feriado de amanhã — serve para a IA desejar uma boa véspera. */
+  /** Feriado de amanhã — serve para desejar bom feriado na última batida. */
   amanha: InfoFeriado | null
+  /** Feriado de ontem — serve para perguntar como foi, na primeira batida de volta. */
+  ontem: InfoFeriado | null
   /** Próximo feriado à frente e a distância em dias. */
   proximo: { feriado: InfoFeriado; emDias: number } | null
 }
@@ -137,15 +139,19 @@ function somarDias(d: Date, dias: number): Date {
 export function obterContextoFeriados(referencia: Date = new Date()): ContextoFeriados {
   const hojeStr = chaveData(referencia)
   const amanhaStr = chaveData(somarDias(referencia, 1))
+  const ontemStr = chaveData(somarDias(referencia, -1))
 
-  // Dois anos, para que em dezembro o "próximo feriado" ache o Ano Novo.
+  // Três anos: o anterior para o "ontem" de 1º de janeiro, e o seguinte para o
+  // "próximo feriado" achar o Ano Novo quando se está em dezembro.
   const lista = [
+    ...feriadosDoAno(referencia.getFullYear() - 1),
     ...feriadosDoAno(referencia.getFullYear()),
     ...feriadosDoAno(referencia.getFullYear() + 1),
   ]
 
   const hoje = lista.find((f) => f.data === hojeStr) || null
   const amanha = lista.find((f) => f.data === amanhaStr) || null
+  const ontem = lista.find((f) => f.data === ontemStr) || null
 
   // Só feriados de verdade contam como "próximo" — data comemorativa não
   // interessa para quem quer saber quando folga.
@@ -165,5 +171,5 @@ export function obterContextoFeriados(referencia: Date = new Date()): ContextoFe
     proximo = { feriado: alvo, emDias }
   }
 
-  return { hoje, amanha, proximo }
+  return { hoje, amanha, ontem, proximo }
 }

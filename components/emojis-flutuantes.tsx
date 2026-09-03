@@ -6,7 +6,7 @@ import { useVozAtiva } from "@/lib/tts-audio"
 interface EmojisFlutuantesProps {
   /** Mensagem visual da IA. Os emojis dela é que sobem na tela. */
   texto?: string
-  /** Quantas partículas subir. Padrão: 14. */
+  /** Quantas partículas subir. Padrão: 20. */
   quantidade?: number
   className?: string
 }
@@ -46,7 +46,7 @@ interface Particula {
  * Só aparece quando há voz tocando e quando a mensagem realmente traz emoji —
  * uma frase sem emoji não ganha enfeite genérico.
  */
-export function EmojisFlutuantes({ texto, quantidade = 14, className = "" }: EmojisFlutuantesProps) {
+export function EmojisFlutuantes({ texto, quantidade = 20, className = "" }: EmojisFlutuantesProps) {
   const estaFalando = useVozAtiva()
   const emojis = useMemo(() => extrairEmojis(texto), [texto])
 
@@ -62,9 +62,9 @@ export function EmojisFlutuantes({ texto, quantidade = 14, className = "" }: Emo
       id: i,
       emoji: emojis[i % emojis.length],
       esquerda: 4 + Math.random() * 92,
-      atraso: Math.random() * 2.4,
-      duracao: 3.6 + Math.random() * 2.4,
-      tamanho: 26 + Math.random() * 30,
+      atraso: Math.random() * 1.8,
+      duracao: 3.2 + Math.random() * 2.2,
+      tamanho: 32 + Math.random() * 34,
       deriva: (Math.random() - 0.5) * 90,
     }))
     // `rodada` entra de propósito: cada fala sorteia um layout novo.

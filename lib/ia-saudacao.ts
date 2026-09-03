@@ -11,27 +11,54 @@ export interface RespostaSaudacao {
 }
 
 /**
- * Transforma o contexto de feriados em uma frase que a IA (ou o catálogo local)
- * consegue usar sem inventar data.
+ * Feriado só vira assunto em dois momentos, e em nenhum outro:
+ *
+ *  - na ÚLTIMA batida do dia, quando amanhã é feriado — aí cabe desejar bom feriado;
+ *  - na PRIMEIRA batida depois do feriado — aí cabe perguntar como foi.
+ *
+ * Fora disso a IA fica quieta. Anunciar "o próximo feriado é em 4 dias" em toda
+ * batida cansa em dois dias de uso.
+ *
+ * Devolve duas coisas diferentes de propósito: `instrucao` é o que vai no prompt
+ * da IA, e `frase` é o que o catálogo local fala. Misturar as duas faz o sistema
+ * dizer em voz alta "Deseje um excelente feriado ao se despedir".
  */
-function resumirFeriados(f: ContextoFeriados | null): string | undefined {
-  if (!f) return undefined
+export function resumirFeriados(
+  f: ContextoFeriados | null,
+  tipoPonto: string
+): { instrucao?: string; frase?: string; vespera?: boolean } {
+  if (!f) return {}
 
-  if (f.hoje && f.hoje.classe === "feriado") {
-    return `Hoje é feriado ${f.hoje.escopo}: ${f.hoje.nome}.`
+  const tipo = (tipoPonto || "").toLowerCase()
+  const ehUltimaBatida = tipo.includes("saída") && !tipo.includes("almoço")
+  const ehPrimeiraBatida = tipo.includes("entrada")
+
+  if (ehUltimaBatida && f.amanha && f.amanha.classe === "feriado") {
+    const frases = [
+      `Amanhã é ${f.amanha.nome}, então excelente feriado para você!`,
+      `E amanhã é feriado de ${f.amanha.nome}. Aproveite muito!`,
+      `Amanhã tem feriado, ${f.amanha.nome}. Excelente descanso!`,
+    ]
+    return {
+      instrucao: `Amanhã é feriado (${f.amanha.nome}). Deseje um excelente feriado ao se despedir, em poucas palavras.`,
+      frase: frases[Math.floor(Math.random() * frases.length)],
+      vespera: true,
+    }
   }
-  if (f.hoje) {
-    return `Hoje é ${f.hoje.nome}.`
+
+  if (ehPrimeiraBatida && f.ontem && f.ontem.classe === "feriado") {
+    const frases = [
+      `E aí, como foi o feriado?`,
+      `Espero que o feriado de ontem tenha sido excelente!`,
+      `Como foi o feriado de ontem? Bora retomar com tudo!`,
+    ]
+    return {
+      instrucao: `Ontem foi feriado (${f.ontem.nome}). Pergunte de forma leve e rápida como foi o feriado.`,
+      frase: frases[Math.floor(Math.random() * frases.length)],
+    }
   }
-  if (f.amanha && f.amanha.classe === "feriado") {
-    return `Amanhã é feriado ${f.amanha.escopo}: ${f.amanha.nome}.`
-  }
-  if (f.proximo && f.proximo.emDias <= 10) {
-    const dias = f.proximo.emDias
-    const quando = dias === 1 ? "amanhã" : `em ${dias} dias`
-    return `O próximo feriado é ${f.proximo.feriado.nome}, ${quando}.`
-  }
-  return undefined
+
+  return {}
 }
 
 /**
@@ -43,12 +70,20 @@ function enriquecerComContextoDoDia(ctx: ContextoSaudacao): ContextoSaudacao {
   const dia = obterContextoDiaEmCache()
   if (!dia) return ctx
 
+  // O tempo só entra quando merece comentário (chuva forte, frio ou calor), e
+  // mesmo assim não em toda batida: variar é o que impede a fala de virar
+  // jingle repetido.
+  const climaVale = !!dia.clima?.relevante && Math.random() < 0.5
+  const feriado = resumirFeriados(dia.feriados, ctx.tipoPonto)
+
   return {
     ...ctx,
-    climaResumo: dia.clima?.resumo,
-    climaFrase: dia.clima?.frase,
-    climaEmoji: dia.clima?.emoji,
-    feriadoResumo: resumirFeriados(dia.feriados),
+    climaResumo: climaVale ? dia.clima?.resumo : undefined,
+    climaFrase: climaVale ? dia.clima?.frase ?? undefined : undefined,
+    climaEmoji: climaVale ? dia.clima?.emoji : undefined,
+    feriadoResumo: feriado.instrucao,
+    feriadoFrase: feriado.frase,
+    vesperaDeFeriado: feriado.vespera,
   }
 }
 
@@ -94,6 +129,8 @@ export async function obterSaudacaoInteligente(
         climaFrase: ctx.climaFrase,
         climaEmoji: ctx.climaEmoji,
         feriadoResumo: ctx.feriadoResumo,
+        feriadoFrase: ctx.feriadoFrase,
+        vesperaDeFeriado: ctx.vesperaDeFeriado,
       }),
       signal: controller.signal,
     })
