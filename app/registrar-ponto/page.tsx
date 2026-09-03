@@ -1,6 +1,10 @@
 "use client"
 
-import { obterLocalizacaoAtual } from "@/lib/geolocation"
+import {
+  iniciarRastreamentoLocalizacao,
+  pararRastreamentoLocalizacao,
+  obterLocalizacaoEmCache,
+} from "@/lib/geolocation"
 
 /**
  * Página de Registro de Ponto - RECONHECIMENTO LOCAL
@@ -16,7 +20,8 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { DotLottieReact } from "@lottiefiles/dotlottie-react"
 import { registrarPonto, buscarRegistrosHoje, buscarFuncionarioPorId, registrarMultiplosPontos, buscarFuncionarios } from "@/lib/supabase"
-import type { Funcionario } from "@/lib/types"
+import type { Funcionario, RegistroPonto } from "@/lib/types"
+import type { CoordenadasLocalizacao } from "@/lib/geolocation"
 import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/dialogo-ponto-inteligente"
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
@@ -29,6 +34,7 @@ import "../ponto-registrado/ponto-batido.css"
 import {
   initModels,
   loadDescriptors,
+  getFuncionariosCarregados,
   recognizeFace,
   detectSmileOnly,
 } from "@/lib/face-recognition-client"
@@ -364,7 +370,26 @@ export default function RegistrarPonto() {
   const pendingTipoRef = useRef<string | null>(null)
   const pendingTipoPromiseRef = useRef<Promise<string> | null>(null)
 
+  // Grade de horários de cada funcionário, já em memória desde o boot: evita ir ao
+  // banco buscar o funcionário na hora de bater o ponto.
+  const funcionariosMapRef = useRef<Map<string, Funcionario>>(new Map())
+  // Registros do dia buscados assim que a pessoa é identificada — enquanto ela lê
+  // "Sorria para registrar", a consulta já está a caminho.
+  const prefetchRegistrosRef = useRef<{
+    id: string
+    ts: number
+    promise: Promise<RegistroPonto[]>
+  } | null>(null)
+  const ultimaVerificacaoIdentidadeRef = useRef(0)
+
   const SMILE_FRAMES_REQUIRED = 1 // 1 frame sorrindo já registra instantaneamente
+  const SMILE_THRESHOLD = 0.40
+  // De quanto em quanto tempo a identidade é reconferida com o passe completo.
+  // É esta janela que pega a troca de pessoa na frente da câmera.
+  const RE_VERIFICACAO_IDENTIDADE_MS = 800
+  // Confirmação visual da moldura esmeralda antes de trocar de tela.
+  const PULSO_CONFIRMACAO_MS = 220
+  const COOLDOWN_MS = 60 * 1000
 
   // Prefetch da página de sucesso
   useEffect(() => {
@@ -388,6 +413,11 @@ export default function RegistrarPonto() {
     let mounted = true
 
     const setup = async () => {
+      // 0. Rastreamento de localização em segundo plano.
+      // Assim o fix de GPS já está em memória quando alguém bater o ponto, em vez
+      // de ser pedido na hora (era o que travava a tela por vários segundos).
+      iniciarRastreamentoLocalizacao()
+
       // 1. Iniciar câmera
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -414,6 +444,11 @@ export default function RegistrarPonto() {
         const count = await loadDescriptors()
 
         if (mounted) {
+          // Mesma lista que alimentou os descritores — traz a grade de horários de
+          // cada um, que é tudo que o diagnóstico do ponto precisa.
+          funcionariosMapRef.current = new Map(
+            getFuncionariosCarregados().map((f) => [f.id, f])
+          )
           setModelsReady(true)
           setLoadingStatus(`Pronto! ${count} funcionário(s) carregado(s)`)
           console.log(`🎥 Sistema de reconhecimento local pronto (${count} funcionários)!`)
@@ -430,6 +465,9 @@ export default function RegistrarPonto() {
               try {
                 const c = await loadDescriptors()
                 if (c > 0) {
+                  funcionariosMapRef.current = new Map(
+                    getFuncionariosCarregados().map((f) => [f.id, f])
+                  )
                   console.log(`✅ ${c} funcionário(s) carregado(s) com sucesso pelo retry automático!`)
                   clearInterval(retryId)
                 }
@@ -447,6 +485,7 @@ export default function RegistrarPonto() {
 
     return () => {
       mounted = false
+      pararRastreamentoLocalizacao()
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream
         stream.getTracks().forEach((t) => t.stop())
@@ -462,6 +501,19 @@ export default function RegistrarPonto() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelsReady, cameraActive])
+
+  // Dispara a busca dos registros do dia assim que a pessoa é identificada.
+  // A batida acontece 1-2s depois (o tempo de ela sorrir), então a consulta chega
+  // pronta e some do caminho crítico.
+  const prefetchRegistrosDoDia = (funcionarioId: string) => {
+    const atual = prefetchRegistrosRef.current
+    if (atual && atual.id === funcionarioId && Date.now() - atual.ts < 20000) return
+    prefetchRegistrosRef.current = {
+      id: funcionarioId,
+      ts: Date.now(),
+      promise: buscarRegistrosHoje(funcionarioId).catch(() => [] as RegistroPonto[]),
+    }
+  }
 
   // Loop de reconhecimento — back-to-back sem throttle, serializado pelo isProcessingRef.
   // Screensaver suspende o loop; só volta a rodar após clique na película.
@@ -490,8 +542,52 @@ export default function RegistrarPonto() {
 
         isProcessingRef.current = true
         try {
-          // Reconhecimento contínuo e detecção de sorriso em 1 único passe no Web Worker
-          const result = await recognizeFace(video, 0.40)
+          // === Duas velocidades ===
+          // O passe completo (detector + landmarks + descritor 128D + expressões)
+          // é caro: a rede de descritor sozinha domina o custo do frame. Rodá-lo em
+          // TODO frame, como estava, fazia a espera pelo sorriso ficar lenta no
+          // tablet — o sorriso só era amostrado a cada passe completo.
+          //
+          // Agora, quem já está identificado é acompanhado por um passe barato
+          // (detector + expressões). O passe completo volta a rodar só quando:
+          //   - ninguém está identificado ainda;
+          //   - passaram RE_VERIFICACAO_IDENTIDADE_MS desde a última conferência
+          //     (é isto que pega a troca de pessoa na frente da câmera);
+          //   - alguém sorriu — a identidade é confirmada antes de gravar o ponto.
+          const identidadeVencida =
+            Date.now() - ultimaVerificacaoIdentidadeRef.current > RE_VERIFICACAO_IDENTIDADE_MS
+
+          if (current && !identidadeVencida) {
+            const smile = await detectSmileOnly(video, SMILE_THRESHOLD)
+
+            if (!smile) {
+              // O passe barato detecta em resolução menor que o completo, então ele
+              // erra o rosto com mais facilidade. Quem limpa a identificação é
+              // sempre o passe completo — aqui só forçamos que ele rode já no
+              // próximo frame, para não piscar o nome de quem continua na frente.
+              ultimaVerificacaoIdentidadeRef.current = 0
+              return
+            }
+
+            lastFaceSeenRef.current = Date.now()
+
+            if (!smile.isSmiling) {
+              if (current.isSmiling) {
+                setRecognizedPerson({ ...current, isSmiling: false, smileFrames: 0 })
+              }
+              return
+            }
+
+            // Sorriu: acende a moldura esmeralda na hora e confirma a identidade no
+            // passe completo abaixo antes de gravar qualquer coisa.
+            if (!current.isSmiling) {
+              setRecognizedPerson({ ...current, isSmiling: true, smileFrames: 1 })
+            }
+          }
+
+          // Reconhecimento completo: identificação + sorriso em 1 passe no Web Worker
+          const result = await recognizeFace(video, SMILE_THRESHOLD)
+          ultimaVerificacaoIdentidadeRef.current = Date.now()
           if (result) {
             // Se o rosto detectado for desconhecido / não cadastrado (ex: Dra. Ana):
             if (result.isUnknown || result.id === "unknown") {
@@ -529,6 +625,9 @@ export default function RegistrarPonto() {
               setRecognizedPerson(updated)
             }
 
+            // Adianta a consulta dos registros do dia enquanto a pessoa sorri.
+            prefetchRegistrosDoDia(result.id)
+
             // Registra ponto instantaneamente no 1º frame com sorriso da pessoa identificada
             if (isSmiling && smileFrames >= SMILE_FRAMES_REQUIRED) {
               await handleRegistro(updated)
@@ -551,6 +650,63 @@ export default function RegistrarPonto() {
     rafRef.current = requestAnimationFrame(loop)
   }
 
+  // Grava o ponto no Supabase depois que a tela de sucesso já está na frente da
+  // pessoa. Se falhar de vez, a tela vira aviso: ninguém pode sair achando que
+  // bateu o ponto quando o registro não foi salvo.
+  const gravarPontoEmSegundoPlano = async (
+    person: RecognizedPerson,
+    tipo: string,
+    localizacao: CoordenadasLocalizacao | null,
+    registrosHoje: RegistroPonto[]
+  ) => {
+    // Cada tentativa tem prazo próprio: a rede pode pendurar a promise para sempre,
+    // e o aviso de falha precisa caber na janela em que a tela de sucesso ainda
+    // está no ar (15s), senão ninguém vê.
+    const comPrazo = <T,>(promessa: Promise<T>, ms: number) =>
+      Promise.race([
+        promessa,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Tempo esgotado ao salvar o ponto")), ms)
+        ),
+      ])
+
+    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+      try {
+        await comPrazo(
+          registrarPonto(person.id, person.nome, tipo, localizacao, registrosHoje),
+          5000
+        )
+        prefetchRegistrosRef.current = null // os registros do dia mudaram
+        return
+      } catch (erro) {
+        console.error(`Erro ao gravar ponto (tentativa ${tentativa}/2):`, erro)
+        if (tentativa === 1) await new Promise((r) => setTimeout(r, 800))
+      }
+    }
+
+    prefetchRegistrosRef.current = null
+    console.error(`❌ PONTO NÃO SALVO: ${person.nome} (${tipo})`)
+
+    // Se a tela já passou para outra pessoa, trocar o conteúdo agora só confundiria
+    // quem está na frente do tablet.
+    if (!showSuccessRef.current || recognizedPersonRef.current?.id !== person.id) return
+
+    const agora = new Date()
+    if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current)
+    setRecognizedPerson({
+      ...person,
+      registroCompleto: true,
+      tipo: "Aviso",
+      hora: agora.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      data: agora.toLocaleDateString(),
+      mensagem: "Não foi possível salvar seu ponto. Tente novamente.",
+    })
+    setShowSuccess(true)
+    successTimeoutRef.current = window.setTimeout(() => {
+      resetToInitialState()
+    }, 8000)
+  }
+
   // Registrar ponto — transição INSTANTÂNEA
   // Mostra tela de sucesso imediatamente com tipo pré-carregado, insert roda em background
   const handleRegistro = async (person: RecognizedPerson) => {
@@ -563,17 +719,23 @@ export default function RegistrarPonto() {
     const primeiroNome = person.nome.split(" ")[0]
 
     try {
-      // Buscar funcionário para obter a grade de horários e os registros do dia
-      const [funcionario, registrosHoje] = await Promise.all([
-        buscarFuncionarioPorId(person.id).catch(() => null),
-        buscarRegistrosHoje(person.id).catch(() => []),
-      ])
+      // Funcionário: já está em memória desde o boot — a grade de horários é tudo
+      // que o diagnóstico usa. Só vai ao banco se for alguém cadastrado depois.
+      const funcObj: Funcionario =
+        funcionariosMapRef.current.get(person.id) ||
+        (await buscarFuncionarioPorId(person.id).catch(() => null)) || {
+          id: person.id,
+          nome: person.nome,
+          descritores: [],
+        }
 
-      const funcObj: Funcionario = funcionario || {
-        id: person.id,
-        nome: person.nome,
-        descritores: [],
-      }
+      // Registros do dia: normalmente já resolvidos pelo prefetch disparado na
+      // identificação, então este await volta na hora.
+      const prefetch = prefetchRegistrosRef.current
+      const registrosHoje =
+        prefetch && prefetch.id === person.id
+          ? await prefetch.promise
+          : await buscarRegistrosHoje(person.id).catch(() => [] as RegistroPonto[])
 
       // Analisar situação inteligente com base na grade
       const diag = analisarSituacaoPonto(funcObj, registrosHoje, now)
@@ -584,10 +746,21 @@ export default function RegistrarPonto() {
         return
       }
 
-      // Fluxo Direto Normal
-      const localizacao = await obterLocalizacaoAtual().catch(() => null)
-      const res = await registrarPonto(person.id, person.nome, diag.proximoTipoSugerido, localizacao)
-      const tipo = res.tipo || diag.proximoTipoSugerido
+      // === Fluxo Direto ===
+      // Tudo que define a tela de sucesso é resolvido aqui, em memória: o tipo vem
+      // do diagnóstico e o cooldown de 60s sai do último registro do dia — as
+      // mesmas duas regras que o registrarPonto aplica. Assim a tela entra na hora
+      // e a gravação no Supabase corre em segundo plano, em vez de a pessoa ficar
+      // olhando a moldura esmeralda esperando a rede.
+      const ultimoRegistro =
+        registrosHoje.length > 0 ? registrosHoje[registrosHoje.length - 1] : null
+      const msDesdeUltimo = ultimoRegistro
+        ? Math.abs(now.getTime() - new Date(ultimoRegistro.data_hora).getTime())
+        : Number.POSITIVE_INFINITY
+      const emCooldown = msDesdeUltimo < COOLDOWN_MS
+      const tipo = emCooldown
+        ? ultimoRegistro?.tipo || "Entrada"
+        : diag.proximoTipoSugerido
 
       // Obter saudação super inteligente com IA do Groq + Fallback local com 120+ variações
       const trabalhaSabado = !!funcObj.horarios?.sabado?.ativo
@@ -598,11 +771,11 @@ export default function RegistrarPonto() {
         trabalhaSabado,
       })
 
-      const mensagemVisual = res.emCooldown
+      const mensagemVisual = emCooldown
         ? `Olá, ${primeiroNome}! Seu ponto (${tipo}) já foi registrado recentemente.`
         : saudacaoIa.visual
 
-      const mensagemVoz = res.emCooldown
+      const mensagemVoz = emCooldown
         ? `Olá, ${primeiroNome}! Seu ponto (${tipo}) já foi registrado recentemente.`
         : saudacaoIa.voz
 
@@ -624,12 +797,18 @@ export default function RegistrarPonto() {
         falaVoz: mensagemVoz,
       }
 
-      // Manter a moldura esmeralda pulsante por 750ms para confirmação visual satisfatória antes da transição
-      await new Promise((r) => setTimeout(r, 750))
+      // Confirmação visual curta da moldura esmeralda antes da transição
+      await new Promise((r) => setTimeout(r, PULSO_CONFIRMACAO_MS))
 
       setRecognizedPerson(completed)
       setShowSuccess(true)
       reproduzirVozSaudacao(mensagemVoz)
+
+      // A tela já está na frente da pessoa — grava no Supabase em segundo plano.
+      // A localização sai do cache do rastreamento, sem esperar fix novo de GPS.
+      if (!emCooldown) {
+        gravarPontoEmSegundoPlano(person, tipo, obterLocalizacaoEmCache(), registrosHoje)
+      }
 
       // Gerenciar lembretes automáticos de almoço por voz
       const tl = tipo.toLowerCase()
@@ -696,8 +875,7 @@ export default function RegistrarPonto() {
     const now = new Date()
 
     try {
-      const localizacao = await obterLocalizacaoAtual().catch(() => null)
-      await registrarMultiplosPontos(person.id, person.nome, pontos, localizacao)
+      await registrarMultiplosPontos(person.id, person.nome, pontos, obterLocalizacaoEmCache())
 
       const funcionario = await buscarFuncionarioPorId(person.id).catch(() => null)
       const funcObj: Funcionario = funcionario || { id: person.id, nome: person.nome, descritores: [] }
@@ -819,8 +997,8 @@ export default function RegistrarPonto() {
         <ViewfinderBorder />
       )}
 
-      {/* Status em Glassmorphism Dourado - Pessoa reconhecida (Oculta ao sorrir) */}
-      {recognizedPerson && !recognizedPerson.isSmiling && !recognizedPerson.registroCompleto && !showSuccess && (
+      {/* Status em Glassmorphism Dourado - Pessoa reconhecida (segue visível ao sorrir) */}
+      {recognizedPerson && !recognizedPerson.registroCompleto && !showSuccess && (
         <div className="absolute bottom-0 left-0 right-0 z-30 w-full pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div
             className="py-5 px-6 border-t backdrop-blur-2xl text-center space-y-1 text-white"
@@ -836,7 +1014,7 @@ export default function RegistrarPonto() {
               {recognizedPerson.nome}
             </div>
             <div className="text-sm sm:text-base font-medium text-amber-100/95 tracking-wide drop-shadow-sm">
-              Sorria para registrar seu ponto
+              {recognizedPerson.isSmiling ? "Registrando seu ponto..." : "Sorria para registrar seu ponto"}
             </div>
           </div>
         </div>

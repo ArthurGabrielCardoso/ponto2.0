@@ -85,6 +85,15 @@ const TINY_SCORE_THRESHOLD = 0.5
 const WORK_WIDTH = 192
 const WORK_HEIGHT = 144
 
+// O passe de identificação roda pouco (só para identificar alguém novo, reconferir
+// a identidade e confirmar quem sorriu), então pode gastar mais resolução — e
+// precisa: o recorte do rosto vai para a rede de descritor 128D, e frame pequeno
+// demais gera descritor pobre, longe do que foi gravado no cadastro. Era isso que
+// fazia o rosto às vezes não bater mesmo com a pessoa parada na frente da câmera.
+const RECOG_WIDTH = 256
+const RECOG_HEIGHT = 192
+const RECOG_INPUT_SIZE = 128
+
 // Cadastro roda uma vez por foto, não a 10fps: vale gastar resolução.
 // 192x144 (o tamanho de reconhecimento) produz descritor ruim, e um descritor
 // ruim gravado no banco estraga o reconhecimento daquele funcionário para sempre.
@@ -100,21 +109,29 @@ let modelsLoaded = false
 let faceMatcher: any = null
 const employeeMap = new Map<string, string>() // id -> nome
 
-function tinyOpts() {
+function tinyOpts(inputSize: number = TINY_INPUT_SIZE) {
   return new faceapi!.TinyFaceDetectorOptions({
-    inputSize: TINY_INPUT_SIZE,
+    inputSize,
     scoreThreshold: TINY_SCORE_THRESHOLD,
   })
 }
 
 /**
- * Desenha um ImageBitmap num OffscreenCanvas 320x240 pra reduzir custo de inferência.
- * Libera o bitmap original após o draw.
+ * Desenha um ImageBitmap num OffscreenCanvas de tamanho fixo pra reduzir o custo
+ * de inferência. Libera o bitmap original após o draw.
+ *
+ * O tamanho é fixo de propósito: cada shape novo de tensor faz o TFJS compilar um
+ * shader novo, e as GPUs integradas dos tablets não gostam disso. Aqui só existem
+ * dois shapes, ambos aquecidos no init.
  */
-function bitmapToWorkCanvas(bitmap: ImageBitmap): OffscreenCanvas {
-  const canvas = new OffscreenCanvas(WORK_WIDTH, WORK_HEIGHT)
+function bitmapToWorkCanvas(
+  bitmap: ImageBitmap,
+  largura: number = WORK_WIDTH,
+  altura: number = WORK_HEIGHT
+): OffscreenCanvas {
+  const canvas = new OffscreenCanvas(largura, altura)
   const ctx = canvas.getContext("2d")!
-  ctx.drawImage(bitmap, 0, 0, WORK_WIDTH, WORK_HEIGHT)
+  ctx.drawImage(bitmap, 0, 0, largura, altura)
   bitmap.close()
   return canvas
 }
@@ -199,13 +216,24 @@ async function handleInit(forcarBackend?: "wasm" | "cpu") {
 
   // Warmup — roda o pipeline completo uma vez pra compilar shaders/WASM ops
   try {
-    const blank = new OffscreenCanvas(WORK_WIDTH, WORK_HEIGHT)
-    const ctx = blank.getContext("2d")!
-    ctx.fillStyle = "#000"
-    ctx.fillRect(0, 0, WORK_WIDTH, WORK_HEIGHT)
-    await fa.detectSingleFace(blank as any, tinyOpts())
+    const branco = (w: number, h: number) => {
+      const c = new OffscreenCanvas(w, h)
+      const ctx = c.getContext("2d")!
+      ctx.fillStyle = "#000"
+      ctx.fillRect(0, 0, w, h)
+      return c
+    }
+
+    // Shape do passe barato (detector + expressões), o que roda a cada frame.
+    const leve = branco(WORK_WIDTH, WORK_HEIGHT)
+    await fa.detectSingleFace(leve as any, tinyOpts())
+    await fa.detectSingleFace(leve as any, tinyOpts()).withFaceExpressions()
+
+    // Shape do passe de identificação. Aquecer aqui é o que evita a primeira
+    // batida do dia pagar a compilação dos shaders.
+    const pesado = branco(RECOG_WIDTH, RECOG_HEIGHT)
     await fa
-      .detectSingleFace(blank as any, tinyOpts())
+      .detectSingleFace(pesado as any, tinyOpts(RECOG_INPUT_SIZE))
       .withFaceLandmarks(true)
       .withFaceDescriptor()
       .withFaceExpressions()
@@ -301,11 +329,11 @@ async function handleRecognize(bitmap: ImageBitmap, smileThreshold: number) {
     bitmap.close()
     return null
   }
-  const canvas = bitmapToWorkCanvas(bitmap)
+  const canvas = bitmapToWorkCanvas(bitmap, RECOG_WIDTH, RECOG_HEIGHT)
   // Expressions + descriptor juntos num único passe — evita um round-trip
   // inteiro no estágio 2 (smile) quando a pessoa já está sorrindo.
   const det = await faceapi!
-    .detectSingleFace(canvas as any, tinyOpts())
+    .detectSingleFace(canvas as any, tinyOpts(RECOG_INPUT_SIZE))
     .withFaceLandmarks(true)
     .withFaceDescriptor()
     .withFaceExpressions()
