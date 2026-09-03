@@ -347,7 +347,20 @@ interface RecognizedPerson {
   falaVoz?: string
 }
 
-export default function RegistrarPonto() {
+/** Tipos de batida, na ordem do expediente. Usado pelo ciclo do modo teste. */
+const CICLO_TIPOS_TESTE = ["Entrada", "Saída Almoço", "Retorno Almoço", "Saída"] as const
+
+interface TelaRegistrarPontoProps {
+  /**
+   * Modo teste: mesma tela, mesmo reconhecimento, mesma IA — só que sem as
+   * travas que existem para proteger o ponto real (cooldown de 60s, limite de
+   * 4 batidas por dia e o diálogo de regularização). Serve para bater ponto à
+   * vontade enquanto se ajusta a experiência.
+   */
+  modoTeste?: boolean
+}
+
+export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProps) {
   const router = useRouter()
   const videoRef = useRef<HTMLVideoElement>(null)
   const [cameraActive, setCameraActive] = useState(false)
@@ -392,6 +405,43 @@ export default function RegistrarPonto() {
     chave: string
     promise: Promise<RespostaSaudacao>
   } | null>(null)
+
+  // === Controles do modo teste ===
+  // O loop de reconhecimento é criado uma vez só, então handleRegistro enxerga
+  // o estado da primeira renderização. Por isso cada controle tem um ref espelho:
+  // o estado desenha a barra, o ref é o que o fluxo da batida lê.
+  const [tipoTeste, setTipoTeste] = useState<string>("auto")
+  const [gravarNoBanco, setGravarNoBanco] = useState(false)
+  const [forcarHumor, setForcarHumor] = useState(false)
+  const [batidasTeste, setBatidasTeste] = useState(0)
+  const tipoTesteRef = useRef("auto")
+  const gravarNoBancoRef = useRef(false)
+  const forcarHumorRef = useRef(false)
+  const cicloTesteRef = useRef(0)
+
+  useEffect(() => {
+    tipoTesteRef.current = tipoTeste
+  }, [tipoTeste])
+  useEffect(() => {
+    gravarNoBancoRef.current = gravarNoBanco
+  }, [gravarNoBanco])
+  useEffect(() => {
+    forcarHumorRef.current = forcarHumor
+  }, [forcarHumor])
+
+  /** Próximo tipo do modo teste, sem consumir o ciclo. */
+  const espiarTipoTeste = () =>
+    tipoTesteRef.current !== "auto"
+      ? tipoTesteRef.current
+      : CICLO_TIPOS_TESTE[cicloTesteRef.current % CICLO_TIPOS_TESTE.length]
+
+  /** Próximo tipo do modo teste, avançando o ciclo. */
+  const consumirTipoTeste = () => {
+    const tipo = espiarTipoTeste()
+    if (tipoTesteRef.current === "auto") cicloTesteRef.current += 1
+    setBatidasTeste((n) => n + 1)
+    return tipo
+  }
 
   const SMILE_FRAMES_REQUIRED = 1 // 1 frame sorrindo já registra instantaneamente
   const SMILE_THRESHOLD = 0.40
@@ -538,6 +588,13 @@ export default function RegistrarPonto() {
     // Assim que os registros chegam já dá para saber qual será a batida, e com
     // isso pedir a saudação da IA adiantado. Ela leva até 1,8s; pedir só depois
     // do sorriso jogaria essa espera inteira na cara da pessoa.
+    if (modoTeste) {
+      // No teste o tipo não depende do banco: dá para pedir a saudação já.
+      const func = funcionariosMapRef.current.get(funcionarioId)
+      if (func) prefetchSaudacao(func, espiarTipoTeste())
+      return
+    }
+
     promise
       .then((registros) => {
         const func = funcionariosMapRef.current.get(funcionarioId)
@@ -792,30 +849,39 @@ export default function RegistrarPonto() {
           ? await prefetch.promise
           : await buscarRegistrosHoje(person.id).catch(() => [] as RegistroPonto[])
 
-      // Analisar situação inteligente com base na grade
-      const diag = analisarSituacaoPonto(funcObj, registrosHoje, now)
+      let tipo: string
+      let emCooldown = false
 
-      if (diag.tipo !== "DIRETO") {
-        // Exibir diálogo inteligente amigável
-        setDialogoInteligente({ diagnostico: diag, person })
-        return
+      if (modoTeste) {
+        // Modo teste: nenhuma das três travas do ponto real se aplica — nem o
+        // cooldown de 60s, nem o teto de 4 batidas no dia, nem o diálogo de
+        // regularização. O tipo vem do seletor da barra ou do ciclo
+        // Entrada → Saída Almoço → Retorno → Saída, que repete sem fim.
+        tipo = consumirTipoTeste()
+      } else {
+        // Analisar situação inteligente com base na grade
+        const diag = analisarSituacaoPonto(funcObj, registrosHoje, now)
+
+        if (diag.tipo !== "DIRETO") {
+          // Exibir diálogo inteligente amigável
+          setDialogoInteligente({ diagnostico: diag, person })
+          return
+        }
+
+        // === Fluxo Direto ===
+        // Tudo que define a tela de sucesso é resolvido aqui, em memória: o tipo
+        // vem do diagnóstico e o cooldown de 60s sai do último registro do dia —
+        // as mesmas duas regras que o registrarPonto aplica. Assim a tela entra
+        // na hora e a gravação no Supabase corre em segundo plano, em vez de a
+        // pessoa ficar olhando a moldura esmeralda esperando a rede.
+        const ultimoRegistro =
+          registrosHoje.length > 0 ? registrosHoje[registrosHoje.length - 1] : null
+        const msDesdeUltimo = ultimoRegistro
+          ? Math.abs(now.getTime() - new Date(ultimoRegistro.data_hora).getTime())
+          : Number.POSITIVE_INFINITY
+        emCooldown = msDesdeUltimo < COOLDOWN_MS
+        tipo = emCooldown ? ultimoRegistro?.tipo || "Entrada" : diag.proximoTipoSugerido
       }
-
-      // === Fluxo Direto ===
-      // Tudo que define a tela de sucesso é resolvido aqui, em memória: o tipo vem
-      // do diagnóstico e o cooldown de 60s sai do último registro do dia — as
-      // mesmas duas regras que o registrarPonto aplica. Assim a tela entra na hora
-      // e a gravação no Supabase corre em segundo plano, em vez de a pessoa ficar
-      // olhando a moldura esmeralda esperando a rede.
-      const ultimoRegistro =
-        registrosHoje.length > 0 ? registrosHoje[registrosHoje.length - 1] : null
-      const msDesdeUltimo = ultimoRegistro
-        ? Math.abs(now.getTime() - new Date(ultimoRegistro.data_hora).getTime())
-        : Number.POSITIVE_INFINITY
-      const emCooldown = msDesdeUltimo < COOLDOWN_MS
-      const tipo = emCooldown
-        ? ultimoRegistro?.tipo || "Entrada"
-        : diag.proximoTipoSugerido
 
       // Saudação da IA: normalmente já foi pedida quando a pessoa foi
       // identificada, então este await volta na hora. Sem prefetch — troca de
@@ -843,7 +909,9 @@ export default function RegistrarPonto() {
 
       // Ativar check-in de humor ocasional (ex: ~35% das vezes na entrada sem cooldown)
       const ehEntrada = tipo.toLowerCase().includes("entrada")
-      if (ehEntrada && !emCooldown) {
+      if (modoTeste && forcarHumorRef.current) {
+        setMostrarCheckinHumor(true)
+      } else if (ehEntrada && !emCooldown) {
         setMostrarCheckinHumor(Math.random() < CHANCE_CHECKIN_HUMOR)
       } else {
         setMostrarCheckinHumor(false)
@@ -868,7 +936,10 @@ export default function RegistrarPonto() {
 
       // A tela já está na frente da pessoa — grava no Supabase em segundo plano.
       // A localização sai do cache do rastreamento, sem esperar fix novo de GPS.
-      if (!emCooldown) {
+      // No modo teste a gravação é opcional e vem desligada: bater ponto de
+      // mentira não pode sujar o registro real de ninguém.
+      const deveGravar = modoTeste ? gravarNoBancoRef.current : !emCooldown
+      if (deveGravar) {
         gravarPontoEmSegundoPlano(person, tipo, obterLocalizacaoEmCache(), registrosHoje)
       }
 
@@ -1126,7 +1197,7 @@ export default function RegistrarPonto() {
           nome={recognizedPerson.nome}
           onConfirmar={handleSelecionarHumor}
           onFechar={() => setMostrarCheckinHumor(false)}
-          duracaoSegundos={12}
+          duracaoSegundos={120}
         />
       )}
 
@@ -1142,6 +1213,77 @@ export default function RegistrarPonto() {
           }}
         />
       )}
+
+      {/* Barra de controle do modo teste — fica acima de tudo, inclusive da
+          tela de sucesso, para dar para trocar o tipo entre uma batida e outra. */}
+      {modoTeste && (
+        <div className="fixed top-3 right-3 z-[60] w-[248px] rounded-xl border border-fuchsia-400/50 bg-slate-950/85 p-3 text-white shadow-2xl backdrop-blur-xl">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="rounded-md bg-fuchsia-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+              Modo teste
+            </span>
+            <span className="text-[11px] text-white/60">{batidasTeste} batida(s)</span>
+          </div>
+
+          <p className="mb-2 text-[11px] leading-snug text-white/70">
+            Sem cooldown, sem limite de 4 por dia e sem diálogo de regularização.
+          </p>
+
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-white/50">
+            Tipo da batida
+          </label>
+          <select
+            value={tipoTeste}
+            onChange={(e) => setTipoTeste(e.target.value)}
+            className="mb-2.5 w-full rounded-md border border-white/20 bg-slate-900 px-2 py-1.5 text-xs text-white outline-none focus:border-fuchsia-400"
+          >
+            <option value="auto">Ciclo automático</option>
+            {CICLO_TIPOS_TESTE.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+
+          <label className="mb-1.5 flex cursor-pointer items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={forcarHumor}
+              onChange={(e) => setForcarHumor(e.target.checked)}
+              className="h-3.5 w-3.5 accent-fuchsia-500"
+            />
+            <span>Sempre mostrar tela de humor</span>
+          </label>
+
+          <label className="flex cursor-pointer items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={gravarNoBanco}
+              onChange={(e) => setGravarNoBanco(e.target.checked)}
+              className="h-3.5 w-3.5 accent-red-500"
+            />
+            <span className={gravarNoBanco ? "font-semibold text-red-300" : ""}>
+              Gravar no banco de verdade
+            </span>
+          </label>
+
+          <p
+            className={`mt-2 rounded-md px-2 py-1.5 text-[11px] leading-snug ${
+              gravarNoBanco
+                ? "bg-red-500/20 text-red-200"
+                : "bg-emerald-500/15 text-emerald-200"
+            }`}
+          >
+            {gravarNoBanco
+              ? "Atenção: as batidas estão indo para o registro real."
+              : "Nada é gravado. O ponto real não é afetado."}
+          </p>
+        </div>
+      )}
 </div>
   )
+}
+
+export default function RegistrarPonto() {
+  return <TelaRegistrarPonto />
 }
