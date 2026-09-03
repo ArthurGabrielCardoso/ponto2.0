@@ -940,7 +940,16 @@ export function TelaRegistrarPonto({ modoTeste = false }: TelaRegistrarPontoProp
       // mentira não pode sujar o registro real de ninguém.
       const deveGravar = modoTeste ? gravarNoBancoRef.current : !emCooldown
       if (deveGravar) {
-        gravarPontoEmSegundoPlano(person, tipo, obterLocalizacaoEmCache(), registrosHoje)
+        // Com a gravação ligada no teste, os registros do dia vão vazios de
+        // propósito: o registrarPonto deriva o cooldown de 60s justamente dessa
+        // lista, e passá-la faria a segunda batida seguida ser descartada sem
+        // aviso — o oposto do que esta rota promete.
+        gravarPontoEmSegundoPlano(
+          person,
+          tipo,
+          obterLocalizacaoEmCache(),
+          modoTeste ? [] : registrosHoje
+        )
       }
 
       // Gerenciar lembretes automáticos de almoço por voz
