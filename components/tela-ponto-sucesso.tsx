@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
+import { EmojisFlutuantes } from "@/components/emojis-flutuantes"
 
 interface TelaPontoSucessoProps {
   nome: string
@@ -275,6 +276,9 @@ export function TelaPontoSucesso({
         {/* RODAPÉ */}
         <div className="relative z-10 h-4 shrink-0" />
       </div>
+
+      {/* Emojis da própria saudação subindo enquanto a IA fala */}
+      <EmojisFlutuantes texto={mensagem} />
 
       {/* Onda luminosa azul na borda bottom quando a voz fala */}
       <AnimacaoVozIa />

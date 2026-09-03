@@ -28,7 +28,12 @@ import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
 import { ModalCheckinHumor } from "@/components/modal-checkin-humor"
 import { OndaOrganicaDourada } from "@/components/onda-organica-dourada"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
-import { obterSaudacaoInteligente } from "@/lib/ia-saudacao"
+import {
+  obterSaudacaoInteligente,
+  gerarSaudacaoLocalDoDia,
+  type RespostaSaudacao,
+} from "@/lib/ia-saudacao"
+import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
 import { agendarLembretesAlmoco, cancelarLembretesAlmoco, sincronizarSessoesAlmocoDoDia, type InfoAlmocoAtivo } from "@/lib/lembretes-almoco"
 import "../ponto-registrado/ponto-batido.css"
 import {
@@ -381,6 +386,12 @@ export default function RegistrarPonto() {
     promise: Promise<RegistroPonto[]>
   } | null>(null)
   const ultimaVerificacaoIdentidadeRef = useRef(0)
+  // Saudação da IA já pedida durante os segundos em que a pessoa sorri, para
+  // não gastar o tempo dela esperando a rede depois do sorriso.
+  const prefetchSaudacaoRef = useRef<{
+    chave: string
+    promise: Promise<RespostaSaudacao>
+  } | null>(null)
 
   const SMILE_FRAMES_REQUIRED = 1 // 1 frame sorrindo já registra instantaneamente
   const SMILE_THRESHOLD = 0.40
@@ -390,6 +401,8 @@ export default function RegistrarPonto() {
   // Confirmação visual da moldura esmeralda antes de trocar de tela.
   const PULSO_CONFIRMACAO_MS = 220
   const COOLDOWN_MS = 60 * 1000
+  // Com que frequência a tela de humor aparece na entrada (fora de cooldown).
+  const CHANCE_CHECKIN_HUMOR = 0.55
 
   // Prefetch da página de sucesso
   useEffect(() => {
@@ -417,6 +430,11 @@ export default function RegistrarPonto() {
       // Assim o fix de GPS já está em memória quando alguém bater o ponto, em vez
       // de ser pedido na hora (era o que travava a tela por vários segundos).
       iniciarRastreamentoLocalizacao()
+
+      // Clima de Mogi das Cruzes e feriados por perto, para a IA ter o que
+      // comentar. Fica em cache no cliente e é revalidado de meia em meia hora,
+      // então nunca é buscado na hora da batida.
+      aquecerContextoDia()
 
       // 1. Iniciar câmera
       try {
@@ -494,6 +512,12 @@ export default function RegistrarPonto() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Revalidar o contexto do dia (clima muda, e à meia-noite o feriado também)
+  useEffect(() => {
+    const id = setInterval(aquecerContextoDia, 30 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+
   // Iniciar loop de reconhecimento quando tudo estiver pronto
   useEffect(() => {
     if (modelsReady && cameraActive && !rafRef.current) {
@@ -508,10 +532,41 @@ export default function RegistrarPonto() {
   const prefetchRegistrosDoDia = (funcionarioId: string) => {
     const atual = prefetchRegistrosRef.current
     if (atual && atual.id === funcionarioId && Date.now() - atual.ts < 20000) return
-    prefetchRegistrosRef.current = {
-      id: funcionarioId,
-      ts: Date.now(),
-      promise: buscarRegistrosHoje(funcionarioId).catch(() => [] as RegistroPonto[]),
+    const promise = buscarRegistrosHoje(funcionarioId).catch(() => [] as RegistroPonto[])
+    prefetchRegistrosRef.current = { id: funcionarioId, ts: Date.now(), promise }
+
+    // Assim que os registros chegam já dá para saber qual será a batida, e com
+    // isso pedir a saudação da IA adiantado. Ela leva até 1,8s; pedir só depois
+    // do sorriso jogaria essa espera inteira na cara da pessoa.
+    promise
+      .then((registros) => {
+        const func = funcionariosMapRef.current.get(funcionarioId)
+        if (!func) return
+        const diag = analisarSituacaoPonto(func, registros, new Date())
+        if (diag.tipo !== "DIRETO") return
+        prefetchSaudacao(func, diag.proximoTipoSugerido)
+      })
+      .catch(() => {})
+  }
+
+  /**
+   * Pede a saudação da IA antes da hora. Guardada por pessoa + tipo de batida,
+   * porque é isso que define o texto.
+   */
+  const prefetchSaudacao = (func: Funcionario, tipo: string) => {
+    const chave = `${func.id}|${tipo}`
+    if (prefetchSaudacaoRef.current?.chave === chave) return
+
+    prefetchSaudacaoRef.current = {
+      chave,
+      promise: obterSaudacaoInteligente({
+        nome: func.nome,
+        tipoPonto: tipo,
+        dataHora: new Date(),
+        trabalhaSabado: !!func.horarios?.sabado?.ativo,
+      }).catch(() =>
+        gerarSaudacaoLocalDoDia({ nome: func.nome, tipoPonto: tipo, dataHora: new Date() })
+      ),
     }
   }
 
@@ -762,14 +817,21 @@ export default function RegistrarPonto() {
         ? ultimoRegistro?.tipo || "Entrada"
         : diag.proximoTipoSugerido
 
-      // Obter saudação super inteligente com IA do Groq + Fallback local com 120+ variações
+      // Saudação da IA: normalmente já foi pedida quando a pessoa foi
+      // identificada, então este await volta na hora. Sem prefetch — troca de
+      // tipo, cooldown, primeira batida da sessão — usamos o catálogo local,
+      // que é síncrono. A IA nunca segura a tela.
       const trabalhaSabado = !!funcObj.horarios?.sabado?.ativo
-      const saudacaoIa = await obterSaudacaoInteligente({
-        nome: person.nome,
-        tipoPonto: tipo,
-        dataHora: now,
-        trabalhaSabado,
-      })
+      const chaveSaudacao = `${person.id}|${tipo}`
+      const saudacaoIa: RespostaSaudacao =
+        prefetchSaudacaoRef.current?.chave === chaveSaudacao
+          ? await prefetchSaudacaoRef.current.promise
+          : gerarSaudacaoLocalDoDia({
+              nome: person.nome,
+              tipoPonto: tipo,
+              dataHora: now,
+              trabalhaSabado,
+            })
 
       const mensagemVisual = emCooldown
         ? `Olá, ${primeiroNome}! Seu ponto (${tipo}) já foi registrado recentemente.`
@@ -781,8 +843,8 @@ export default function RegistrarPonto() {
 
       // Ativar check-in de humor ocasional (ex: ~35% das vezes na entrada sem cooldown)
       const ehEntrada = tipo.toLowerCase().includes("entrada")
-      if (ehEntrada && !res.emCooldown) {
-        setMostrarCheckinHumor(Math.random() < 0.35)
+      if (ehEntrada && !emCooldown) {
+        setMostrarCheckinHumor(Math.random() < CHANCE_CHECKIN_HUMOR)
       } else {
         setMostrarCheckinHumor(false)
       }
@@ -938,6 +1000,7 @@ export default function RegistrarPonto() {
       successTimeoutRef.current = null
     }
     isRegisteringRef.current = false
+    prefetchSaudacaoRef.current = null
     setShowSuccess(false)
     setRecognizedPerson(null)
     setDialogoInteligente(null)

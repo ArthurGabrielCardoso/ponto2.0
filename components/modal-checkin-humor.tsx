@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import { ArrowRight } from "lucide-react"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
+import { EmojisFlutuantes } from "@/components/emojis-flutuantes"
 import { obterSaudacaoInteligente } from "@/lib/ia-saudacao"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import "../app/ponto-registrado/ponto-batido.css"
@@ -152,9 +153,12 @@ export function ModalCheckinHumor({
   nome,
   onConfirmar,
   onFechar,
-  duracaoSegundos = 15,
+  // Dois minutos: tempo de a pessoa ler, pensar e escolher sem a tela sumir
+  // debaixo do dedo dela.
+  duracaoSegundos = 120,
 }: ModalCheckinHumorProps) {
   const [selecionado, setSelecionado] = useState<string | null>(null)
+  const [emojiEscolhido, setEmojiEscolhido] = useState<string>("")
   const [tempoRestante, setTempoRestante] = useState(duracaoSegundos)
   const primeiroNome = (nome || "Colega").split(" ")[0]
 
@@ -181,6 +185,7 @@ export function ModalCheckinHumor({
   const handleEscolher = async (opcao: OpcaoHumorCompleta) => {
     if (selecionado) return // Evita duplo clique
     setSelecionado(opcao.id)
+    setEmojiEscolhido(opcao.emoji)
     if (onConfirmar) onConfirmar(opcao.id, opcao.titulo)
 
     try {
@@ -218,7 +223,9 @@ export function ModalCheckinHumor({
         {/* TOPO: Logo limpa e Indicador de Tempo */}
         <div className="relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0">
           <Image src="/logo.png" alt="Logo" width={140} height={70} priority style={{ height: "auto" }} />
-          <span className="text-xs text-white/60 font-medium">Tempo: {tempoRestante}s</span>
+          <span className="text-xs text-white/60 font-medium">
+            {`Tempo: ${Math.floor(tempoRestante / 60)}:${String(tempoRestante % 60).padStart(2, "0")}`}
+          </span>
         </div>
 
         {/* ÁREA CENTRAL: Pergunta e Cards dos Emojis */}
@@ -301,7 +308,10 @@ export function ModalCheckinHumor({
         </div>
       </div>
 
-      {/* 3. ONDA LUMINOSA AZUL NA BORDA BOTTOM ENQUANTO A VOZ ESTIVER FALANDO */}
+      {/* 3. EMOJI DA OPÇÃO ESCOLHIDA SUBINDO ENQUANTO A IA RESPONDE */}
+      <EmojisFlutuantes texto={emojiEscolhido} quantidade={10} />
+
+      {/* 4. ONDA LUMINOSA AZUL NA BORDA BOTTOM ENQUANTO A VOZ ESTIVER FALANDO */}
       <AnimacaoVozIa />
     </div>
   )

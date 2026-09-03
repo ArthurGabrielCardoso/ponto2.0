@@ -6,6 +6,14 @@ export interface ContextoSaudacao {
   dataHora?: Date
   trabalhaSabado?: boolean
   humor?: string // ex: "cafe", "animado", "excelente", "bem", "sono"
+  /** Resumo cheio de números, para o prompt da IA. Ex: "19°C agora em Mogi das Cruzes, ..." */
+  climaResumo?: string
+  /** Frase curta e falável do tempo. Ex: "Faz 19 graus agora, com céu nublado." */
+  climaFrase?: string
+  /** Emoji do tempo de hoje, para a mensagem visual. Ex: "🌧️" */
+  climaEmoji?: string
+  /** Ex: "Hoje é feriado municipal: Aniversário de Mogi das Cruzes" */
+  feriadoResumo?: string
 }
 
 // Mapeamento e motor inteligente de apelidos carinhosos
@@ -466,6 +474,30 @@ export function gerarSaudacaoLocal(ctx: ContextoSaudacao): { visual: string; voz
       templateVoz = sortearItem(BANCO_FRASES.saidaFinal.diasNormais)
       textoVisual = `Excelente noite, ${nome}!`
     }
+  }
+
+  // Tempero do dia: no máximo UM assunto por saudação, e nem sempre. Juntar
+  // clima e feriado na mesma fala transforma a saudação em boletim, que é
+  // justamente o que a regra do prompt da IA proíbe.
+  const feriadoEhHoje = !!ctx.feriadoResumo && /^(Hoje|Amanhã)/.test(ctx.feriadoResumo)
+  let tempero: string | undefined
+
+  if (feriadoEhHoje) {
+    // Feriado hoje ou amanhã é notícia: sempre vale falar.
+    tempero = ctx.feriadoResumo
+  } else if (Math.random() > 0.5) {
+    // Fora isso, alterna entre o tempo e o próximo feriado, com moderação.
+    const candidatos = [ctx.climaFrase, ctx.feriadoResumo].filter(Boolean) as string[]
+    if (candidatos.length > 0) {
+      tempero = candidatos[Math.floor(Math.random() * candidatos.length)]
+    }
+  }
+
+  if (tempero) {
+    templateVoz = `${templateVoz} ${tempero}`
+  }
+  if (ctx.climaEmoji && !textoVisual.includes(ctx.climaEmoji) && Math.random() > 0.5) {
+    textoVisual = `${textoVisual} ${ctx.climaEmoji}`
   }
 
   const vozBruta = aplicarNomes(templateVoz, nome, apelido)
