@@ -123,15 +123,21 @@ async function buscarDaApi(): Promise<InfoClima | null> {
     // repetido a cada batida.
     const tempestade = [95, 96, 99, 82].includes(codigoDia)
     let frase: string | null = null
+    // O emoji tem que dizer o MOTIVO de o tempo ser assunto. Uma nuvem genérica
+    // não comunica nada: se é frio, emoji de frio; chuva, de chuva; calor, de sol.
+    let emojiFala = emoji
 
     if (chanceDeChuva >= 60 || tempestade) {
       frase = tempestade
         ? `Tem tempestade prevista para hoje, se puder já leve guarda-chuva.`
         : `Hoje tem ${chanceDeChuva}% de chance de chuva, vale levar guarda-chuva.`
+      emojiFala = tempestade ? "⛈️" : "🌧️"
     } else if (minima <= 12) {
       frase = `A mínima hoje é de ${minima} graus, capriche no agasalho.`
+      emojiFala = "🥶"
     } else if (maxima >= 30) {
       frase = `A máxima hoje chega a ${maxima} graus, beba bastante água.`
+      emojiFala = "☀️"
     }
 
     const relevante = frase !== null
@@ -142,7 +148,8 @@ async function buscarDaApi(): Promise<InfoClima | null> {
       minima,
       maxima,
       descricao,
-      emoji,
+      // O emoji exposto é o do motivo, não o do código do tempo.
+      emoji: emojiFala,
       chanceDeChuva,
       resumo,
       frase,

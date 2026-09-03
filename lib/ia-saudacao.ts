@@ -72,8 +72,11 @@ function enriquecerComContextoDoDia(ctx: ContextoSaudacao): ContextoSaudacao {
 
   // O tempo só entra quando merece comentário (chuva forte, frio ou calor), e
   // mesmo assim não em toda batida: variar é o que impede a fala de virar
-  // jingle repetido.
-  const climaVale = !!dia.clima?.relevante && Math.random() < 0.5
+  // jingle repetido. Nas batidas de almoço ele não entra nunca — quem sai para
+  // comer e volta em uma hora não precisa de previsão do tempo.
+  const tipo = (ctx.tipoPonto || "").toLowerCase()
+  const ehAlmoco = tipo.includes("almoço") || tipo.includes("almoco")
+  const climaVale = !ehAlmoco && !!dia.clima?.relevante && Math.random() < 0.5
   const feriado = resumirFeriados(dia.feriados, ctx.tipoPonto)
 
   return {

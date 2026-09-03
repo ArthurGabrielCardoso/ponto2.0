@@ -72,9 +72,12 @@ export async function POST(req: NextRequest) {
     ctx.vesperaDeFeriado = feriado.vespera
   }
   if (!ctx.climaResumo) {
-    const clima = await obterClimaAtual().catch(() => null)
+    const tipoLower = (ctx.tipoPonto || "").toLowerCase()
+    const ehAlmoco = tipoLower.includes("almoço") || tipoLower.includes("almoco")
+    const clima = ehAlmoco ? null : await obterClimaAtual().catch(() => null)
     // Só entra quando o tempo merece comentário — e nem sempre, senão a mesma
-    // frase de agasalho sai em toda batida do dia inteiro.
+    // frase de agasalho sai em toda batida do dia inteiro. Nas idas e voltas do
+    // almoço, nunca.
     if (clima?.relevante && Math.random() < 0.5) {
       ctx.climaResumo = clima.resumo
       ctx.climaFrase = clima.frase ?? undefined

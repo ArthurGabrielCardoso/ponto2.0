@@ -5,6 +5,9 @@ import { useVozAtiva, useNivelVoz } from "@/lib/tts-audio"
 
 export type HumorOlhos = "padrao" | "feliz" | "cansado" | "bravo"
 
+/** Qual olho está fechado neste instante. */
+type Piscada = "ambos" | "esquerdo" | "direito" | null
+
 interface OlhosRoboProps {
   humor?: HumorOlhos
   /** Largura total do desenho, em px. A altura sai proporcional. */
@@ -14,6 +17,8 @@ interface OlhosRoboProps {
   ocioso?: boolean
   /** Pisca sozinho em intervalos aleatórios. */
   piscar?: boolean
+  /** Deixa escapar piscadinhas de um olho só. Combina com tela ociosa. */
+  piscadinha?: boolean
   /** Cresce e encolhe junto com a voz da IA. */
   reagirAVoz?: boolean
   /** Direção fixa do olhar, de -1 a 1 em cada eixo. Desliga o modo ocioso. */
@@ -30,10 +35,10 @@ interface OlhosRoboProps {
  * o que some vira transparente e deixa ver o fundo, em vez de virar um borrão
  * escuro.
  *
- * O que veio do original: os quatro humores, o piscar automático em intervalo
- * aleatório e o modo ocioso que reposiciona o olhar sozinho. O que é daqui: a
- * reação à voz, ligada no mesmo medidor de amplitude que move a onda do rodapé,
- * para os olhos acompanharem a fala da IA.
+ * Do original vieram os quatro humores, o piscar automático em intervalo
+ * aleatório e o modo ocioso que reposiciona o olhar sozinho. Daqui vieram a
+ * reação à voz — ligada no mesmo medidor de amplitude que move a onda do
+ * rodapé — e a piscadinha de um olho só.
  */
 export function OlhosRobo({
   humor = "padrao",
@@ -41,6 +46,7 @@ export function OlhosRobo({
   cor = "#ffffff",
   ocioso = true,
   piscar = true,
+  piscadinha = false,
   reagirAVoz = false,
   olhar,
   className = "",
@@ -48,15 +54,17 @@ export function OlhosRobo({
   const estaFalando = useVozAtiva()
   const nivelVoz = useNivelVoz()
 
-  // === Geometria, toda derivada da largura ===
+  // === Geometria ===
+  // Os olhos ocupam 70% da largura e o resto é margem. Essa sobra é o que
+  // permite um deslocamento grande o bastante para o olhar realmente ler como
+  // "olhando para o lado" — com pouca folga, o movimento some.
   const g = useMemo(() => {
-    const larguraOlho = largura * 0.36
+    const larguraOlho = largura * 0.3
     const alturaOlho = larguraOlho
-    const espaco = largura * 0.12
+    const espaco = largura * 0.1
     const raio = larguraOlho * 0.3
-    // Sobra em volta para o olhar se deslocar sem encostar na borda.
     const margemX = (largura - (larguraOlho * 2 + espaco)) / 2
-    const altura = alturaOlho * 1.5
+    const altura = alturaOlho * 1.7
     const margemY = (altura - alturaOlho) / 2
     return {
       larguraOlho,
@@ -66,43 +74,49 @@ export function OlhosRobo({
       margemX,
       margemY,
       altura,
-      alcanceX: margemX * 0.75,
-      alcanceY: margemY * 0.6,
+      alcanceX: margemX * 0.92,
+      alcanceY: margemY * 0.8,
     }
   }, [largura])
 
   // === Piscar automático ===
-  const [fechado, setFechado] = useState(false)
+  const [piscada, setPiscada] = useState<Piscada>(null)
   useEffect(() => {
     if (!piscar) return
     let cancelado = false
     const timers: number[] = []
+    const esperar = (ms: number, fn: () => void) => {
+      timers.push(window.setTimeout(fn, ms))
+    }
 
     const agendar = () => {
       if (cancelado) return
       // Intervalo irregular: piscar em cadência fixa parece relógio, não vida.
-      const espera = 2400 + Math.random() * 3600
-      timers.push(
-        window.setTimeout(() => {
-          if (cancelado) return
-          setFechado(true)
-          timers.push(
-            window.setTimeout(() => {
-              setFechado(false)
-              // De vez em quando sai uma piscada dupla.
-              if (Math.random() < 0.25) {
-                timers.push(
-                  window.setTimeout(() => {
-                    setFechado(true)
-                    timers.push(window.setTimeout(() => setFechado(false), 90))
-                  }, 130)
-                )
-              }
-              agendar()
-            }, 100)
-          )
-        }, espera)
-      )
+      esperar(2400 + Math.random() * 3600, () => {
+        if (cancelado) return
+
+        // De vez em quando sai uma piscadinha de um olho só — é o que dá o ar
+        // de brincalhão na tela de espera.
+        const soUmOlho = piscadinha && Math.random() < 0.3
+        const alvo: Piscada = soUmOlho
+          ? Math.random() < 0.5
+            ? "esquerdo"
+            : "direito"
+          : "ambos"
+
+        setPiscada(alvo)
+        esperar(soUmOlho ? 230 : 100, () => {
+          setPiscada(null)
+          // Piscada dupla eventual, só quando foi com os dois olhos.
+          if (!soUmOlho && Math.random() < 0.25) {
+            esperar(130, () => {
+              setPiscada("ambos")
+              esperar(90, () => setPiscada(null))
+            })
+          }
+          agendar()
+        })
+      })
     }
 
     agendar()
@@ -110,13 +124,10 @@ export function OlhosRobo({
       cancelado = true
       timers.forEach((t) => clearTimeout(t))
     }
-  }, [piscar])
+  }, [piscar, piscadinha])
 
   // === Modo ocioso: reposiciona o olhar sozinho ===
   const [direcao, setDirecao] = useState({ x: 0, y: 0 })
-  const olharFixoRef = useRef(olhar)
-  olharFixoRef.current = olhar
-
   useEffect(() => {
     if (!ocioso || olhar) return
     let cancelado = false
@@ -124,9 +135,14 @@ export function OlhosRobo({
 
     const mover = () => {
       if (cancelado) return
-      // Centro puxa mais que os cantos: olhar sempre torto fica esquisito.
-      const sortear = () => (Math.random() < 0.4 ? 0 : Math.random() * 2 - 1)
-      setDirecao({ x: sortear(), y: sortear() * 0.6 })
+      // Sorteia com viés para os extremos: olhar meio torto não lê como olhar
+      // para o lado, e o meio-termo é justamente o que não comunica nada.
+      const sortear = () => {
+        const r = Math.random()
+        if (r < 0.3) return 0
+        return (Math.random() < 0.5 ? -1 : 1) * (0.65 + Math.random() * 0.35)
+      }
+      setDirecao({ x: sortear(), y: sortear() * 0.7 })
       timer = window.setTimeout(mover, 1600 + Math.random() * 2600)
     }
 
@@ -138,16 +154,33 @@ export function OlhosRobo({
   }, [ocioso, olhar])
 
   const alvo = olhar ?? direcao
-  const deslocX = Math.max(-1, Math.min(1, alvo.x)) * g.alcanceX
-  const deslocY = Math.max(-1, Math.min(1, alvo.y)) * g.alcanceY
+  const dirX = Math.max(-1, Math.min(1, alvo.x))
+  const dirY = Math.max(-1, Math.min(1, alvo.y))
+  const deslocX = dirX * g.alcanceX
+  const deslocY = dirY * g.alcanceY
 
   // === Reação à voz ===
   // Faixa curta de propósito: os olhos respiram junto com a fala, não pulam.
   const vivo = reagirAVoz && estaFalando
   const escalaVoz = vivo ? 1 + nivelVoz * 0.08 : 1
-  const abertura = fechado ? 0.08 : vivo ? 1 + nivelVoz * 0.06 : 1
 
   const idMascara = useMemo(() => `olhos-${Math.random().toString(36).slice(2, 9)}`, [])
+
+  /**
+   * Pálpebra que acompanha o olhar vertical. Olhar para baixo sem isso é só o
+   * olho descendo alguns pixels, o que não lê como olhar para baixo — num olho
+   * de verdade a pálpebra de cima desce junto.
+   */
+  const palpebraDoOlhar = () => {
+    if (dirY <= 0.05) return null
+    return (
+      <rect
+        width={g.larguraOlho}
+        height={g.alturaOlho * 0.26 * dirY}
+        fill="black"
+      />
+    )
+  }
 
   /** Pálpebra do humor, em coordenadas locais do olho. Preto = recortado. */
   const palpebra = (ladoEsquerdo: boolean) => {
@@ -157,14 +190,7 @@ export function OlhosRobo({
       // Curva rasa subindo pela base: o olho fecha por baixo, como quem sorri.
       // Raso de propósito — cortar fundo transforma o olho num arco de ponte.
       return (
-        <rect
-          x={-w * 0.3}
-          y={h * 0.74}
-          width={w * 1.6}
-          height={h}
-          rx={w * 0.8}
-          fill="black"
-        />
+        <rect x={-w * 0.3} y={h * 0.74} width={w * 1.6} height={h} rx={w * 0.8} fill="black" />
       )
     }
 
@@ -193,6 +219,17 @@ export function OlhosRobo({
     const x = ladoEsquerdo ? g.margemX : g.margemX + g.larguraOlho + g.espaco
     const idLocal = `${idMascara}-${ladoEsquerdo ? "e" : "d"}`
 
+    // "Curiosidade", emprestada do RoboEyes: o olho do lado para onde se olha
+    // cresce e o oposto encolhe. É isso, mais que o deslocamento, que faz o
+    // olhar realmente parecer virado para o lado.
+    const proximidade = ladoEsquerdo ? -dirX : dirX
+    const curiosidade = 1 + proximidade * 0.22
+
+    const fechado = piscada === "ambos" || piscada === (ladoEsquerdo ? "esquerdo" : "direito")
+    const abertura = fechado ? 0.08 : (vivo ? 1 + nivelVoz * 0.06 : 1) * curiosidade
+    // O olho cresce a partir da base para não flutuar no ar ao esticar.
+    const largura2 = fechado ? 1 : 1 + Math.abs(proximidade) * 0.04
+
     return (
       // O deslocamento vai por CSS, não pelo atributo transform do SVG:
       // atributo não recebe transição, e o olhar teleportaria de um lado ao
@@ -200,18 +237,21 @@ export function OlhosRobo({
       <g
         style={{
           transform: `translate(${x + deslocX}px, ${g.margemY + deslocY}px)`,
-          transition: "transform 600ms cubic-bezier(0.22, 1, 0.36, 1)",
+          transition: "transform 520ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}
       >
         <mask id={idLocal}>
           <rect width={g.larguraOlho} height={g.alturaOlho} rx={g.raio} fill="white" />
           {palpebra(ladoEsquerdo)}
+          {palpebraDoOlhar()}
         </mask>
         <g
           style={{
-            transform: `scaleY(${abertura})`,
+            transform: `scale(${largura2}, ${abertura})`,
             transformOrigin: `${g.larguraOlho / 2}px ${g.alturaOlho / 2}px`,
-            transition: "transform 90ms ease-out",
+            transition: fechado
+              ? "transform 90ms ease-out"
+              : "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)",
           }}
         >
           <rect

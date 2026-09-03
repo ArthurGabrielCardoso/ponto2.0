@@ -291,7 +291,7 @@ function Screensaver({ onTap, onSegredo }: { onTap: () => void; onSegredo: () =>
         {/* Os olhos ficam aqui e em nenhum outro lugar da espera: é o que faz o
             tablet parado parecer acordado e convidar a pessoa a chegar. */}
         <div className="mb-6 flex justify-center sm:mb-8">
-          <OlhosRobo largura={215} cor="#ffffff" ocioso piscar />
+          <OlhosRobo largura={215} cor="#ffffff" ocioso piscar piscadinha />
         </div>
 
         <h2 className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight flex items-center justify-center flex-wrap">

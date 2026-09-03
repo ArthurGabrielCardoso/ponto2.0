@@ -232,11 +232,28 @@ export function ModalCheckinHumor({
       {/* 2. SUPERFÍCIE GLASSMORPHISM DE TELA INTEIRA */}
       <div className="absolute inset-0 w-full h-full backdrop-blur-[60px] backdrop-saturate-[180%] bg-slate-950/50 border-none flex flex-col justify-between p-4 sm:p-8 lg:p-10 transition-all duration-700">
         {/* TOPO: Logo limpa e Indicador de Tempo */}
-        <div className="relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0">
+        {/* O rodapé foi todo para cá: a faixa do topo estava vazia à direita da
+            logo, e o espaço que ele ocupava embaixo era o que faltava para os
+            cards respirarem. */}
+        <div className="relative z-10 flex items-center justify-between gap-4 w-full max-w-5xl mx-auto shrink-0">
           <Image src="/logo.png" alt="Logo" width={140} height={70} priority style={{ height: "auto" }} />
-          <span className="text-xs text-white/60 font-medium">
-            {`Tempo: ${Math.floor(tempoRestante / 60)}:${String(tempoRestante % 60).padStart(2, "0")}`}
-          </span>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="hidden text-xs text-white/50 sm:inline">
+              Toque em qualquer opção para registrar
+            </span>
+            <span className="text-xs font-medium text-white/60">
+              {`${Math.floor(tempoRestante / 60)}:${String(tempoRestante % 60).padStart(2, "0")}`}
+            </span>
+            <button
+              type="button"
+              onClick={onFechar}
+              className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white/80 transition-all hover:bg-white/20 hover:text-white active:scale-95 sm:text-sm"
+            >
+              <span>Pular</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* ÁREA CENTRAL: Pergunta e Cards dos Emojis */}
@@ -317,19 +334,7 @@ export function ModalCheckinHumor({
           </div>
         </div>
 
-        {/* RODAPÉ: Botão de Pular Limpo */}
-        <div className="relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto pt-2 shrink-0">
-          <button
-            type="button"
-            onClick={onFechar}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white/80 hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 transition-all cursor-pointer active:scale-95"
-          >
-            <span>Pular</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
 
-          <span className="text-xs text-white/50">Toque em qualquer opção para registrar</span>
-        </div>
       </div>
 
       {/* 3. EMOJI DA OPÇÃO ESCOLHIDA SUBINDO ENQUANTO A IA RESPONDE */}
