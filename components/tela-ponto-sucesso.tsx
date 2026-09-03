@@ -5,6 +5,7 @@ import Image from "next/image"
 import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 import { EmojisFlutuantes } from "@/components/emojis-flutuantes"
+import { OlhosRobo } from "@/components/olhos-robo"
 
 interface TelaPontoSucessoProps {
   nome: string
@@ -205,6 +206,20 @@ export function TelaPontoSucesso({
                 : "opacity-0 -translate-x-6 md:-translate-y-2 pointer-events-none"
             }`}
           >
+            {/* Olhos da IA: dão um rosto para a voz que fala a saudação.
+                Ficam discretos e menores que no screensaver — aqui quem manda
+                na tela é a mensagem, não eles. */}
+            <div className="flex justify-center md:justify-start">
+              <OlhosRobo
+                humor="feliz"
+                largura={165}
+                cor={cenario.greetingColor}
+                ocioso={false}
+                piscar
+                reagirAVoz
+              />
+            </div>
+
             {/* Saudação com Nome */}
             <div className="space-y-2">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight drop-shadow-sm">

@@ -5,6 +5,7 @@ import Image from "next/image"
 import { ArrowRight } from "lucide-react"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 import { EmojisFlutuantes } from "@/components/emojis-flutuantes"
+import { OlhosRobo, type HumorOlhos } from "@/components/olhos-robo"
 import { obterSaudacaoInteligente } from "@/lib/ia-saudacao"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import "../app/ponto-registrado/ponto-batido.css"
@@ -162,6 +163,16 @@ export function ModalCheckinHumor({
   const [tempoRestante, setTempoRestante] = useState(duracaoSegundos)
   const primeiroNome = (nome || "Colega").split(" ")[0]
 
+  // Cada opção do banco vira uma cara. Sem escolha, os olhos ficam neutros e
+  // curiosos, olhando em volta enquanto esperam.
+  const humorDosOlhos: HumorOlhos = !selecionado
+    ? "padrao"
+    : selecionado === "cafe"
+    ? "cansado"
+    : ["leao", "foco", "superacao", "coragem", "resiliencia"].includes(selecionado)
+    ? "bravo" // olhar de determinação, não de raiva: é o "modo fera" da opção
+    : "feliz"
+
   // Sorteia 5 opções variadas sempre que abrir para nunca ser repetitivo
   const opcoesExibidas = useMemo(() => {
     const embaralhado = [...BANCO_OPCOES_HUMOR].sort(() => 0.5 - Math.random())
@@ -230,6 +241,19 @@ export function ModalCheckinHumor({
 
         {/* ÁREA CENTRAL: Pergunta e Cards dos Emojis */}
         <div className="relative z-10 flex-1 flex flex-col justify-center max-w-5xl mx-auto w-full px-2 my-auto">
+          {/* Olhos da IA espelhando o humor escolhido — é a tela onde eles
+              mais fazem sentido: a pergunta é sobre como a pessoa está. */}
+          <div className="mb-5 flex justify-center md:justify-start">
+            <OlhosRobo
+              humor={humorDosOlhos}
+              largura={150}
+              cor="#c69e6b"
+              ocioso={!selecionado}
+              piscar
+              reagirAVoz
+            />
+          </div>
+
           {/* Título e Subtítulo Limpos */}
           <div className={`space-y-1.5 text-center md:text-left mb-6 transition-all duration-500 ${selecionado ? "opacity-30" : "opacity-100"}`}>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white drop-shadow-sm">

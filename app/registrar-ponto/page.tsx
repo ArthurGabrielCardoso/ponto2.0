@@ -34,6 +34,7 @@ import {
   type RespostaSaudacao,
 } from "@/lib/ia-saudacao"
 import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
+import { OlhosRobo } from "@/components/olhos-robo"
 import { agendarLembretesAlmoco, cancelarLembretesAlmoco, sincronizarSessoesAlmocoDoDia, type InfoAlmocoAtivo } from "@/lib/lembretes-almoco"
 import "../ponto-registrado/ponto-batido.css"
 import {
@@ -260,8 +261,14 @@ function Screensaver({ onTap }: { onTap: () => void }) {
         </p>
       </div>
 
-      {/* Centro: Saudação com Nome Rotativo a cada 5s (prefixo fixo) + Instrução de Toque */}
+      {/* Centro: Olhos da IA + Saudação com Nome Rotativo a cada 5s + Instrução de Toque */}
       <div className="text-center text-white px-6 ss-fade">
+        {/* Os olhos ficam aqui e em nenhum outro lugar da espera: é o que faz o
+            tablet parado parecer acordado e convidar a pessoa a chegar. */}
+        <div className="mb-6 flex justify-center sm:mb-8">
+          <OlhosRobo largura={215} cor="#ffffff" ocioso piscar />
+        </div>
+
         <h2 className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight flex items-center justify-center flex-wrap">
           <span>{periodo},</span>
           {nomeAtual ? (
