@@ -219,16 +219,13 @@ export function OlhosRobo({
     const x = ladoEsquerdo ? g.margemX : g.margemX + g.larguraOlho + g.espaco
     const idLocal = `${idMascara}-${ladoEsquerdo ? "e" : "d"}`
 
-    // "Curiosidade", emprestada do RoboEyes: o olho do lado para onde se olha
-    // cresce e o oposto encolhe. É isso, mais que o deslocamento, que faz o
-    // olhar realmente parecer virado para o lado.
-    const proximidade = ladoEsquerdo ? -dirX : dirX
-    const curiosidade = 1 + proximidade * 0.22
-
+    // Os dois olhos são sempre do mesmo tamanho. O RoboEyes original tem uma
+    // "curiosidade" que estica o olho do lado para onde se olha e encolhe o
+    // outro; aqui ficou feio — um olho grande e um pequeno lê como defeito, não
+    // como olhar. O que dá a direção é o deslocamento, que já é grande
+    // (~45% da largura do olho) desde que a margem em volta foi aumentada.
     const fechado = piscada === "ambos" || piscada === (ladoEsquerdo ? "esquerdo" : "direito")
-    const abertura = fechado ? 0.08 : (vivo ? 1 + nivelVoz * 0.06 : 1) * curiosidade
-    // O olho cresce a partir da base para não flutuar no ar ao esticar.
-    const largura2 = fechado ? 1 : 1 + Math.abs(proximidade) * 0.04
+    const abertura = fechado ? 0.08 : vivo ? 1 + nivelVoz * 0.06 : 1
 
     return (
       // O deslocamento vai por CSS, não pelo atributo transform do SVG:
@@ -247,7 +244,7 @@ export function OlhosRobo({
         </mask>
         <g
           style={{
-            transform: `scale(${largura2}, ${abertura})`,
+            transform: `scaleY(${abertura})`,
             transformOrigin: `${g.larguraOlho / 2}px ${g.alturaOlho / 2}px`,
             transition: fechado
               ? "transform 90ms ease-out"
