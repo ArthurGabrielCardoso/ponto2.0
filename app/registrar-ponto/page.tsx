@@ -1327,6 +1327,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       {/* Tela de sucesso de Ponto Registrado — Zero Scroll, Animação do Centro para Direita & Dourado */}
       {showSuccess && recognizedPerson && (
         <TelaPontoSucesso
+          funcionarioId={recognizedPerson.id}
           nome={recognizedPerson.nome}
           tipo={recognizedPerson.tipo || "Entrada"}
           hora={recognizedPerson.hora || "08:00:00"}

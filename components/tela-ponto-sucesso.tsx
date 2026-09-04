@@ -6,8 +6,11 @@ import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 import { EmojisFlutuantes } from "@/components/emojis-flutuantes"
 import { OlhosRobo } from "@/components/olhos-robo"
+import { QrEspelho } from "@/components/qr-espelho"
 
 interface TelaPontoSucessoProps {
+  /** Id do funcionário — sem ele o QR do espelho não aparece. */
+  funcionarioId?: string
   nome: string
   tipo: string
   hora: string
@@ -20,6 +23,7 @@ interface TelaPontoSucessoProps {
 }
 
 export function TelaPontoSucesso({
+  funcionarioId,
   nome,
   tipo,
   hora,
@@ -36,6 +40,8 @@ export function TelaPontoSucesso({
   // 3. "revelar": Ícone 100% ancorado -> surge a logo, badge e lado esquerdo (1500ms+)
   const [fase, setFase] = useState<"centro" | "deslizando" | "revelar">("centro")
   const [timeLeft, setTimeLeft] = useState(Math.round(durationMs / 1000))
+  // Com o QR aberto a contagem para: a pessoa está com o celular na mão.
+  const [contagemPausada, setContagemPausada] = useState(false)
   const onVoltarRef = useRef(onVoltar)
 
   useEffect(() => {
@@ -60,6 +66,11 @@ export function TelaPontoSucesso({
 
   useEffect(() => {
     setTimeLeft(Math.round(durationMs / 1000))
+  }, [durationMs, tipo, nome])
+
+  useEffect(() => {
+    if (contagemPausada) return
+
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -72,7 +83,7 @@ export function TelaPontoSucesso({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [durationMs, tipo, nome])
+  }, [contagemPausada, durationMs, tipo, nome])
 
   const iconeAncorado = fase === "deslizando" || fase === "revelar"
   const conteudoVisivel = fase === "revelar"
@@ -293,6 +304,16 @@ export function TelaPontoSucesso({
         {/* RODAPÉ */}
         <div className="relative z-10 h-4 shrink-0" />
       </div>
+
+      {/* QR do espelho de ponto. Abrir pausa o retorno automático: sacar o
+          celular, desbloquear e abrir a câmera não cabe em 15 segundos. */}
+      {funcionarioId && (
+        <QrEspelho
+          funcionarioId={funcionarioId}
+          nome={nome}
+          onAbrirFechar={(aberto) => setContagemPausada(aberto)}
+        />
+      )}
 
       {/* Emojis da própria saudação subindo enquanto a IA fala */}
       <EmojisFlutuantes texto={mensagem} />
