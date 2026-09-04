@@ -271,7 +271,16 @@ async function handleDetectFast(bitmap: ImageBitmap) {
   const canvas = bitmapToWorkCanvas(bitmap)
   const det = await faceapi!.detectSingleFace(canvas as any, tinyOpts())
   if (!det) return null
-  return { x: det.box.x, y: det.box.y, width: det.box.width, height: det.box.height }
+  // Normalizado em 0..1 para o cliente não precisar saber em que resolução o
+  // frame foi processado.
+  return {
+    x: det.box.x,
+    y: det.box.y,
+    width: det.box.width,
+    height: det.box.height,
+    centroX: (det.box.x + det.box.width / 2) / WORK_WIDTH,
+    centroY: (det.box.y + det.box.height / 2) / WORK_HEIGHT,
+  }
 }
 
 /**

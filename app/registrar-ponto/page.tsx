@@ -34,6 +34,12 @@ import {
   type RespostaSaudacao,
 } from "@/lib/ia-saudacao"
 import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
+import {
+  enfileirarPonto,
+  removerDaFila,
+  contarPendentes,
+  iniciarSincronizacaoAutomatica,
+} from "@/lib/fila-pontos"
 import { OlhosRobo } from "@/components/olhos-robo"
 import { agendarLembretesAlmoco, cancelarLembretesAlmoco, sincronizarSessoesAlmocoDoDia, type InfoAlmocoAtivo } from "@/lib/lembretes-almoco"
 import "../ponto-registrado/ponto-batido.css"
@@ -43,6 +49,7 @@ import {
   getFuncionariosCarregados,
   recognizeFace,
   detectSmileOnly,
+  detectFaceFast,
 } from "@/lib/face-recognition-client"
 
 // Animação temática: emoji por 3.5s → depois Lottie check original
@@ -175,7 +182,16 @@ function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
   )
 }
 
-function Screensaver({ onTap, onSegredo }: { onTap: () => void; onSegredo: () => void }) {
+function Screensaver({
+  onTap,
+  onSegredo,
+  olhar,
+}: {
+  onTap: () => void
+  onSegredo: () => void
+  /** Direção em que a pessoa detectada está. null = ninguém à vista. */
+  olhar: { x: number; y: number } | null
+}) {
   // Gesto escondido: 10 toques no canto inferior direito abrem o modo teste.
   // Fica no canto e exige repetição justamente para ninguém cair nele sem querer.
   const toquesRef = useRef(0)
@@ -291,7 +307,17 @@ function Screensaver({ onTap, onSegredo }: { onTap: () => void; onSegredo: () =>
         {/* Os olhos ficam aqui e em nenhum outro lugar da espera: é o que faz o
             tablet parado parecer acordado e convidar a pessoa a chegar. */}
         <div className="mb-6 flex justify-center sm:mb-8">
-          <OlhosRobo largura={215} cor="#ffffff" ocioso piscar piscadinha />
+          {/* Com alguém à vista os olhos seguem a pessoa; sozinhos, voltam a
+              vaguear. É a câmera que já roda para o reconhecimento, então isso
+              não custa nada de novo. */}
+          <OlhosRobo
+            largura={215}
+            cor="#ffffff"
+            olhar={olhar ?? undefined}
+            ocioso={!olhar}
+            piscar
+            piscadinha
+          />
         </div>
 
         <h2 className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight flex items-center justify-center flex-wrap">
@@ -471,6 +497,12 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const [forcarHumor, setForcarHumor] = useState(false)
   const [batidasTeste, setBatidasTeste] = useState(0)
   const [barraAberta, setBarraAberta] = useState(true)
+  // Batidas ainda não gravadas no Supabase (rede fora, servidor lento).
+  const [pontosPendentes, setPontosPendentes] = useState(0)
+  // Para onde os olhos da proteção de tela estão olhando. null = ninguém à
+  // vista, e aí eles voltam a vaguear sozinhos.
+  const [olharDaCamera, setOlharDaCamera] = useState<{ x: number; y: number } | null>(null)
+  const ultimaDeteccaoOciosaRef = useRef(0)
   const tipoTesteRef = useRef("auto")
   const gravarNoBancoRef = useRef(false)
   const forcarHumorRef = useRef(false)
@@ -507,6 +539,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const RE_VERIFICACAO_IDENTIDADE_MS = 800
   // Confirmação visual da moldura esmeralda antes de trocar de tela.
   const PULSO_CONFIRMACAO_MS = 220
+  // A câmera frontal NÃO está espelhada no vídeo: quem está à esquerda de quem
+  // olha o tablet aparece à direita do frame. Por isso o eixo X é invertido
+  // para os olhos acompanharem a pessoa, e não o espelho dela. Se no tablet o
+  // olhar sair ao contrário, é só trocar este sinal.
+  const INVERTER_OLHAR_X = true
+  // De quanto em quanto tempo procurar um rosto enquanto a tela está em espera.
+  const INTERVALO_DETECCAO_OCIOSA_MS = 180
   const COOLDOWN_MS = 60 * 1000
   // Com que frequência a tela de humor aparece na entrada (fora de cooldown).
   const CHANCE_CHECKIN_HUMOR = 0.55
@@ -619,6 +658,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Fila offline: sobe o que ficou para trás quando a internet volta, quando a
+  // aba reaparece e periodicamente.
+  useEffect(() => iniciarSincronizacaoAutomatica(setPontosPendentes), [])
+
   // Revalidar o contexto do dia (clima muda, e à meia-noite o feriado também)
   useEffect(() => {
     const id = setInterval(aquecerContextoDia, 30 * 60 * 1000)
@@ -696,12 +739,43 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       if (showSuccessRef.current) return
       if (isProcessingRef.current || isRegisteringRef.current) return
 
-      // Se a proteção de tela estiver ativa, executa em baixa frequência apenas para manter a GPU e worker 100% aquecidos
-      if (screensaverRef.current) {
-        if (Math.random() > 0.03) return // Warmup heartbeat periódico
+      if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+        return
       }
 
-      if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      // === Tela em espera: só o detector barato ===
+      // Nada de descritor aqui — apenas "existe um rosto e onde ele está", que
+      // é o suficiente para os olhos acompanharem quem se aproxima. De quebra
+      // mantém o worker e a GPU aquecidos, que era o único motivo do
+      // heartbeat aleatório que existia antes.
+      if (screensaverRef.current) {
+        if (Date.now() - ultimaDeteccaoOciosaRef.current < INTERVALO_DETECCAO_OCIOSA_MS) return
+        ultimaDeteccaoOciosaRef.current = Date.now()
+
+        isProcessingRef.current = true
+        try {
+          const rosto = await detectFaceFast(video)
+          if (!rosto) {
+            setOlharDaCamera(null)
+            return
+          }
+          // Centro do rosto (0..1) vira direção do olhar (-1..1). O eixo
+          // vertical fica mais contido: olhar muito para baixo esconde os olhos
+          // atrás da própria pálpebra.
+          const x = Math.max(-1, Math.min(1, (rosto.centroX * 2 - 1) * (INVERTER_OLHAR_X ? -1 : 1)))
+          const y = Math.max(-1, Math.min(1, (rosto.centroY * 2 - 1) * 0.6))
+
+          // Só re-renderiza quando a pessoa realmente se moveu. Sem isto seriam
+          // ~5 renders por segundo da tela inteira por causa de tremidas de
+          // um pixel na detecção.
+          setOlharDaCamera((atual) =>
+            atual && Math.abs(atual.x - x) < 0.07 && Math.abs(atual.y - y) < 0.07
+              ? atual
+              : { x, y }
+          )
+        } finally {
+          isProcessingRef.current = false
+        }
         return
       }
 
@@ -822,15 +896,32 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // Grava o ponto no Supabase depois que a tela de sucesso já está na frente da
   // pessoa. Se falhar de vez, a tela vira aviso: ninguém pode sair achando que
   // bateu o ponto quando o registro não foi salvo.
+  /**
+   * Grava o ponto depois que a tela de sucesso já está na frente da pessoa.
+   *
+   * A batida entra ANTES numa fila persistente. Se a rede falhar, ela fica lá e
+   * sobe sozinha quando a internet voltar — carimbada com o horário real, não
+   * com o do envio. Por isso não existe mais a tela de "não foi possível
+   * salvar": o ponto não se perde, só atrasa.
+   */
   const gravarPontoEmSegundoPlano = async (
     person: RecognizedPerson,
     tipo: string,
     localizacao: CoordenadasLocalizacao | null,
-    registrosHoje: RegistroPonto[]
+    registrosHoje: RegistroPonto[],
+    dataHoraIso: string
   ) => {
-    // Cada tentativa tem prazo próprio: a rede pode pendurar a promise para sempre,
-    // e o aviso de falha precisa caber na janela em que a tela de sucesso ainda
-    // está no ar (15s), senão ninguém vê.
+    const idNaFila = enfileirarPonto({
+      funcionarioId: person.id,
+      nomeFuncionario: person.nome,
+      tipo,
+      dataHoraIso,
+      localizacao,
+    })
+    setPontosPendentes(contarPendentes())
+
+    // Prazo curto: a rede pode pendurar a promise para sempre, e quem está na
+    // frente do tablet não pode ficar esperando por isso.
     const comPrazo = <T,>(promessa: Promise<T>, ms: number) =>
       Promise.race([
         promessa,
@@ -839,41 +930,20 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         ),
       ])
 
-    for (let tentativa = 1; tentativa <= 2; tentativa++) {
-      try {
-        await comPrazo(
-          registrarPonto(person.id, person.nome, tipo, localizacao, registrosHoje),
-          5000
-        )
-        prefetchRegistrosRef.current = null // os registros do dia mudaram
-        return
-      } catch (erro) {
-        console.error(`Erro ao gravar ponto (tentativa ${tentativa}/2):`, erro)
-        if (tentativa === 1) await new Promise((r) => setTimeout(r, 800))
-      }
+    try {
+      await comPrazo(
+        registrarPonto(person.id, person.nome, tipo, localizacao, registrosHoje, dataHoraIso),
+        5000
+      )
+      removerDaFila(idNaFila)
+      prefetchRegistrosRef.current = null // os registros do dia mudaram
+    } catch (erro) {
+      // Fica na fila. A sincronização automática cuida do resto.
+      console.warn("Ponto foi para a fila offline, será gravado assim que der:", erro)
+      prefetchRegistrosRef.current = null
+    } finally {
+      setPontosPendentes(contarPendentes())
     }
-
-    prefetchRegistrosRef.current = null
-    console.error(`❌ PONTO NÃO SALVO: ${person.nome} (${tipo})`)
-
-    // Se a tela já passou para outra pessoa, trocar o conteúdo agora só confundiria
-    // quem está na frente do tablet.
-    if (!showSuccessRef.current || recognizedPersonRef.current?.id !== person.id) return
-
-    const agora = new Date()
-    if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current)
-    setRecognizedPerson({
-      ...person,
-      registroCompleto: true,
-      tipo: "Aviso",
-      hora: agora.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      data: agora.toLocaleDateString(),
-      mensagem: "Não foi possível salvar seu ponto. Tente novamente.",
-    })
-    setShowSuccess(true)
-    successTimeoutRef.current = window.setTimeout(() => {
-      resetToInitialState()
-    }, 8000)
   }
 
   // Registrar ponto — transição INSTANTÂNEA
@@ -1005,7 +1075,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           person,
           tipo,
           obterLocalizacaoEmCache(),
-          modoTesteRef.current ? [] : registrosHoje
+          modoTesteRef.current ? [] : registrosHoje,
+          now.toISOString()
         )
       }
 
@@ -1243,6 +1314,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       {/* Proteção de tela */}
       {screensaver && (
         <Screensaver
+          olhar={olharDaCamera}
           onTap={() => {
             screensaverRef.current = false
             setScreensaver(false)
@@ -1287,6 +1359,16 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             resetToInitialState()
           }}
         />
+      )}
+
+      {/* Batidas na fila esperando internet. Discreto de propósito: é informação
+          para quem cuida do tablet, não um alarme para quem bate o ponto. */}
+      {pontosPendentes > 0 && (
+        <div className="fixed top-3 left-1/2 z-[55] -translate-x-1/2 rounded-full border border-amber-300/40 bg-amber-950/70 px-3 py-1 text-[11px] font-medium text-amber-100 shadow-lg backdrop-blur-md">
+          {pontosPendentes === 1
+            ? "1 batida aguardando internet"
+            : `${pontosPendentes} batidas aguardando internet`}
+        </div>
       )}
 
       {/* Barra de controle do modo teste — fica acima de tudo, inclusive da
