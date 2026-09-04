@@ -6,6 +6,18 @@ export interface ContextoSaudacao {
   dataHora?: Date
   trabalhaSabado?: boolean
   humor?: string // ex: "cafe", "animado", "excelente", "bem", "sono"
+  /** Resumo cheio de números, para o prompt da IA. Ex: "19°C agora em Mogi das Cruzes, ..." */
+  climaResumo?: string
+  /** Frase curta e falável do tempo. Ex: "Faz 19 graus agora, com céu nublado." */
+  climaFrase?: string
+  /** Emoji do tempo de hoje, para a mensagem visual. Ex: "🌧️" */
+  climaEmoji?: string
+  /** INSTRUÇÃO para a IA, nunca falada literalmente. Ex: "Amanhã é feriado (X). Deseje..." */
+  feriadoResumo?: string
+  /** Frase pronta e natural, essa sim para o catálogo local falar. */
+  feriadoFrase?: string
+  /** Amanhã é feriado — o catálogo local não pode se despedir com "até amanhã". */
+  vesperaDeFeriado?: boolean
 }
 
 // Mapeamento e motor inteligente de apelidos carinhosos
@@ -25,7 +37,7 @@ const APELIDOS_CONHECIDOS: Record<string, string[]> = {
   daniela: ["Dani", "Daniela"],
   daniel: ["Dani", "Daniel"],
   juliana: ["Ju", "Juli", "Juliana"],
-  julliana: ["Ju", "Juli", "Julliana"],
+  julliana: ["Ju", "Julliana"],
   julio: ["Ju", "Julio"],
   juliano: ["Ju", "Juliano"],
   leonardo: ["Léo", "Leonardo"],
@@ -466,6 +478,50 @@ export function gerarSaudacaoLocal(ctx: ContextoSaudacao): { visual: string; voz
       templateVoz = sortearItem(BANCO_FRASES.saidaFinal.diasNormais)
       textoVisual = `Excelente noite, ${nome}!`
     }
+  }
+
+  // Tempero do dia: no máximo UM assunto por saudação. Clima e feriado já
+  // chegam aqui filtrados — o clima só quando merece comentário, o feriado só
+  // na véspera e no retorno. Se veio, é porque vale falar.
+  // feriadoFrase, não feriadoResumo: o resumo é a instrução que vai para a IA e
+  // sairia falada ao pé da letra ("Deseje um excelente feriado ao se despedir").
+  const tempero = ctx.feriadoFrase || ctx.climaFrase
+  if (tempero) {
+    templateVoz = `${templateVoz} ${tempero}`
+  }
+
+  // A mensagem visual SEMPRE termina com emoji: são eles que sobem animados na
+  // tela quando a IA fala. Sem emoji na frase, não há nada para subir.
+  const EMOJIS_POR_TIPO: Record<string, string[]> = {
+    Entrada: ["☀️", "🚀", "💪", "✨", "🌤️", "😄", "⭐"],
+    "Saída Almoço": ["🍽️", "😋", "🥗", "☕", "🍴"],
+    "Retorno Almoço": ["💼", "⚡", "🔥", "💪", "🎯"],
+    Saída: ["🌙", "⭐", "👏", "🎉", "❤️", "✨"],
+  }
+  const paleta = EMOJIS_POR_TIPO[tipo] || ["✨", "💪", "🎉"]
+  const sorteados = new Set<string>()
+  sorteados.add(sortearItem(paleta))
+  if (Math.random() < 0.6) sorteados.add(sortearItem(paleta))
+  // O emoji do tempo só entra se o clima foi de fato o assunto da fala. Quando
+  // o feriado ganha a vez, uma nuvem solta na tela não quer dizer nada.
+  if (ctx.climaEmoji && tempero && tempero === ctx.climaFrase) {
+    sorteados.add(ctx.climaEmoji)
+  }
+
+  textoVisual = `${textoVisual} ${[...sorteados].join("")}`
+
+  // Véspera de feriado: "até amanhã" seguido de "amanhã é feriado" se contradiz.
+  if (ctx.vesperaDeFeriado) {
+    // Sem \b no fim: "ã" não é caractere de palavra em regex JS, então a borda
+    // nunca casaria e a despedida contraditória passava batido.
+    templateVoz = templateVoz
+      .replace(/[,\s]*\be\s+at[ée]\s+amanh[ãa]\s*[!.]?/gi, "!")
+      .replace(/\s*,?\s*at[ée]\s+amanh[ãa]\s*[!.]?/gi, "")
+      .replace(/\s+/g, " ")
+      .replace(/[\s,;]+$/, "")
+      .trim()
+    // Tirar a despedida pode deixar a frase sem pontuação no fim.
+    if (templateVoz && !/[!?.]$/.test(templateVoz)) templateVoz += "!"
   }
 
   const vozBruta = aplicarNomes(templateVoz, nome, apelido)

@@ -13,6 +13,142 @@ type ListenerVoz = (falando: boolean) => void
 const ouvintesVoz = new Set<ListenerVoz>()
 let falandoAtual = false
 
+// ============================================================
+// NÍVEL DE VOZ EM TEMPO REAL
+// ============================================================
+// A onda do rodapé cresce e encolhe junto com a voz. Para isso o áudio passa
+// por um AnalyserNode da Web Audio API e viramos a amplitude num número 0..1.
+//
+// Quando a análise não é possível (fallback de speechSynthesis, que não tem
+// elemento de áudio para grampear, ou navegador que recusa o grafo), caímos
+// numa oscilação sintética: continua parecendo fala, sem depender de nada.
+type ListenerNivel = (nivel: number) => void
+const ouvintesNivel = new Set<ListenerNivel>()
+let nivelAtual = 0
+
+let audioCtx: AudioContext | null = null
+let analisador: AnalyserNode | null = null
+let fonteAtual: MediaElementAudioSourceNode | null = null
+let bufferAnalise: Uint8Array | null = null
+let loopNivelId: number | null = null
+let inicioSintetico = 0
+let usandoSintetico = false
+
+function notificarNivel(nivel: number) {
+  const arredondado = Math.round(nivel * 100) / 100
+  if (Math.abs(arredondado - nivelAtual) < 0.03) return
+  nivelAtual = arredondado
+  ouvintesNivel.forEach((cb) => {
+    try {
+      cb(arredondado)
+    } catch {}
+  })
+}
+
+function pararMedicaoNivel() {
+  if (loopNivelId !== null) {
+    cancelAnimationFrame(loopNivelId)
+    loopNivelId = null
+  }
+  usandoSintetico = false
+  nivelAtual = -1 // força a notificação do zero abaixo
+  notificarNivel(0)
+}
+
+function medirNivel() {
+  loopNivelId = requestAnimationFrame(medirNivel)
+
+  if (usandoSintetico || !analisador || !bufferAnalise) {
+    // Oscilação suave e viva, em torno de um nível médio de fala.
+    const t = (performance.now() - inicioSintetico) / 1000
+    const onda = 0.5 + 0.28 * Math.sin(t * 7.5) + 0.16 * Math.sin(t * 3.1)
+    notificarNivel(Math.min(1, Math.max(0.12, onda)))
+    return
+  }
+
+  analisador.getByteTimeDomainData(bufferAnalise as Uint8Array<ArrayBuffer>)
+
+  // RMS do sinal: 128 é o silêncio no domínio do tempo em 8 bits.
+  let soma = 0
+  for (let i = 0; i < bufferAnalise.length; i++) {
+    const desvio = (bufferAnalise[i] - 128) / 128
+    soma += desvio * desvio
+  }
+  const rms = Math.sqrt(soma / bufferAnalise.length)
+
+  // Fala normalizada fica num RMS baixo; 3.2 abre a faixa sem estourar.
+  notificarNivel(Math.min(1, rms * 3.2))
+}
+
+function iniciarMedicaoSintetica() {
+  usandoSintetico = true
+  inicioSintetico = performance.now()
+  if (loopNivelId === null) medirNivel()
+}
+
+/**
+ * Liga o analisador no elemento de áudio. Devolve false quando não dá — nesse
+ * caso o áudio continua tocando normalmente, só sem medição real.
+ */
+function ligarAnalisador(audio: HTMLAudioElement): boolean {
+  try {
+    if (typeof window === "undefined") return false
+    const Ctor =
+      window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!Ctor) return false
+
+    if (!audioCtx) audioCtx = new Ctor()
+    if (audioCtx.state === "suspended") void audioCtx.resume()
+
+    // Solta o grafo da fala anterior. Cada batida cria um elemento de áudio
+    // novo, e sem isto os nós iriam se empilhando no contexto o dia inteiro.
+    try {
+      fonteAtual?.disconnect()
+      analisador?.disconnect()
+    } catch {}
+    fonteAtual = null
+    analisador = null
+
+    // createMediaElementSource redireciona a saída do elemento para o grafo:
+    // se ele for criado, é obrigatório conectar até o destination, senão o
+    // áudio fica mudo. Por isso as duas conexões vêm logo em seguida.
+    const fonte = audioCtx.createMediaElementSource(audio)
+    const node = audioCtx.createAnalyser()
+    node.fftSize = 256
+    node.smoothingTimeConstant = 0.75
+    fonte.connect(node)
+    node.connect(audioCtx.destination)
+
+    fonteAtual = fonte
+    analisador = node
+    bufferAnalise = new Uint8Array(node.frequencyBinCount)
+    usandoSintetico = false
+    return true
+  } catch (e) {
+    console.warn("[TTS] análise de áudio indisponível, usando oscilação sintética:", e)
+    analisador = null
+    bufferAnalise = null
+    return false
+  }
+}
+
+/**
+ * Hook React com a intensidade da voz agora (0 = silêncio, 1 = pico).
+ */
+export function useNivelVoz(): number {
+  const [nivel, setNivel] = useState(nivelAtual > 0 ? nivelAtual : 0)
+
+  useEffect(() => {
+    const handler = (n: number) => setNivel(n)
+    ouvintesNivel.add(handler)
+    return () => {
+      ouvintesNivel.delete(handler)
+    }
+  }, [])
+
+  return nivel
+}
+
 function notificarEstadoVoz(falando: boolean) {
   falandoAtual = falando
   ouvintesVoz.forEach((cb) => {
@@ -20,6 +156,8 @@ function notificarEstadoVoz(falando: boolean) {
       cb(falando)
     } catch {}
   })
+
+  if (!falando) pararMedicaoNivel()
 }
 
 /**
@@ -75,7 +213,11 @@ function falarComNavegador(texto: string) {
     utterance.rate = 1.05
     utterance.pitch = 1.0
 
-    utterance.onstart = () => notificarEstadoVoz(true)
+    utterance.onstart = () => {
+      notificarEstadoVoz(true)
+      // speechSynthesis não expõe o áudio, então a onda usa oscilação sintética.
+      iniciarMedicaoSintetica()
+    }
     utterance.onend = () => notificarEstadoVoz(false)
     utterance.onerror = () => notificarEstadoVoz(false)
 
@@ -96,7 +238,14 @@ function falarComNavegador(texto: string) {
 }
 
 function tocarElementoAudio(audio: HTMLAudioElement): Promise<void> {
-  audio.onplay = () => notificarEstadoVoz(true)
+  audio.onplay = () => {
+    notificarEstadoVoz(true)
+    if (ligarAnalisador(audio)) {
+      if (loopNivelId === null) medirNivel()
+    } else {
+      iniciarMedicaoSintetica()
+    }
+  }
   audio.onended = () => {
     notificarEstadoVoz(false)
     audioAtual = null

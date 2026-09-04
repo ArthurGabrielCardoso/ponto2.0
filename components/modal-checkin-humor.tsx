@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import { ArrowRight } from "lucide-react"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
+import { EmojisFlutuantes } from "@/components/emojis-flutuantes"
+import { OlhosRobo, type HumorOlhos } from "@/components/olhos-robo"
 import { obterSaudacaoInteligente } from "@/lib/ia-saudacao"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import "../app/ponto-registrado/ponto-batido.css"
@@ -152,11 +154,24 @@ export function ModalCheckinHumor({
   nome,
   onConfirmar,
   onFechar,
-  duracaoSegundos = 15,
+  // Dois minutos: tempo de a pessoa ler, pensar e escolher sem a tela sumir
+  // debaixo do dedo dela.
+  duracaoSegundos = 120,
 }: ModalCheckinHumorProps) {
   const [selecionado, setSelecionado] = useState<string | null>(null)
+  const [emojiEscolhido, setEmojiEscolhido] = useState<string>("")
   const [tempoRestante, setTempoRestante] = useState(duracaoSegundos)
   const primeiroNome = (nome || "Colega").split(" ")[0]
+
+  // Cada opção do banco vira uma cara. Sem escolha, os olhos ficam neutros e
+  // curiosos, olhando em volta enquanto esperam.
+  const humorDosOlhos: HumorOlhos = !selecionado
+    ? "padrao"
+    : selecionado === "cafe"
+    ? "cansado"
+    : ["leao", "foco", "superacao", "coragem", "resiliencia"].includes(selecionado)
+    ? "bravo" // olhar de determinação, não de raiva: é o "modo fera" da opção
+    : "feliz"
 
   // Sorteia 5 opções variadas sempre que abrir para nunca ser repetitivo
   const opcoesExibidas = useMemo(() => {
@@ -181,6 +196,7 @@ export function ModalCheckinHumor({
   const handleEscolher = async (opcao: OpcaoHumorCompleta) => {
     if (selecionado) return // Evita duplo clique
     setSelecionado(opcao.id)
+    setEmojiEscolhido(opcao.emoji)
     if (onConfirmar) onConfirmar(opcao.id, opcao.titulo)
 
     try {
@@ -216,13 +232,45 @@ export function ModalCheckinHumor({
       {/* 2. SUPERFÍCIE GLASSMORPHISM DE TELA INTEIRA */}
       <div className="absolute inset-0 w-full h-full backdrop-blur-[60px] backdrop-saturate-[180%] bg-slate-950/50 border-none flex flex-col justify-between p-4 sm:p-8 lg:p-10 transition-all duration-700">
         {/* TOPO: Logo limpa e Indicador de Tempo */}
-        <div className="relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto shrink-0">
+        {/* O rodapé foi todo para cá: a faixa do topo estava vazia à direita da
+            logo, e o espaço que ele ocupava embaixo era o que faltava para os
+            cards respirarem. */}
+        <div className="relative z-10 flex items-center justify-between gap-4 w-full max-w-5xl mx-auto shrink-0">
           <Image src="/logo.png" alt="Logo" width={140} height={70} priority style={{ height: "auto" }} />
-          <span className="text-xs text-white/60 font-medium">Tempo: {tempoRestante}s</span>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="hidden text-xs text-white/50 sm:inline">
+              Toque em qualquer opção para registrar
+            </span>
+            <span className="text-xs font-medium text-white/60">
+              {`${Math.floor(tempoRestante / 60)}:${String(tempoRestante % 60).padStart(2, "0")}`}
+            </span>
+            <button
+              type="button"
+              onClick={onFechar}
+              className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white/80 transition-all hover:bg-white/20 hover:text-white active:scale-95 sm:text-sm"
+            >
+              <span>Pular</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* ÁREA CENTRAL: Pergunta e Cards dos Emojis */}
         <div className="relative z-10 flex-1 flex flex-col justify-center max-w-5xl mx-auto w-full px-2 my-auto">
+          {/* Olhos da IA espelhando o humor escolhido — é a tela onde eles
+              mais fazem sentido: a pergunta é sobre como a pessoa está. */}
+          <div className="mb-5 flex justify-center md:justify-start">
+            <OlhosRobo
+              humor={humorDosOlhos}
+              largura={150}
+              cor="#c69e6b"
+              ocioso={!selecionado}
+              piscar
+              reagirAVoz
+            />
+          </div>
+
           {/* Título e Subtítulo Limpos */}
           <div className={`space-y-1.5 text-center md:text-left mb-6 transition-all duration-500 ${selecionado ? "opacity-30" : "opacity-100"}`}>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white drop-shadow-sm">
@@ -286,22 +334,13 @@ export function ModalCheckinHumor({
           </div>
         </div>
 
-        {/* RODAPÉ: Botão de Pular Limpo */}
-        <div className="relative z-10 flex items-center justify-between w-full max-w-5xl mx-auto pt-2 shrink-0">
-          <button
-            type="button"
-            onClick={onFechar}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white/80 hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 transition-all cursor-pointer active:scale-95"
-          >
-            <span>Pular</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
 
-          <span className="text-xs text-white/50">Toque em qualquer opção para registrar</span>
-        </div>
       </div>
 
-      {/* 3. ONDA LUMINOSA AZUL NA BORDA BOTTOM ENQUANTO A VOZ ESTIVER FALANDO */}
+      {/* 3. EMOJI DA OPÇÃO ESCOLHIDA SUBINDO ENQUANTO A IA RESPONDE */}
+      <EmojisFlutuantes texto={emojiEscolhido} quantidade={10} />
+
+      {/* 4. ONDA LUMINOSA AZUL NA BORDA BOTTOM ENQUANTO A VOZ ESTIVER FALANDO */}
       <AnimacaoVozIa />
     </div>
   )

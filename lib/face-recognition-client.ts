@@ -16,6 +16,8 @@
  *    como ImageBitmap, transfere pro worker (zero-copy), aguarda resposta
  */
 
+import type { Funcionario } from "@/lib/types"
+
 let worker: Worker | null = null
 let nextMsgId = 0
 const pending = new Map<
@@ -27,6 +29,17 @@ let modelsLoaded = false
 let modelsLoading: Promise<void> | null = null
 let descriptorCount = 0
 let tfBackend = ""
+let funcionariosCarregados: Funcionario[] = []
+
+// Duas resoluções de captura, casadas com os dois passes do worker.
+//
+// O passe de identificação é raro e precisa de pixels: o recorte do rosto vai
+// para a rede de descritor 128D, e frame pequeno demais gera descritor pobre —
+// que é o que fazia o reconhecimento falhar com a pessoa parada na frente da
+// câmera. O passe de sorriso roda o tempo todo e só precisa da expressão,
+// então segue barato.
+const CAPTURA_RECONHECIMENTO = { largura: 256, altura: 192 }
+const CAPTURA_SORRISO = { largura: 192, altura: 144 }
 // Depois de uma queda de GPU, o resto da sessão roda em WASM.
 let backendForcado: "wasm" | undefined
 
@@ -152,7 +165,11 @@ function ehFalhaDeGpu(erro: unknown): boolean {
  * Captura um frame do video como ImageBitmap (transferível).
  * Usa resizeWidth/Height quando suportado pra já vir downscaled do browser.
  */
-async function videoToBitmap(video: HTMLVideoElement): Promise<ImageBitmap> {
+async function videoToBitmap(
+  video: HTMLVideoElement,
+  largura: number,
+  altura: number
+): Promise<ImageBitmap> {
   // Verificar se o vídeo está pronto
   if (!video.videoWidth || !video.videoHeight || video.readyState < 2) {
     throw new Error("Vídeo não está pronto para captura")
@@ -161,8 +178,8 @@ async function videoToBitmap(video: HTMLVideoElement): Promise<ImageBitmap> {
   try {
     // Opções de resize são nativas e rápidas (quando suportadas).
     return await createImageBitmap(video, {
-      resizeWidth: 192,
-      resizeHeight: 144,
+      resizeWidth: largura,
+      resizeHeight: altura,
       resizeQuality: "low",
     } as ImageBitmapOptions)
   } catch {
@@ -209,6 +226,7 @@ export async function loadDescriptors(): Promise<number> {
 
   const { buscarFuncionarios } = await import("@/lib/supabase")
   const funcionarios = await buscarFuncionarios()
+  funcionariosCarregados = funcionarios
 
   const payload = funcionarios.map((f) => ({
     id: f.id,
@@ -230,7 +248,7 @@ export async function detectFaceFast(
 ): Promise<{ x: number; y: number; width: number; height: number } | null> {
   if (!modelsLoaded) return null
   try {
-    const bitmap = await videoToBitmap(video)
+    const bitmap = await videoToBitmap(video, CAPTURA_SORRISO.largura, CAPTURA_SORRISO.altura)
     return await call("detectFast", { bitmap }, [bitmap])
   } catch (e) {
     console.error("[face-client] detectFaceFast erro:", e)
@@ -255,7 +273,11 @@ export async function recognizeFace(
 ): Promise<RecognitionResult | null> {
   if (!modelsLoaded) return null
   try {
-    const bitmap = await videoToBitmap(video)
+    const bitmap = await videoToBitmap(
+      video,
+      CAPTURA_RECONHECIMENTO.largura,
+      CAPTURA_RECONHECIMENTO.altura
+    )
     return await call("recognize", { bitmap, smileThreshold }, [bitmap])
   } catch (e) {
     console.error("[face-client] recognizeFace erro:", e)
@@ -272,7 +294,7 @@ export async function detectSmileOnly(
 ): Promise<{ isSmiling: boolean; confidence: number } | null> {
   if (!modelsLoaded) return null
   try {
-    const bitmap = await videoToBitmap(video)
+    const bitmap = await videoToBitmap(video, CAPTURA_SORRISO.largura, CAPTURA_SORRISO.altura)
     return await call("smileOnly", { bitmap, smileThreshold }, [bitmap])
   } catch (e) {
     console.error("[face-client] detectSmileOnly erro:", e)
@@ -333,6 +355,17 @@ export async function extractDescriptorFromBase64(
     await initModels()
     return await tentar()
   }
+}
+
+/**
+ * Funcionários da última chamada de loadDescriptors().
+ *
+ * É a mesma lista que alimentou o FaceMatcher e já traz a grade de horários de
+ * cada um — o suficiente para diagnosticar o ponto sem ir ao banco na hora da
+ * batida.
+ */
+export function getFuncionariosCarregados(): Funcionario[] {
+  return funcionariosCarregados
 }
 
 export function isReady(): boolean {

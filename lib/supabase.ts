@@ -651,11 +651,17 @@ export async function registrarMultiplosPontos(
 }
 
 // Registrar ponto de um funcionário consultando a sequência real no banco de dados
+//
+// `registrosHojeConhecidos` evita ida ao banco no caminho crítico: a tela de ponto
+// já carregou os registros do dia enquanto a pessoa lia "Sorria para registrar",
+// e o cooldown de 60s só pode ser disparado por um registro de hoje. Sem ele o
+// comportamento é o de antes (busca no banco).
 export async function registrarPonto(
   funcionarioId: string,
   nomeFuncionario: string,
   tipoForcado?: string,
-  localizacao?: CoordenadasLocalizacao | null
+  localizacao?: CoordenadasLocalizacao | null,
+  registrosHojeConhecidos?: RegistroPonto[]
 ): Promise<ResultadoRegistroPonto> {
   try {
     if (!isSupabaseAvailable()) {
@@ -666,8 +672,14 @@ export async function registrarPonto(
     const agora = new Date()
     const dataHoraIso = agora.toISOString()
 
-    // 1. Buscar último registro para checagem de cooldown (60 segundos)
-    const ultimoRegistro = await buscarUltimoRegistroPonto(funcionarioId)
+    // 1. Registros de hoje — servem tanto para o cooldown quanto para deduzir o
+    // próximo tipo. Uma consulta só, em vez das duas que existiam aqui.
+    const registrosHoje =
+      registrosHojeConhecidos ?? (await buscarRegistrosHoje(funcionarioId))
+
+    // buscarRegistrosHoje devolve em ordem crescente: o último é o mais recente.
+    const ultimoRegistro: RegistroPonto | null =
+      registrosHoje.length > 0 ? registrosHoje[registrosHoje.length - 1] : null
 
     if (ultimoRegistro) {
       const tsUltimo = new Date(ultimoRegistro.data_hora).getTime()
@@ -691,8 +703,7 @@ export async function registrarPonto(
 
     let tipo = tipoForcado
 
-    // 2. Buscar todos os registros de hoje no Supabase para saber o próximo tipo com precisão
-    const registrosHoje = await buscarRegistrosHoje(funcionarioId)
+    // 2. Deduzir o próximo tipo a partir dos registros já carregados acima
     const quantidadeHoje = registrosHoje.length
 
     if (!tipo) {

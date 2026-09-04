@@ -1,8 +1,44 @@
 import { NextRequest, NextResponse } from "next/server"
 import { gerarSaudacaoLocal, ContextoSaudacao } from "@/lib/gerador-falas"
+import { obterClimaAtual } from "@/lib/clima"
+import { obterContextoFeriados } from "@/lib/feriados"
+
+export const dynamic = "force-dynamic"
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 const DEFAULT_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile"
+
+/**
+ * Mesma regra do cliente, repetida aqui porque a rota precisa se virar sozinha
+ * quando o cliente não manda nada. `instrucao` vai para o prompt da IA;
+ * `frase` é o que o catálogo local fala, e as duas nunca se misturam.
+ */
+function resumirFeriadosServidor(
+  referencia: Date,
+  tipoPonto: string
+): { instrucao?: string; frase?: string; vespera?: boolean } {
+  try {
+    const f = obterContextoFeriados(referencia)
+    const tipo = (tipoPonto || "").toLowerCase()
+    const ehUltimaBatida = tipo.includes("saída") && !tipo.includes("almoço")
+    const ehPrimeiraBatida = tipo.includes("entrada")
+
+    if (ehUltimaBatida && f.amanha && f.amanha.classe === "feriado") {
+      return {
+        instrucao: `Amanhã é feriado (${f.amanha.nome}). Deseje um excelente feriado ao se despedir, em poucas palavras.`,
+        frase: `Amanhã é ${f.amanha.nome}, então excelente feriado para você!`,
+        vespera: true,
+      }
+    }
+    if (ehPrimeiraBatida && f.ontem && f.ontem.classe === "feriado") {
+      return {
+        instrucao: `Ontem foi feriado (${f.ontem.nome}). Pergunte de forma leve e rápida como foi o feriado.`,
+        frase: `E aí, como foi o feriado?`,
+      }
+    }
+  } catch {}
+  return {}
+}
 
 export async function POST(req: NextRequest) {
   let ctx: ContextoSaudacao
@@ -15,9 +51,38 @@ export async function POST(req: NextRequest) {
       dataHora: body.dataHora ? new Date(body.dataHora) : new Date(),
       trabalhaSabado: !!body.trabalhaSabado,
       humor: body.humor,
+      climaResumo: body.climaResumo,
+      climaFrase: body.climaFrase,
+      climaEmoji: body.climaEmoji,
+      feriadoResumo: body.feriadoResumo,
+      feriadoFrase: body.feriadoFrase,
+      vesperaDeFeriado: body.vesperaDeFeriado,
     }
   } catch {
     ctx = { nome: "Colaborador", tipoPonto: "Entrada", dataHora: new Date(), trabalhaSabado: false }
+  }
+
+  // O cliente normalmente já manda o contexto do dia (ele mantém em cache).
+  // Quando não manda, a rota busca — ambos vêm de cache em memória, então isso
+  // não custa rede na maior parte das vezes.
+  if (!ctx.feriadoResumo && !ctx.feriadoFrase) {
+    const feriado = resumirFeriadosServidor(ctx.dataHora || new Date(), ctx.tipoPonto)
+    ctx.feriadoResumo = feriado.instrucao
+    ctx.feriadoFrase = feriado.frase
+    ctx.vesperaDeFeriado = feriado.vespera
+  }
+  if (!ctx.climaResumo) {
+    const tipoLower = (ctx.tipoPonto || "").toLowerCase()
+    const ehAlmoco = tipoLower.includes("almoço") || tipoLower.includes("almoco")
+    const clima = ehAlmoco ? null : await obterClimaAtual().catch(() => null)
+    // Só entra quando o tempo merece comentário — e nem sempre, senão a mesma
+    // frase de agasalho sai em toda batida do dia inteiro. Nas idas e voltas do
+    // almoço, nunca.
+    if (clima?.relevante && Math.random() < 0.5) {
+      ctx.climaResumo = clima.resumo
+      ctx.climaFrase = clima.frase ?? undefined
+      ctx.climaEmoji = clima.emoji
+    }
   }
 
   const groqApiKey = process.env.GROQ_API_KEY
@@ -53,10 +118,15 @@ REGRAS INEGOCIÁVEIS DA CULTURA DA EMPRESA:
    - Seja caloroso(a), alegre e motivador(a). Se for sexta-feira, celebre a energia positiva, mas mantendo o foco em realizar um trabalho excelente.
    - Use o primeiro nome da pessoa ou apelidos carinhosos comuns em português (ex: Jéssica -> Jé, Arthur -> Artur / Tu, Julliana -> Ju, etc.).
    - Se um humor de check-in foi informado (ex: "cafe", "energia", "excelente"), encoraje com positividade e força de vontade.
-4. REGRA CRÍTICA DE VOZ (SEM EMOJIS):
+4. CLIMA E FERIADOS (SÓ QUANDO O CONTEXTO TROUXER, NUNCA INVENTE):
+   - O contexto só traz clima quando o tempo MERECE comentário (chuva forte, frio ou calor forte). Quando vier, comente em POUCAS PALAVRAS e de forma útil ("leva guarda-chuva", "capriche no agasalho", "bebe bastante água"). NUNCA invente temperatura, previsão ou chance de chuva: use SOMENTE os números do contexto.
+   - Quando o contexto NÃO trouxer clima, é PROIBIDO falar do tempo. Dia ameno não é assunto.
+   - O contexto só traz feriado em dois momentos: na despedida da véspera e no retorno depois dele. Siga exatamente a instrução que vier. NUNCA anuncie "o próximo feriado é em X dias" e NUNCA invente feriado ou data.
+   - Use no MÁXIMO UM desses dois assuntos por saudação. A saudação tem que continuar curta: nunca vire boletim do tempo.
+5. REGRA CRÍTICA DE VOZ (SEM EMOJIS):
    - O campo "voz" NUNCA DEVE CONTER EMOJIS OU SÍMBOLOS MUSICAIS (nada de 🎶, 🚀, 😄, etc.), pois o sintetizador de voz do Google lê os emojis como palavras ("nota musical", "foguete"). No campo "voz", use APENAS texto falado natural e melódico em português!
-   - No campo "visual" você PODE usar emojis normalmente para ficar bonito na tela.
-5. FORMATO DE SAÍDA JSON OBRIGATÓRIO:
+   - No campo "visual" é OBRIGATÓRIO usar de 1 a 3 emojis que combinem com a mensagem, o horário e o clima — eles sobem animados na tela do tablet. Escolha emojis expressivos e variados (❤️, 🚀, ☀️, 🌧️, ☕, 💪, 🎉, 🌙, ⭐, 🍽️, 🔥, 😄...), nunca sempre os mesmos.
+6. FORMATO DE SAÍDA JSON OBRIGATÓRIO:
    Retorne estritamente um objeto JSON válido com dois campos:
    {
      "visual": "Texto curto e nobre com emoji para exibir na tela (ex: 'Excelente dia, Jé! 🚀' ou 'Excelente final de semana, Arthur! 🎉')",
@@ -70,6 +140,8 @@ REGRAS INEGOCIÁVEIS DA CULTURA DA EMPRESA:
 - Horário: ${horaFormatada}
 - Trabalha no Sábado: ${ctx.trabalhaSabado ? "Sim" : "Não"}
 - Humor informado: ${ctx.humor || "Não informado"}
+- Clima em Mogi das Cruzes: ${ctx.climaResumo || "Tempo sem nada digno de nota — NÃO fale sobre o tempo"}
+- Feriados: ${ctx.feriadoResumo || "Nada a dizer sobre feriado — NÃO fale sobre feriado"}
 
 Gere o JSON com "visual" e "voz" seguindo estritamente as regras da empresa.`
 
