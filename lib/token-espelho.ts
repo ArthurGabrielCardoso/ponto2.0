@@ -15,7 +15,20 @@ import crypto from "crypto"
  * Módulo de servidor — o segredo nunca vai para o navegador.
  */
 
-const VALIDADE_PADRAO_MS = 10 * 60 * 1000
+/**
+ * Oito horas — um turno.
+ *
+ * Começou em 10 minutos, pensando só em limitar o estrago de um QR fotografado.
+ * Mas o uso principal é o contador de almoço: a pessoa lê o QR ao sair, sobe
+ * para comer e volta a olhar 40 minutos depois. Com 10 minutos o link morria no
+ * meio do almoço, que é justamente quando ela precisa dele.
+ *
+ * O que se ganha em conveniência se paga em janela de exposição: quem
+ * fotografar a tela no instante da batida consegue ver as horas daquela pessoa
+ * até o fim do turno. Para um time pequeno onde só colegas estão perto do
+ * tablet, é uma troca aceitável — mas é uma troca, e está aqui escrita.
+ */
+const VALIDADE_PADRAO_MS = 8 * 60 * 60 * 1000
 
 export interface DadosEspelho {
   funcionarioId: string

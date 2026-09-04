@@ -6,6 +6,8 @@ import {
   minutosParaHoras,
   obterHorasEsperadasParaData,
 } from "@/lib/utils-ponto"
+import { obterGradeDoDia, horaParaMinutos } from "@/lib/logica-ponto-inteligente"
+import { ContadorAlmoco } from "@/components/contador-almoco"
 import type { RegistroPonto, Funcionario } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -24,6 +26,49 @@ export const dynamic = "force-dynamic"
  */
 function comInicialMaiuscula(texto: string): string {
   return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : texto
+}
+
+/**
+ * Almoço em andamento: a última saída para almoço de hoje sem um retorno depois
+ * dela. A duração sai da grade do funcionário — a mesma conta que o tablet usa
+ * na proteção de tela, para os dois nunca discordarem do horário de volta.
+ */
+function obterAlmocoEmAndamento(registros: RegistroPonto[], funcionario: Funcionario | null) {
+  const hoje = new Date()
+  const ehHoje = (iso: string) => {
+    const d = new Date(iso)
+    return (
+      d.getFullYear() === hoje.getFullYear() &&
+      d.getMonth() === hoje.getMonth() &&
+      d.getDate() === hoje.getDate()
+    )
+  }
+
+  const doDia = registros
+    .filter((r) => ehHoje(r.data_hora))
+    .sort((a, b) => a.data_hora.localeCompare(b.data_hora))
+
+  const tipo = (r: RegistroPonto) => (r.tipo || "").toLowerCase()
+  const saida = doDia.filter((r) => tipo(r).includes("saída") && tipo(r).includes("almoço")).pop()
+  const retorno = doDia.filter((r) => tipo(r).includes("retorno")).pop()
+
+  if (!saida) return null
+  if (retorno && new Date(retorno.data_hora) > new Date(saida.data_hora)) return null
+
+  const saidaEm = new Date(saida.data_hora)
+  const grade = obterGradeDoDia(funcionario?.horarios, saidaEm)
+  const duracao = horaParaMinutos(grade.retornoAlmoco) - horaParaMinutos(grade.saidaAlmoco)
+  const minutos = duracao > 0 ? duracao : 60
+
+  const retornoPrevisto = new Date(saidaEm.getTime() + minutos * 60 * 1000)
+  const hhmm = (d: Date) =>
+    d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+
+  return {
+    retornoPrevistoMs: retornoPrevisto.getTime(),
+    horaSaida: hhmm(saidaEm),
+    horaRetorno: hhmm(retornoPrevisto),
+  }
 }
 
 function Aviso({ titulo, texto }: { titulo: string; texto: string }) {
@@ -84,6 +129,7 @@ export default async function EspelhoDePonto({
     return { data, regs, resumo }
   })
 
+  const almoco = obterAlmocoEmAndamento(registros, funcionario)
   const primeiroNome = (dados.nome || funcionario?.nome || "").split(" ")[0]
   const mes = comInicialMaiuscula(
     agora.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
@@ -97,6 +143,15 @@ export default async function EspelhoDePonto({
           <h1 className="mt-1 text-2xl font-bold">{primeiroNome}</h1>
           <p className="mt-0.5 text-sm text-white/50">{mes}</p>
         </header>
+
+        {almoco && (
+          <ContadorAlmoco
+            retornoPrevistoMs={almoco.retornoPrevistoMs}
+            horaSaida={almoco.horaSaida}
+            horaRetorno={almoco.horaRetorno}
+            urlLembrete={`/api/lembrete-almoco?token=${encodeURIComponent(token)}&retorno=${almoco.retornoPrevistoMs}`}
+          />
+        )}
 
         <section className="mb-5 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-white/10 bg-white/5 p-3.5">

@@ -18,9 +18,10 @@ interface QrEspelhoProps {
  * toque que pausa o retorno automático de 15s, já que sacar o celular,
  * desbloquear e abrir a câmera não cabe nesse tempo.
  *
- * O token é curto e assinado no servidor: um QR fotografado por outra pessoa
- * vence em minutos. Se ESPELHO_SECRET não estiver configurado no ambiente, o
- * componente simplesmente não aparece.
+ * O token é assinado no servidor e vale um turno — tempo suficiente para a
+ * pessoa consultar o contador de almoço depois de subir para comer. Se
+ * ESPELHO_SECRET não estiver configurado no ambiente, o componente simplesmente
+ * não aparece.
  */
 export function QrEspelho({ funcionarioId, nome, onAbrirFechar }: QrEspelhoProps) {
   const [imagem, setImagem] = useState<string | null>(null)
@@ -95,7 +96,7 @@ export function QrEspelho({ funcionarioId, nome, onAbrirFechar }: QrEspelhoProps
             <div className="text-center">
               <p className="text-base font-bold text-slate-900">Aponte a câmera do celular</p>
               <p className="mt-1 text-xs text-slate-500">
-                O link é pessoal e expira em 10 minutos.
+                O link é pessoal e vale até o fim do seu turno.
               </p>
             </div>
             <button
