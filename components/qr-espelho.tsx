@@ -11,7 +11,7 @@ interface QrEspelhoProps {
 }
 
 /**
- * QR que leva a pessoa ao próprio espelho de ponto.
+ * QR que leva a pessoa ao próprio ponto, no celular dela.
  *
  * Fica pequeno num canto porque a tela de sucesso já é cheia e porque quem só
  * quer bater o ponto não deveria ter que desviar dele. Tocar amplia — e é o
@@ -41,7 +41,7 @@ export function QrEspelho({ funcionarioId, nome, onAbrirFechar }: QrEspelhoProps
         const dados = await res.json()
         if (cancelado || !dados?.configurado || !dados?.token) return
 
-        const url = `${window.location.origin}/espelho/${dados.token}`
+        const url = `${window.location.origin}/meu-ponto/${dados.token}`
         const png = await QRCode.toDataURL(url, {
           margin: 1,
           width: 320,
@@ -73,13 +73,13 @@ export function QrEspelho({ funcionarioId, nome, onAbrirFechar }: QrEspelhoProps
         type="button"
         onClick={alternar}
         className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-xl border border-white/25 bg-black/40 p-2 backdrop-blur-md transition-all hover:bg-black/60 active:scale-95"
-        aria-label="Ver meu espelho de ponto"
+        aria-label="Ver o meu ponto no celular"
       >
         <img src={imagem} alt="" className="h-14 w-14 rounded-md bg-white p-0.5" />
         <span className="pr-1 text-left text-[11px] font-medium leading-tight text-white/80">
-          Meu espelho
+          Meu ponto
           <br />
-          de ponto
+          no celular
         </span>
       </button>
 
@@ -92,7 +92,7 @@ export function QrEspelho({ funcionarioId, nome, onAbrirFechar }: QrEspelhoProps
             className="mx-4 flex flex-col items-center gap-4 rounded-2xl bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <img src={imagem} alt="QR do espelho de ponto" className="h-64 w-64" />
+            <img src={imagem} alt="QR para abrir o seu ponto no celular" className="h-64 w-64" />
             <div className="text-center">
               <p className="text-base font-bold text-slate-900">Aponte a câmera do celular</p>
               <p className="mt-1 text-xs text-slate-500">
