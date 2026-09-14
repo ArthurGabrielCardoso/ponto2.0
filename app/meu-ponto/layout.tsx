@@ -9,10 +9,10 @@ export const metadata: Metadata = {
  * Esta é a única tela do sistema que abre no celular da pessoa, fora da
  * clínica, em telefone que não controlamos. Daí as duas decisões aqui:
  *
- * - `colorScheme: light` fixo. O tablet tem tema escuro porque fica num
- *   ambiente controlado; um celular no modo escuro do sistema inverteria os
- *   vidros claros e o resultado seria um cinza sujo. Aqui a tela é sempre
- *   clara, em qualquer telefone.
+ * - Esquema de cor fixo. A tela pinta o próprio fundo e o próprio texto, e
+ *   travar isso impede que o modo escuro do sistema, ou o "inverter cores" do
+ *   telefone, mexa no que já está resolvido — a película teal com vidro escuro
+ *   por cima sai igual em qualquer aparelho.
  * - `overscroll-none` para a página não "descolar" no topo ao puxar, que é o
  *   que denuncia site dentro de navegador.
  */

@@ -53,14 +53,14 @@ export function ContadorAlmoco({
   const acabando = !passou && restanteMs <= 10 * 60 * 1000
 
   const tema = passou
-    ? { borda: "border-rose-300", rotulo: "text-rose-700", numero: "text-rose-600", ponto: "bg-rose-500" }
+    ? { borda: "border-rose-400/50", rotulo: "text-rose-200", numero: "text-rose-300", ponto: "bg-rose-400" }
     : acabando
-      ? { borda: "border-amber-300", rotulo: "text-amber-800", numero: "text-amber-600", ponto: "bg-amber-500" }
-      : { borda: "border-[#c69e6b]/60", rotulo: "text-[#a67c4e]", numero: "text-teal-700", ponto: "bg-teal-500" }
+      ? { borda: "border-amber-400/50", rotulo: "text-amber-200", numero: "text-amber-300", ponto: "bg-amber-400" }
+      : { borda: "border-[#c69e6b]/50", rotulo: "text-[#e6c79a]", numero: "text-teal-200", ponto: "bg-teal-300" }
 
   return (
     <section
-      className={`mb-2.5 rounded-lg border ${tema.borda} bg-white/85 p-5 shadow-lg backdrop-blur-xl`}
+      className={`mb-2.5 rounded-lg border ${tema.borda} bg-slate-950/35 p-5 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -76,11 +76,11 @@ export function ContadorAlmoco({
             {formatar(segundos)}
           </p>
 
-          <p className="mt-2.5 text-sm text-slate-600">
+          <p className="mt-2.5 text-sm text-white/75">
             {passou ? "Deveria ter voltado às " : "Volte às "}
-            <strong className="font-bold text-slate-900">{horaRetorno}</strong>
+            <strong className="font-bold text-white">{horaRetorno}</strong>
           </p>
-          <p className="text-xs text-slate-400">saiu às {horaSaida}</p>
+          <p className="text-xs text-white/45">saiu às {horaSaida}</p>
         </div>
 
         {/* A mesma ilustração de almoço da tela de ponto batido. */}

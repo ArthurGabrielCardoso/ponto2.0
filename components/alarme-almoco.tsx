@@ -160,7 +160,7 @@ export function AlarmeAlmoco({ retornoPrevistoMs, minutosAntes = 5 }: AlarmeAlmo
 
   if (estado === "indisponivel") {
     return (
-      <p className="mt-4 text-center text-xs text-slate-500">
+      <p className="mt-4 text-center text-xs text-white/55">
         Este navegador não deixou preparar o som do alarme.
       </p>
     )
@@ -177,7 +177,7 @@ export function AlarmeAlmoco({ retornoPrevistoMs, minutosAntes = 5 }: AlarmeAlmo
         className={`flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3.5 text-sm font-bold transition active:scale-[0.98] ${
           estado === "desligado"
             ? "text-white shadow-md"
-            : "border border-[#c69e6b]/50 bg-[#c69e6b]/15 text-[#7d5a31]"
+            : "border border-[#c69e6b]/50 bg-[#c69e6b]/20 text-[#e6c79a]"
         }`}
         style={
           estado === "desligado"
@@ -192,7 +192,7 @@ export function AlarmeAlmoco({ retornoPrevistoMs, minutosAntes = 5 }: AlarmeAlmo
             : "Alarme armado · toque para cancelar"}
       </button>
 
-      <p className="mt-2 text-center text-[11px] leading-relaxed text-slate-500">
+      <p className="mt-2 text-center text-[11px] leading-relaxed text-white/55">
         {estado === "desligado"
           ? "O som toca no seu celular, mesmo com a tela bloqueada."
           : "Deixe esta aba aberta. Se fechar o navegador, o alarme não toca."}

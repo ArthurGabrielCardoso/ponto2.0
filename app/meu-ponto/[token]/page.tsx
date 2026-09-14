@@ -106,11 +106,13 @@ function FundoVitall() {
 }
 
 /**
- * Cartão claro sobre a película teal. Canto reto de propósito — o arredondado
- * grande dava cara de aplicativo de banco; o reto acompanha melhor o desenho
- * dos cartões da tela de ponto batido.
+ * Vidro escuro sobre a película teal, do mesmo jeito que os cartões da tela de
+ * ponto batido — lá também é uma superfície escura translúcida sobre o fundo
+ * colorido, não um cartão branco. Canto reto de propósito: o arredondado
+ * grande dava cara de aplicativo de banco.
  */
-const VIDRO = "rounded-lg border border-white/70 bg-white/85 shadow-lg backdrop-blur-xl"
+const VIDRO =
+  "rounded-lg border border-white/20 bg-slate-950/35 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl"
 
 function Aviso({ titulo, texto }: { titulo: string; texto: string }) {
   return (
@@ -125,9 +127,10 @@ function Aviso({ titulo, texto }: { titulo: string; texto: string }) {
             height={66}
             priority
             className="mx-auto h-auto w-[132px]"
+            style={{ filter: "brightness(0) invert(1) drop-shadow(0 2px 6px rgba(0,0,0,0.3))" }}
           />
-          <h1 className="mt-5 text-lg font-bold text-slate-900">{titulo}</h1>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">{texto}</p>
+          <h1 className="mt-5 text-lg font-bold text-white">{titulo}</h1>
+          <p className="mt-2 text-sm leading-relaxed text-white/65">{texto}</p>
         </div>
       </main>
     </>
@@ -215,16 +218,21 @@ export default async function MeuPonto({ params }: { params: Promise<{ token: st
       <main className="min-h-screen px-4 pb-10 pt-5">
         <div className="mx-auto w-full max-w-md">
           <header className="mb-5 flex items-center justify-between gap-3">
-            <span className="rounded-md bg-white/90 px-2.5 py-1.5 shadow-sm backdrop-blur">
-              <Image
-                src="/logo.png"
-                alt="Vitall Odontologia & Saúde Integrativa"
-                width={112}
-                height={56}
-                priority
-                className="h-auto w-[112px]"
-              />
-            </span>
+            <Image
+              src="/logo.png"
+              alt="Vitall Odontologia & Saúde Integrativa"
+              width={120}
+              height={60}
+              priority
+              className="h-auto w-[120px]"
+              style={{
+                // A logo e teal e dourada; o teal dela some na pelicula teal do
+                // fundo. Sem um card branco atras, a saida e usar a versao
+                // solida em branco — o dourado da marca aparece no resto da
+                // tela, entao a identidade nao se perde.
+                filter: "brightness(0) invert(1) drop-shadow(0 2px 6px rgba(0,0,0,0.3))",
+              }}
+            />
             <span className="rounded-md border border-[#e6c79a]/60 bg-[#c69e6b]/25 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur">
               Meu Ponto
             </span>
@@ -248,18 +256,18 @@ export default async function MeuPonto({ params }: { params: Promise<{ token: st
           {/* O saldo do mês é o número que a pessoa abre o celular para ver,
               então ganha a largura toda e o corpo maior. */}
           <section className={`mb-2.5 ${VIDRO} p-5`}>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#a67c4e]">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#e6c79a]">
               Saldo do mês
             </p>
             <p
               className={`mt-1 text-4xl font-bold tabular-nums ${
-                saldoNegativo ? "text-rose-600" : "text-teal-700"
+                saldoNegativo ? "text-rose-300" : "text-teal-200"
               }`}
             >
               {saldoNegativo ? "−" : "+"}
               {minutosParaHoras(Math.abs(saldoAcumulado))}
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-white/60">
               {saldoAcumulado === 0
                 ? "Você está em dia com a sua carga horária."
                 : saldoNegativo
@@ -270,23 +278,23 @@ export default async function MeuPonto({ params }: { params: Promise<{ token: st
 
           <section className="mb-5 grid grid-cols-2 gap-2.5">
             <div className={`${VIDRO} p-4`}>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[#a67c4e]">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#e6c79a]">
                 Dias com ponto
               </p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{dias.length}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-white">{dias.length}</p>
             </div>
             <div className={`${VIDRO} p-4`}>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[#a67c4e]">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#e6c79a]">
                 Horas no mês
               </p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
+              <p className="mt-1 text-2xl font-bold tabular-nums text-white">
                 {minutosParaHoras(trabalhadasNoMes)}
               </p>
             </div>
           </section>
 
           {dias.length === 0 ? (
-            <p className={`${VIDRO} p-6 text-center text-sm text-slate-500`}>
+            <p className={`${VIDRO} p-6 text-center text-sm text-white/60`}>
               Nenhuma batida registrada neste mês.
             </p>
           ) : (
