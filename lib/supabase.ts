@@ -661,7 +661,13 @@ export async function registrarPonto(
   nomeFuncionario: string,
   tipoForcado?: string,
   localizacao?: CoordenadasLocalizacao | null,
-  registrosHojeConhecidos?: RegistroPonto[]
+  registrosHojeConhecidos?: RegistroPonto[],
+  /**
+   * Instante real da batida. Só é usado pela fila offline, que grava horas
+   * depois do fato: o registro tem que carimbar quando a pessoa bateu, nunca
+   * quando a internet voltou.
+   */
+  dataHoraForcada?: string
 ): Promise<ResultadoRegistroPonto> {
   try {
     if (!isSupabaseAvailable()) {
@@ -669,8 +675,8 @@ export async function registrarPonto(
       throw new Error("Supabase indisponível")
     }
 
-    const agora = new Date()
-    const dataHoraIso = agora.toISOString()
+    const agora = dataHoraForcada ? new Date(dataHoraForcada) : new Date()
+    const dataHoraIso = dataHoraForcada || agora.toISOString()
 
     // 1. Registros de hoje — servem tanto para o cooldown quanto para deduzir o
     // próximo tipo. Uma consulta só, em vez das duas que existiam aqui.

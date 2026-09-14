@@ -243,9 +243,19 @@ export async function loadDescriptors(): Promise<number> {
 /**
  * Detecção rápida (só bounding box). Muito barata.
  */
+export interface RostoDetectado {
+  x: number
+  y: number
+  width: number
+  height: number
+  /** Centro do rosto no frame, de 0 a 1. */
+  centroX: number
+  centroY: number
+}
+
 export async function detectFaceFast(
   video: HTMLVideoElement
-): Promise<{ x: number; y: number; width: number; height: number } | null> {
+): Promise<RostoDetectado | null> {
   if (!modelsLoaded) return null
   try {
     const bitmap = await videoToBitmap(video, CAPTURA_SORRISO.largura, CAPTURA_SORRISO.altura)
