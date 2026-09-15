@@ -373,10 +373,10 @@ function Screensaver({
         </p>
       </div>
 
-      {/* Centro: Olhos do Robô Reduzidos + Saudação em Linha Única */}
-      <div className="text-center text-white px-4 ss-fade w-full max-w-2xl flex flex-col items-center">
-        {/* Rosto do robô reduzido e proporcional */}
-        <div className="flex justify-center -mt-2 sm:-mt-3 mb-4">
+      {/* Centro: Olhos do Robô e Saudação Elevados + Maior Espaçamento */}
+      <div className="text-center text-white px-4 ss-fade w-full max-w-3xl flex flex-col items-center -translate-y-12 sm:-translate-y-16 md:-translate-y-20">
+        {/* Rosto do robô reduzido e com maior espaçamento para o texto */}
+        <div className="flex justify-center mb-7 sm:mb-9 md:mb-10">
           <div
             className="rounded-3xl px-6 py-3.5 sm:px-8 sm:py-4"
             style={{
@@ -512,6 +512,22 @@ interface RecognizedPerson {
 /** Tipos de batida, na ordem do expediente. Usado pelo ciclo do modo teste. */
 const CICLO_TIPOS_TESTE = ["Entrada", "Saída Almoço", "Retorno Almoço", "Saída"] as const
 
+export interface ConfiguracaoFiltroCamera {
+  brilho: number
+  contraste: number
+  saturacao: number
+  opacidadeBlush: number
+  opacidadeRingLight: number
+}
+
+export const FILTRO_CAMERA_PADRAO: ConfiguracaoFiltroCamera = {
+  brilho: 1.22,
+  contraste: 1.08,
+  saturacao: 1.28,
+  opacidadeBlush: 0.85,
+  opacidadeRingLight: 0.35,
+}
+
 interface TelaRegistrarPontoProps {
   /**
    * Modo teste: mesma tela, mesmo reconhecimento, mesma IA — só que sem as
@@ -538,6 +554,38 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const rafRef = useRef<number | null>(null)
   const inactivityTimerRef = useRef<number | null>(null)
   const successTimeoutRef = useRef<number | null>(null)
+
+  // Configuração interativa dos filtros de beleza (ajustável no modo teste e persistido no tablet)
+  const [filtroCamera, setFiltroCamera] = useState<ConfiguracaoFiltroCamera>(FILTRO_CAMERA_PADRAO)
+  const [filtroSalvo, setFiltroSalvo] = useState(false)
+
+  // Carregar filtros salvos no tablet via localStorage
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem("vitall_filtro_camera")
+      if (salvo) {
+        const parsed = JSON.parse(salvo)
+        setFiltroCamera((prev) => ({ ...prev, ...parsed }))
+      }
+    } catch {}
+  }, [])
+
+  const handleSalvarFiltroCamera = () => {
+    try {
+      localStorage.setItem("vitall_filtro_camera", JSON.stringify(filtroCamera))
+      setFiltroSalvo(true)
+      setTimeout(() => setFiltroSalvo(false), 2500)
+    } catch {}
+  }
+
+  const handleRestaurarFiltroPadrao = () => {
+    setFiltroCamera(FILTRO_CAMERA_PADRAO)
+    try {
+      localStorage.removeItem("vitall_filtro_camera")
+      setFiltroSalvo(true)
+      setTimeout(() => setFiltroSalvo(false), 2500)
+    } catch {}
+  }
 
   const [modelsReady, setModelsReady] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState("Carregando sistema...")
@@ -1732,7 +1780,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
   return (
     <div className="relative min-h-screen w-full bg-secondary">
-      {/* Vídeo em tela cheia - invertido horizontalmente para efeito espelho natural */}
+      {/* Vídeo em tela cheia - invertido horizontalmente para efeito espelho natural com filtros dinâmicos */}
       <video
         ref={videoRef}
         autoPlay
@@ -1742,13 +1790,16 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         style={{
           transform: "scaleX(-1) translateZ(0)",
           WebkitTransform: "scaleX(-1) translateZ(0)",
+          filter: `brightness(${filtroCamera.brilho}) contrast(${filtroCamera.contraste}) saturate(${filtroCamera.saturacao})`,
+          WebkitFilter: `brightness(${filtroCamera.brilho}) contrast(${filtroCamera.contraste}) saturate(${filtroCamera.saturacao})`,
         }}
       />
 
       {/* Camada 1: Iluminação Ring Light - Clareia o rosto no centro */}
       <div
-        className="absolute inset-0 pointer-events-none z-10 mix-blend-screen opacity-35"
+        className="absolute inset-0 pointer-events-none z-10 mix-blend-screen transition-opacity duration-150"
         style={{
+          opacity: filtroCamera.opacidadeRingLight,
           background:
             "radial-gradient(circle at 50% 45%, rgba(255, 235, 235, 0.7) 0%, rgba(255, 215, 225, 0.35) 45%, transparent 80%)",
         }}
@@ -1756,8 +1807,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
       {/* Camada 2: Blush & Glow Rosé - Realça maçãs do rosto e lábios */}
       <div
-        className="absolute inset-0 pointer-events-none z-10 mix-blend-soft-light opacity-85"
+        className="absolute inset-0 pointer-events-none z-10 mix-blend-soft-light transition-opacity duration-150"
         style={{
+          opacity: filtroCamera.opacidadeBlush,
           background:
             "radial-gradient(ellipse at 50% 48%, rgba(251, 113, 133, 0.45) 0%, rgba(244, 63, 94, 0.25) 40%, rgba(225, 29, 72, 0.10) 70%, transparent 100%)",
         }}
@@ -1974,7 +2026,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       )}
 
       {modoTeste && barraAberta && (
-        <div className="fixed top-3 right-3 z-[60] w-[248px] rounded-xl border border-fuchsia-400/50 bg-slate-950/85 p-3 text-white shadow-2xl backdrop-blur-xl">
+        <div className="fixed top-3 right-3 z-[60] w-[260px] max-h-[90vh] overflow-y-auto rounded-xl border border-fuchsia-400/50 bg-slate-950/90 p-3 text-white shadow-2xl backdrop-blur-xl no-scrollbar">
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="rounded-md bg-fuchsia-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
               Modo teste
@@ -2045,6 +2097,117 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               ? "Atenção: as batidas estão indo para o registro real."
               : "Nada é gravado. O ponto real não é afetado."}
           </p>
+
+          {/* Ajuste Fino dos Filtros de Câmera & Beleza */}
+          <div className="mt-2.5 pt-2 border-t border-white/15 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-pink-300">
+                Filtros de Beleza
+              </span>
+              {filtroSalvo && (
+                <span className="text-[10px] font-bold text-emerald-400 animate-pulse">
+                  Salvo! ✓
+                </span>
+              )}
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                <span>Brilho</span>
+                <span className="font-mono font-bold text-white">{filtroCamera.brilho.toFixed(2)}x</span>
+              </div>
+              <input
+                type="range"
+                min="0.90"
+                max="1.50"
+                step="0.02"
+                value={filtroCamera.brilho}
+                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, brilho: parseFloat(e.target.value) }))}
+                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                <span>Corado / Saturação</span>
+                <span className="font-mono font-bold text-white">{filtroCamera.saturacao.toFixed(2)}x</span>
+              </div>
+              <input
+                type="range"
+                min="0.90"
+                max="1.60"
+                step="0.02"
+                value={filtroCamera.saturacao}
+                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, saturacao: parseFloat(e.target.value) }))}
+                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                <span>Contraste</span>
+                <span className="font-mono font-bold text-white">{filtroCamera.contraste.toFixed(2)}x</span>
+              </div>
+              <input
+                type="range"
+                min="0.90"
+                max="1.25"
+                step="0.01"
+                value={filtroCamera.contraste}
+                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, contraste: parseFloat(e.target.value) }))}
+                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                <span>Blush Rosé (Bochechas/Boca)</span>
+                <span className="font-mono font-bold text-white">{Math.round(filtroCamera.opacidadeBlush * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={filtroCamera.opacidadeBlush}
+                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, opacidadeBlush: parseFloat(e.target.value) }))}
+                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                <span>Luz Ring Light Central</span>
+                <span className="font-mono font-bold text-white">{Math.round(filtroCamera.opacidadeRingLight * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="0.8"
+                step="0.05"
+                value={filtroCamera.opacidadeRingLight}
+                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, opacidadeRingLight: parseFloat(e.target.value) }))}
+                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <div className="flex gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={handleSalvarFiltroCamera}
+                className="flex-1 rounded-md bg-pink-600 hover:bg-pink-500 px-2 py-1 text-[11px] font-bold text-white shadow-sm transition-colors"
+              >
+                Salvar como padrão
+              </button>
+              <button
+                type="button"
+                onClick={handleRestaurarFiltroPadrao}
+                className="rounded-md border border-white/20 px-2 py-1 text-[10px] text-white/70 hover:bg-white/10"
+              >
+                Restaurar
+              </button>
+            </div>
+          </div>
 
           <button
             type="button"
