@@ -373,12 +373,12 @@ function Screensaver({
         </p>
       </div>
 
-      {/* Centro: Olhos do Robô e Saudação Elevados + Maior Espaçamento */}
-      <div className="text-center text-white px-4 ss-fade w-full max-w-3xl flex flex-col items-center -translate-y-12 sm:-translate-y-16 md:-translate-y-20">
-        {/* Rosto do robô reduzido e com maior espaçamento para o texto */}
-        <div className="flex justify-center mb-7 sm:mb-9 md:mb-10">
+      {/* Centro: Olhos do Robô Ampliados e Saudação Posicionada Harmônica */}
+      <div className="text-center text-white px-4 ss-fade w-full max-w-3xl flex flex-col items-center -translate-y-5 sm:-translate-y-7 md:-translate-y-9">
+        {/* Rosto do robô ampliado e com maior espaçamento para o texto */}
+        <div className="flex justify-center mb-7 sm:mb-8 md:mb-9">
           <div
-            className="rounded-3xl px-6 py-3.5 sm:px-8 sm:py-4"
+            className="rounded-3xl px-7 py-4 sm:px-9 sm:py-4.5"
             style={{
               background: "rgba(3, 32, 38, 0.45)",
               boxShadow:
@@ -387,7 +387,7 @@ function Screensaver({
             }}
           >
             <OlhosRobo
-              largura={195}
+              largura={235}
               cor="#ffffff"
               olhar={olhar ?? { x: 0, y: 0 }}
               ocioso={false}
@@ -518,6 +518,8 @@ export interface ConfiguracaoFiltroCamera {
   saturacao: number
   opacidadeBlush: number
   opacidadeRingLight: number
+  offsetHorizontal: number
+  zoom: number
 }
 
 export const FILTRO_CAMERA_PADRAO: ConfiguracaoFiltroCamera = {
@@ -526,6 +528,8 @@ export const FILTRO_CAMERA_PADRAO: ConfiguracaoFiltroCamera = {
   saturacao: 1.28,
   opacidadeBlush: 0.85,
   opacidadeRingLight: 0.35,
+  offsetHorizontal: 0,
+  zoom: 1.06,
 }
 
 interface TelaRegistrarPontoProps {
@@ -871,17 +875,36 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // então nunca é buscado na hora da batida.
       aquecerContextoDia()
 
-      // 1. Iniciar câmera
+      // 1. Iniciar câmera em alta definição (resolução nativa máxima até 4K / Full HD)
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+          video: {
+            width: { ideal: 3840, min: 1280 },
+            height: { ideal: 2160, min: 720 },
+            facingMode: "user",
+            frameRate: { ideal: 30, max: 60 },
+          },
           audio: false,
+        }).catch(async () => {
+          return await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              facingMode: "user",
+            },
+            audio: false,
+          })
+        }).catch(async () => {
+          return await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          })
         })
         if (!mounted) return
         if (videoRef.current) {
           videoRef.current.srcObject = stream
           setCameraActive(true)
-          console.log("📹 Câmera ativada!")
+          console.log("📷 Câmera ativada em alta definição!")
         }
       } catch (error) {
         console.error("Erro ao acessar câmera:", error)
@@ -1779,8 +1802,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const completedPerson = recognizedPerson?.registroCompleto ? recognizedPerson : null
 
   return (
-    <div className="relative min-h-screen w-full bg-secondary">
-      {/* Vídeo em tela cheia - invertido horizontalmente para efeito espelho natural com filtros dinâmicos */}
+    <div className="relative min-h-screen w-full bg-secondary overflow-hidden">
+      {/* Vídeo em tela cheia - invertido horizontalmente para efeito espelho natural com filtros dinâmicos e centralização */}
       <video
         ref={videoRef}
         autoPlay
@@ -1788,8 +1811,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         muted
         className="absolute inset-0 h-full w-full object-cover camera-espelho"
         style={{
-          transform: "scaleX(-1) translateZ(0)",
-          WebkitTransform: "scaleX(-1) translateZ(0)",
+          transform: `scaleX(-1) scale(${filtroCamera.zoom ?? 1.06}) translateX(${filtroCamera.offsetHorizontal ?? 0}%) translateZ(0)`,
+          WebkitTransform: `scaleX(-1) scale(${filtroCamera.zoom ?? 1.06}) translateX(${filtroCamera.offsetHorizontal ?? 0}%) translateZ(0)`,
           filter: `brightness(${filtroCamera.brilho}) contrast(${filtroCamera.contraste}) saturate(${filtroCamera.saturacao})`,
           WebkitFilter: `brightness(${filtroCamera.brilho}) contrast(${filtroCamera.contraste}) saturate(${filtroCamera.saturacao})`,
         }}
@@ -2187,6 +2210,38 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                 step="0.05"
                 value={filtroCamera.opacidadeRingLight}
                 onChange={(e) => setFiltroCamera((prev) => ({ ...prev, opacidadeRingLight: parseFloat(e.target.value) }))}
+                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                <span>Centralizar Câmera (Tablet)</span>
+                <span className="font-mono font-bold text-white">{(filtroCamera.offsetHorizontal ?? 0) > 0 ? `+${filtroCamera.offsetHorizontal}` : filtroCamera.offsetHorizontal ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="-25"
+                max="25"
+                step="1"
+                value={filtroCamera.offsetHorizontal ?? 0}
+                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, offsetHorizontal: parseFloat(e.target.value) }))}
+                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                <span>Zoom / Enquadramento</span>
+                <span className="font-mono font-bold text-white">{(filtroCamera.zoom ?? 1.06).toFixed(2)}x</span>
+              </div>
+              <input
+                type="range"
+                min="1.00"
+                max="1.35"
+                step="0.02"
+                value={filtroCamera.zoom ?? 1.06}
+                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, zoom: parseFloat(e.target.value) }))}
                 className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
               />
             </div>
