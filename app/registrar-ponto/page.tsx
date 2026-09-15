@@ -590,6 +590,17 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    */
   const INTERVALO_AQUECIMENTO_PESADO_MS = 25 * 1000
   /**
+   * Faixa de horas em que vale a pena manter a rede pesada acordada.
+   *
+   * Aquecer as três da manhã não serve a ninguém: não há batida, e o custo
+   * (GPU acordando de 25 em 25 segundos) corre igual. Limitando ao expediente
+   * — com folga generosa nas pontas, porque gente chega cedo e sai tarde —
+   * sobra cerca de um terço do trabalho de aquecimento, sem que uma única
+   * batida real fique fria.
+   */
+  const HORA_INICIO_AQUECIMENTO = 6
+  const HORA_FIM_AQUECIMENTO = 22
+  /**
    * Quantos passes completos seguidos precisam falhar para a identificação cair.
    *
    * Antes era 1: um único frame ruim — a cabeça virando alguns graus, um borrão
@@ -859,7 +870,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // Fica aqui dentro, e não antes do detector, porque aquecimento
             // nunca pode atrasar quem chegou — se há rosto no quadro, este
             // trecho sequer é alcançado.
-            if (Date.now() - ultimoPassePesadoRef.current > INTERVALO_AQUECIMENTO_PESADO_MS) {
+            const hora = new Date().getHours()
+            const dentroDoExpediente =
+              hora >= HORA_INICIO_AQUECIMENTO && hora < HORA_FIM_AQUECIMENTO
+            if (
+              dentroDoExpediente &&
+              Date.now() - ultimoPassePesadoRef.current > INTERVALO_AQUECIMENTO_PESADO_MS
+            ) {
               await recognizeFace(video, SMILE_THRESHOLD)
               ultimoPassePesadoRef.current = Date.now()
             }
@@ -872,6 +889,17 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           if (!rostoNaEsperaRef.current) {
             rostoNaEsperaRef.current = true
             aquecerConexaoSupabase()
+            // O cronômetro da tentativa começa aqui, no instante em que alguém
+            // aparece — não quando é identificado. O tempo até identificar é
+            // justamente uma das medidas que interessam.
+            //
+            // E vem ANTES da ociosidade de propósito: a telemetria guarda os
+            // valores dentro da tentativa em curso, então qualquer medida
+            // enviada antes de `iniciarTentativa` é descartada em silêncio.
+            // Foi esse o bug que deixou ms_ocioso_antes vazio nas três
+            // primeiras batidas com o código novo — justamente a coluna que
+            // diria de quanto em quanto tempo vale a pena aquecer.
+            telemetria.iniciarTentativa()
             // Quanto tempo a rede pesada passou sem rodar antes desta pessoa
             // chegar. É a variável que o Arthur descreveu na mão ("duas
             // seguidas é rápido, de três em três horas é lento") virando
@@ -881,10 +909,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                 ? null
                 : Date.now() - ultimoPassePesadoRef.current
             )
-            // O cronômetro da tentativa começa aqui, no instante em que alguém
-            // aparece — não quando é identificado. O tempo até identificar é
-            // justamente uma das medidas que interessam.
-            telemetria.iniciarTentativa()
           }
 
           // Centro do rosto (0..1) vira direção do olhar (-1..1). O eixo

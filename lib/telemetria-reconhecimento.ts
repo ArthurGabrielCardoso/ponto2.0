@@ -175,6 +175,12 @@ export function registrarPerdaDeIdentidade() {
  * daquilo era alguém decidindo encostar o dedo.
  */
 export function registrarToque() {
+  // Quem toca antes de ser enxergado não tem tentativa aberta ainda, e o
+  // toque caía no vazio — foi o que deixou ms_ate_tocar em branco nas três
+  // primeiras batidas com o código novo. Abrir a tentativa aqui resolve, e o
+  // ms_ate_tocar sai zero, que é a leitura correta: ninguém foi visto antes
+  // do dedo encostar.
+  if (!atual) iniciarTentativa()
   if (atual && atual.tocouEm === undefined) atual.tocouEm = performance.now()
 }
 
