@@ -132,3 +132,15 @@ body,
 #__next {
   height: 100%;
 }
+
+/* Espelhamento horizontal da câmera (efeito espelho natural) */
+.camera-espelho,
+video.camera-espelho {
+  -webkit-transform: scaleX(-1) translateZ(0) !important;
+  -moz-transform: scaleX(-1) translateZ(0) !important;
+  -ms-transform: scaleX(-1) translateZ(0) !important;
+  -o-transform: scaleX(-1) translateZ(0) !important;
+  transform: scaleX(-1) translateZ(0) !important;
+  -webkit-transform-origin: center center !important;
+  transform-origin: center center !important;
+}

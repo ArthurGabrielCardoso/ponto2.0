@@ -369,10 +369,10 @@ function Screensaver({
         </p>
       </div>
 
-      {/* Centro: Robô à Esquerda e Balão de Fala à Direita (alinhados ao meio) */}
-      <div className="text-white px-4 ss-fade w-full max-w-4xl flex flex-col md:flex-row items-center justify-center gap-6 sm:gap-8">
+      {/* Centro exato da tela: Rosto do robô 100% centralizado */}
+      <div className="relative flex flex-col items-center justify-center text-white px-4 ss-fade">
         {/* Rosto do robô com presença ampliada e vidro nobre */}
-        <div className="flex justify-center shrink-0">
+        <div className="flex justify-center -mt-2 sm:-mt-4">
           <div
             className="rounded-[2.5rem] px-8 py-5 sm:px-11 sm:py-6"
             style={{
@@ -392,8 +392,9 @@ function Screensaver({
           </div>
         </div>
 
-        {/* Balão de Fala Dinâmico no lado direito, alinhado ao centro vertical do robô */}
-        <div className="w-full max-w-md flex items-center">
+        {/* Balão de Fala Inteligente: em md+, fica à direita do robô via absolute,
+            alinhado verticalmente ao meio da face, SEM deslocar o rosto do robô nem 1px do centro! */}
+        <div className="w-full max-w-sm mt-4 md:mt-0 md:absolute md:left-[calc(100%+1.25rem)] md:top-1/2 md:-translate-y-1/2 md:w-[320px] lg:w-[360px] z-20 pointer-events-auto">
           <BalaoFalaRobo
             pessoaNaEspera={pessoaNaEspera ?? null}
             falaIa={falaIa}
@@ -1697,14 +1698,17 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
   return (
     <div className="relative min-h-screen w-full bg-secondary">
-      {/* Vídeo em tela cheia - invertido horizontalmente para não ficar espelhado */}
+      {/* Vídeo em tela cheia - invertido horizontalmente para efeito espelho natural */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="absolute inset-0 h-full w-full object-cover -scale-x-100"
-        style={{ transform: "scaleX(-1)" }}
+        className="absolute inset-0 h-full w-full object-cover camera-espelho"
+        style={{
+          transform: "scaleX(-1) translateZ(0)",
+          WebkitTransform: "scaleX(-1) translateZ(0)",
+        }}
       />
 
       {/* Logo no topo esquerdo */}
