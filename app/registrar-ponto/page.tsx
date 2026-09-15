@@ -45,6 +45,7 @@ import {
 } from "@/lib/fila-pontos"
 import { OlhosRobo } from "@/components/olhos-robo"
 import { agendarLembretesAlmoco, cancelarLembretesAlmoco, sincronizarSessoesAlmocoDoDia, type InfoAlmocoAtivo } from "@/lib/lembretes-almoco"
+import { ModalQRAlmoco } from "@/components/modal-qr-almoco"
 import "../ponto-registrado/ponto-batido.css"
 import {
   initModels,
@@ -177,7 +178,13 @@ function MolduraTopo({ duracaoMs }: { duracaoMs: number }) {
 }
 
 // Componente individual com cronômetro regressivo ao vivo (Design Dourado e horizontal)
-function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
+function BadgeAlmocoCronometro({
+  item,
+  onClick,
+}: {
+  item: InfoAlmocoAtivo
+  onClick?: () => void
+}) {
   const [tempoRestanteStr, setTempoRestanteStr] = useState("")
   const [passouDoTempo, setPassouDoTempo] = useState(false)
 
@@ -210,7 +217,13 @@ function BadgeAlmocoCronometro({ item }: { item: InfoAlmocoAtivo }) {
   }, [item.retornoPrevistoMs])
 
   return (
-    <div className="flex items-center justify-between gap-3 bg-black/25 rounded-md px-3.5 py-2.5 border border-white/25 text-xs shadow-md">
+    <div
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick?.()
+      }}
+      className="flex items-center justify-between gap-3 bg-black/25 hover:bg-black/45 cursor-pointer rounded-md px-3.5 py-2.5 border border-white/25 text-xs shadow-md transition-all active:scale-[0.98]"
+    >
       <div className="flex flex-col min-w-0 pr-2">
         <span className="font-bold text-sm text-white tracking-tight leading-tight truncate">{item.primeiroNome}</span>
         <span className="text-[12px] text-amber-100 font-medium mt-0.5 whitespace-nowrap">
@@ -236,11 +249,13 @@ function Screensaver({
   onTap,
   onSegredo,
   olhar,
+  onSelecionarAlmoco,
 }: {
   onTap: () => void
   onSegredo: () => void
   /** Direção em que a pessoa detectada está. null = ninguém à vista. */
   olhar: { x: number; y: number } | null
+  onSelecionarAlmoco?: (item: InfoAlmocoAtivo) => void
 }) {
   // Gesto escondido: 10 toques no canto inferior direito abrem o modo teste.
   // Fica no canto e exige repetição justamente para ninguém cair nele sem querer.
@@ -343,8 +358,8 @@ function Screensaver({
       `}</style>
 
       {/* Canto Superior Esquerdo: Relógio Menor e Discreto */}
-      <div className="absolute top-6 left-6 sm:top-8 sm:left-8 z-30 pointer-events-none ss-fade">
-        <p className="text-3xl sm:text-4xl font-light text-white/90 tracking-wider" style={{ fontVariantNumeric: "tabular-nums" }}>
+      <div className="absolute top-5 left-6 sm:top-7 sm:left-8 z-30 pointer-events-none ss-fade">
+        <p className="text-2xl sm:text-[28px] font-light text-white/90 tracking-wider" style={{ fontVariantNumeric: "tabular-nums" }}>
           {time}
         </p>
       </div>
@@ -355,31 +370,19 @@ function Screensaver({
             tablet parado parecer acordado e convidar a pessoa a chegar.
             
             O painel escuro em volta é o que transforma dois retângulos em um
-            ROSTO. Solto sobre o teal, o par de olhos flutuava sem âncora; com
-            uma superfície própria por trás, o cérebro fecha a figura sozinho e
-            passa a ler uma cara olhando para quem chega. */}
-        <div className="mb-6 flex justify-center sm:mb-8">
+            ROSTO. Reduzido e elevado para dar mais respiro à tela. */}
+        <div className="-mt-3 sm:-mt-5 mb-4 sm:mb-6 flex justify-center -translate-y-2">
           <div
-            className="rounded-[2rem] px-10 py-7 sm:px-12 sm:py-8"
+            className="rounded-2xl px-6 py-3.5 sm:px-7 sm:py-4"
             style={{
-              background: "rgba(3, 32, 38, 0.38)",
+              background: "rgba(3, 32, 38, 0.42)",
               boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.10), 0 12px 34px -14px rgba(0,0,0,0.55)",
-              border: "1px solid rgba(255,255,255,0.10)",
+                "inset 0 1px 0 rgba(255,255,255,0.12), 0 10px 28px -10px rgba(0,0,0,0.55)",
+              border: "1px solid rgba(255,255,255,0.12)",
             }}
           >
-            {/* `ocioso={false}` sempre: os olhos ficam PARADOS e só se mexem
-                quando alguém se mexe na frente da câmera. Vagar sozinho dava
-                movimento o tempo todo, e movimento constante esconde o
-                movimento que significa alguma coisa — não dava para perceber
-                que ele estava seguindo a pessoa, porque ele nunca parava.
-                
-                `piscadinha` também sai: a piscada de um olho só fecha uma
-                pálpebra por 230 ms, e no meio de uma cara parada isso lê como
-                careta, não como charme. O piscar normal, dos dois olhos,
-                continua — é o que mantém a cara viva. */}
             <OlhosRobo
-              largura={215}
+              largura={210}
               cor="#ffffff"
               olhar={olhar ?? { x: 0, y: 0 }}
               ocioso={false}
@@ -451,7 +454,10 @@ function Screensaver({
             <div className="flex items-center gap-3 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
               {funcionariosEmAlmoco.map((f) => (
                 <div key={f.funcionarioId} className="shrink-0 w-72 sm:w-80">
-                  <BadgeAlmocoCronometro item={f} />
+                  <BadgeAlmocoCronometro
+                    item={f}
+                    onClick={() => onSelecionarAlmoco?.(f)}
+                  />
                 </div>
               ))}
             </div>
@@ -568,7 +574,17 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const prefetchSaudacaoRef = useRef<{
     chave: string
     promise: Promise<RespostaSaudacao>
+    fallback: RespostaSaudacao
   } | null>(null)
+
+  // Modal de validação facial e QR Code ao tocar no card de almoço
+  const [funcionarioAlmocoModal, setFuncionarioAlmocoModal] = useState<InfoAlmocoAtivo | null>(null)
+  const funcionarioAlmocoModalRef = useRef<InfoAlmocoAtivo | null>(null)
+  const [pessoaDetectadaModal, setPessoaDetectadaModal] = useState<{ id: string; nome: string } | null>(null)
+
+  useEffect(() => {
+    funcionarioAlmocoModalRef.current = funcionarioAlmocoModal
+  }, [funcionarioAlmocoModal])
 
   // === Controles do modo teste ===
   // O loop de reconhecimento é criado uma vez só, então handleRegistro enxerga
@@ -663,11 +679,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    * quem está quase pronta, e curto o bastante para ninguém perceber.
    */
   const TETO_SAUDACAO_IA_MS = 120
-  // A câmera frontal NÃO está espelhada no vídeo: quem está à esquerda de quem
-  // olha o tablet aparece à direita do frame. Por isso o eixo X é invertido
-  // para os olhos acompanharem a pessoa, e não o espelho dela. Se no tablet o
-  // olhar sair ao contrário, é só trocar este sinal.
-  const INVERTER_OLHAR_X = true
+  // Acompanhamento direto do usuário: sem inversão artificial para que quando
+  // a pessoa for para a direita, os olhos olhem para a direita dela.
+  const INVERTER_OLHAR_X = false
   // De quanto em quanto tempo procurar um rosto enquanto a tela está em espera.
   const INTERVALO_DETECCAO_OCIOSA_MS = 180
   /**
@@ -943,25 +957,34 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     const chave = `${func.id}|${tipo}`
     if (prefetchSaudacaoRef.current?.chave === chave) return
 
+    // 1. Gera IMEDIATAMENTE a saudação local instantânea (0ms)
+    const fallback = gerarSaudacaoLocalDoDia({
+      nome: func.nome,
+      tipoPonto: tipo,
+      dataHora: new Date(),
+      trabalhaSabado: !!func.horarios?.sabado?.ativo,
+    })
+
+    // 2. Pré-carrega no mesmo instante o áudio TTS da saudação local.
+    // Durante o 1,5s em que o colaborador sorri, o áudio já fica baixado em memória no cache.
+    void prepararVozSaudacao(fallback.voz)
+
+    // 3. Em paralelo, dispara a tentativa de saudação inteligente com Groq
     const promessaSaudacao = obterSaudacaoInteligente({
       nome: func.nome,
       tipoPonto: tipo,
       dataHora: new Date(),
       trabalhaSabado: !!func.horarios?.sabado?.ativo,
-    }).catch(() =>
-      gerarSaudacaoLocalDoDia({ nome: func.nome, tipoPonto: tipo, dataHora: new Date() })
-    )
+    })
+      .then((sd) => {
+        if (sd?.voz) {
+          void prepararVozSaudacao(sd.voz)
+        }
+        return sd
+      })
+      .catch(() => fallback)
 
-    // Assim que a frase existe, o áudio dela já começa a ser baixado — em
-    // paralelo com a pessoa andando até o tablet e sorrindo. Quando a tela de
-    // sucesso entrar, o MP3 já está no cache e a voz sai no mesmo instante.
-    //
-    // Isto virou necessário porque a batida encurtou: com 25 s de batida o
-    // /api/tts cabia folgado no meio; com 2,1 s, a funcionária já saiu da sala
-    // quando a voz começa.
-    void promessaSaudacao.then((sd) => prepararVozSaudacao(sd?.voz)).catch(() => {})
-
-    prefetchSaudacaoRef.current = { chave, promise: promessaSaudacao }
+    prefetchSaudacaoRef.current = { chave, promise: promessaSaudacao, fallback }
   }
 
   // Loop de reconhecimento — back-to-back sem throttle, serializado pelo isProcessingRef.
@@ -991,6 +1014,19 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
         isProcessingRef.current = true
         try {
+          // Se o modal de confirmação de almoço estiver aberto, rodamos o passe completo
+          // para identificar a pessoa em frente à câmera e liberar ou negar amigavelmente
+          if (funcionarioAlmocoModalRef.current) {
+            const result = await recognizeFace(video, SMILE_THRESHOLD)
+            if (result && !result.isUnknown && result.id !== "unknown") {
+              const func = funcionariosMapRef.current.get(result.id)
+              if (func) {
+                setPessoaDetectadaModal({ id: func.id, nome: func.nome })
+              }
+            }
+            return
+          }
+
           const rosto = await detectFaceFast(video)
           if (!rosto) {
             setOlharDaCamera(null)
@@ -1045,17 +1081,14 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             )
           }
 
-          // Centro do rosto (0..1) vira direção do olhar (-1..1). O eixo
-          // vertical fica mais contido: olhar muito para baixo esconde os olhos
-          // atrás da própria pálpebra.
-          const x = Math.max(-1, Math.min(1, (rosto.centroX * 2 - 1) * (INVERTER_OLHAR_X ? -1 : 1)))
-          const y = Math.max(-1, Math.min(1, (rosto.centroY * 2 - 1) * 0.6))
+          // Centro do rosto (0..1) vira direção do olhar (-1..1).
+          // Ganho aumentado em X e Y para acompanhar o rosto com amplitude real.
+          const x = Math.max(-1, Math.min(1, (rosto.centroX * 2 - 1) * 1.35))
+          const y = Math.max(-1, Math.min(1, (rosto.centroY * 2 - 1) * 1.3))
 
-          // Só re-renderiza quando a pessoa realmente se moveu. Sem isto seriam
-          // ~5 renders por segundo da tela inteira por causa de tremidas de
-          // um pixel na detecção.
+          // Deadzone reduzida para 0.03 para responder a movimentos menores e mais fluidos
           setOlharDaCamera((atual) =>
-            atual && Math.abs(atual.x - x) < 0.07 && Math.abs(atual.y - y) < 0.07
+            atual && Math.abs(atual.x - x) < 0.03 && Math.abs(atual.y - y) < 0.03
               ? atual
               : { x, y }
           )
@@ -1366,22 +1399,30 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       const trabalhaSabado = !!funcObj.horarios?.sabado?.ativo
       const chaveSaudacao = `${person.id}|${tipo}`
       const tSaudacao = performance.now()
-      const saudacaoLocal = () =>
+      const saudacaoGuardada =
+        prefetchSaudacaoRef.current?.chave === chaveSaudacao
+          ? prefetchSaudacaoRef.current
+          : null
+
+      // Se a IA não responder a tempo, usamos o fallback que já teve o áudio
+      // pré-carregado no mesmo instante em que a pessoa foi detectada!
+      const fallbackComAudioPronto =
+        saudacaoGuardada?.fallback ??
         gerarSaudacaoLocalDoDia({
           nome: person.nome,
           tipoPonto: tipo,
           dataHora: now,
           trabalhaSabado,
         })
-      const saudacaoIa: RespostaSaudacao =
-        prefetchSaudacaoRef.current?.chave === chaveSaudacao
-          ? await Promise.race([
-              prefetchSaudacaoRef.current.promise.catch(() => saudacaoLocal()),
-              new Promise<RespostaSaudacao>((resolve) =>
-                setTimeout(() => resolve(saudacaoLocal()), TETO_SAUDACAO_IA_MS)
-              ),
-            ])
-          : saudacaoLocal()
+
+      const saudacaoIa: RespostaSaudacao = saudacaoGuardada
+        ? await Promise.race([
+            saudacaoGuardada.promise.catch(() => fallbackComAudioPronto),
+            new Promise<RespostaSaudacao>((resolve) =>
+              setTimeout(() => resolve(fallbackComAudioPronto), TETO_SAUDACAO_IA_MS)
+            ),
+          ])
+        : fallbackComAudioPronto
 
       telemetria.registrarSaudacaoIa(performance.now() - tSaudacao)
 
@@ -1723,6 +1764,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       {screensaver && (
         <Screensaver
           olhar={olharDaCamera}
+          onSelecionarAlmoco={(f) => {
+            setPessoaDetectadaModal(null)
+            setFuncionarioAlmocoModal(f)
+          }}
           onTap={() => {
             // Tudo que o app precisa acontece AQUI, de forma síncrona. A
             // animação vem depois e não tem voto nenhum sobre isso.
@@ -1746,6 +1791,25 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             )
           }}
           onSegredo={() => setModoTeste(true)}
+        />
+      )}
+
+      {/* Modal inteligente de confirmação de almoço por QR Code */}
+      {funcionarioAlmocoModal && (
+        <ModalQRAlmoco
+          funcionario={{
+            funcionarioId: funcionarioAlmocoModal.funcionarioId,
+            primeiroNome: funcionarioAlmocoModal.primeiroNome,
+            nomeCompleto: funcionarioAlmocoModal.nome,
+            horaSaida: funcionarioAlmocoModal.horaSaida,
+            horaRetornoPrevista: funcionarioAlmocoModal.horaRetornoPrevista,
+            retornoPrevistoMs: funcionarioAlmocoModal.retornoPrevistoMs,
+          }}
+          pessoaNaCamera={pessoaDetectadaModal}
+          onClose={() => {
+            setFuncionarioAlmocoModal(null)
+            setPessoaDetectadaModal(null)
+          }}
         />
       )}
 

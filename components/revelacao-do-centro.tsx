@@ -28,22 +28,14 @@ import { useEffect } from "react"
  * GPU que nesse instante roda o reconhecimento. Mesmo desenho, conta diferente.
  */
 /**
- * POR QUE O RAIO PARA EM 75%, E NÃO EM 160%
+ * RAIO QUE COBRE A TELA INTEIRA
  *
- * Num `radial-gradient(circle at 50% 50%)` o raio em porcentagem é medido
- * contra sqrt((l² + a²) / 2), enquanto o canto mais distante do centro está a
- * sqrt(l² + a²) / 2. A razão entre os dois é sqrt(2)/2 — ou seja, **70,7%
- * cobre a tela inteira, em qualquer proporção**. É constante: 1280x800,
- * 1920x1080 ou retrato, dá sempre 70,7%.
- *
- * A primeira versão ia até 160%. A tela já estava completamente revelada com
- * ~44% do progresso, e o resto da animação crescia fora da tela, sem mostrar
- * nada. Era por isso que parecia apressada e parecia não sair do centro: só a
- * primeira fração era visível.
- *
- * 75% dá a margem de segurança e faz a duração inteira ser movimento que se vê.
+ * Em telas widescreen (16:9, tablets 1280x800 ou 1920x1080), 75% não alcança
+ * os 4 cantos da tela retangular (a hipotenusa/distância do centro ao canto é maior).
+ * 150% garante que o círculo se expanda completamente além de qualquer canto,
+ * revelando 100% da tela sem vazar a camada anterior.
  */
-const RAIO_QUE_COBRE_A_TELA = "75%"
+const RAIO_QUE_COBRE_A_TELA = "150%"
 
 /**
  * A curva também mudou. `ease-out` é rápido no começo e lento no fim — para uma

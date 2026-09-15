@@ -74,8 +74,8 @@ export function OlhosRobo({
       margemX,
       margemY,
       altura,
-      alcanceX: margemX * 0.92,
-      alcanceY: margemY * 1.05,
+      alcanceX: margemX * 0.96,
+      alcanceY: margemY * 1.32,
     }
   }, [largura])
 
@@ -157,7 +157,7 @@ export function OlhosRobo({
   const dirX = Math.max(-1, Math.min(1, alvo.x))
   const dirY = Math.max(-1, Math.min(1, alvo.y))
   const deslocX = dirX * g.alcanceX
-  const deslocY = dirY * g.alcanceY
+  const deslocY = dirY * (dirY > 0 ? g.alcanceY * 1.15 : g.alcanceY)
 
   // === Reação à voz ===
   // Faixa curta de propósito: os olhos respiram junto com a fala, não pulam.
