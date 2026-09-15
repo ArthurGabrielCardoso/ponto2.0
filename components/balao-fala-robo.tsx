@@ -64,15 +64,10 @@ export function BalaoFalaRobo({
 
   return (
     <div className={`relative w-full max-w-md ${className}`}>
-      {/* Rabicho apontando para a esquerda (em direção ao robô em md+) */}
+      {/* Rabicho apontando para baixo (em direção ao robô), alinhado ao centro da face */}
       <div
-        className="hidden md:block absolute -left-2.5 top-1/2 -translate-y-1/2 w-0 h-0 border-y-[9px] border-y-transparent border-r-[11px] drop-shadow-md z-10"
-        style={{ borderRightColor: "rgba(15, 23, 42, 0.94)" }}
-      />
-      {/* Rabicho apontando para cima (em telas menores quando empilhado) */}
-      <div
-        className="md:hidden mx-auto w-0 h-0 border-x-[9px] border-x-transparent border-b-[10px] mb-[-1px] drop-shadow-md z-10"
-        style={{ borderBottomColor: "rgba(15, 23, 42, 0.94)" }}
+        className="absolute -bottom-2.5 left-7 sm:left-9 w-0 h-0 border-x-[9px] border-x-transparent border-t-[11px] drop-shadow-md z-10"
+        style={{ borderTopColor: "rgba(15, 23, 42, 0.94)" }}
       />
 
       {/* Caixa do balão com glassmorphism obsidian escuro de altíssimo nível */}

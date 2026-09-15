@@ -370,7 +370,15 @@ function Screensaver({
 
       {/* Centro exato da tela: Rosto do robô 100% centralizado */}
       <div className="relative flex flex-col items-center justify-center text-white px-4 ss-fade">
-        {/* Rosto do robô com presença ampliada e vidro nobre */}
+        {/* Balão de Fala Inteligente: ENCIMA do robô, partindo do centro do rosto em direção ao lado direito */}
+        <div className="absolute bottom-[calc(100%+14px)] left-1/2 -translate-x-1/2 sm:translate-x-0 sm:left-1/2 w-[calc(100vw-2rem)] max-w-[340px] sm:max-w-[380px] lg:max-w-[420px] z-20 pointer-events-auto">
+          <BalaoFalaRobo
+            pessoaNaEspera={pessoaNaEspera ?? null}
+            falaIa={falaIa}
+          />
+        </div>
+
+        {/* Rosto do robô com presença ampliada e vidro nobre no centro da tela */}
         <div className="flex justify-center -mt-2 sm:-mt-4">
           <div
             className="rounded-[2.5rem] px-8 py-5 sm:px-11 sm:py-6"
@@ -389,15 +397,6 @@ function Screensaver({
               piscar
             />
           </div>
-        </div>
-
-        {/* Balão de Fala Inteligente: em md+, fica à direita do robô via absolute,
-            alinhado verticalmente ao meio da face, SEM deslocar o rosto do robô nem 1px do centro! */}
-        <div className="w-full max-w-sm mt-4 md:mt-0 md:absolute md:left-[calc(100%+1.25rem)] md:top-1/2 md:-translate-y-1/2 md:w-[320px] lg:w-[360px] z-20 pointer-events-auto">
-          <BalaoFalaRobo
-            pessoaNaEspera={pessoaNaEspera ?? null}
-            falaIa={falaIa}
-          />
         </div>
       </div>
 
