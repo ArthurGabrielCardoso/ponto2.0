@@ -369,10 +369,10 @@ function Screensaver({
         </p>
       </div>
 
-      {/* Centro: Olhos do Robô Ampliados + Balão de Fala Inteligente */}
-      <div className="text-center text-white px-4 ss-fade w-full max-w-xl flex flex-col items-center">
+      {/* Centro: Robô à Esquerda e Balão de Fala à Direita (alinhados ao meio) */}
+      <div className="text-white px-4 ss-fade w-full max-w-4xl flex flex-col md:flex-row items-center justify-center gap-6 sm:gap-8">
         {/* Rosto do robô com presença ampliada e vidro nobre */}
-        <div className="flex justify-center -mt-2 sm:-mt-4 mb-4">
+        <div className="flex justify-center shrink-0">
           <div
             className="rounded-[2.5rem] px-8 py-5 sm:px-11 sm:py-6"
             style={{
@@ -392,11 +392,13 @@ function Screensaver({
           </div>
         </div>
 
-        {/* Balão de Fala Dinâmico com IA Llama, Lembretes e Identificação */}
-        <BalaoFalaRobo
-          pessoaNaEspera={pessoaNaEspera ?? null}
-          falaIa={falaIa}
-        />
+        {/* Balão de Fala Dinâmico no lado direito, alinhado ao centro vertical do robô */}
+        <div className="w-full max-w-md flex items-center">
+          <BalaoFalaRobo
+            pessoaNaEspera={pessoaNaEspera ?? null}
+            falaIa={falaIa}
+          />
+        </div>
       </div>
 
       {/* Canto inferior direito: área invisível do gesto do modo teste.
@@ -582,6 +584,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   } | null>(null)
   const [falaIaEspera, setFalaIaEspera] = useState<string | null>(null)
   const ultimoReconhecimentoEsperaRef = useRef(0)
+  const ultimoIdFaladoEsperaRef = useRef<string | null>(null)
 
   useEffect(() => {
     funcionarioAlmocoModalRef.current = funcionarioAlmocoModal
@@ -1026,6 +1029,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             setOlharDaCamera(null)
             setPessoaNaEspera(null)
             setFalaIaEspera(null)
+            ultimoIdFaladoEsperaRef.current = null
             if (rostoNaEsperaRef.current) {
               // Apareceu e foi embora sem bater nada. A telemetria descarta
               // tentativas sem nenhum passe completo, então isso não vira lixo.
@@ -1085,6 +1089,17 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                     primeiroNome: func.nome.split(" ")[0],
                   })
                   prefetchRegistrosDoDia(func.id)
+
+                  // Robô fala saudação personalizada ao identificar o colaborador na tela de espera
+                  if (ultimoIdFaladoEsperaRef.current !== func.id) {
+                    ultimoIdFaladoEsperaRef.current = func.id
+                    const pNome = func.nome.split(" ")[0]
+                    const horaAtual = new Date().getHours()
+                    let saudacao = "bom dia"
+                    if (horaAtual >= 12 && horaAtual < 18) saudacao = "boa tarde"
+                    else if (horaAtual >= 18) saudacao = "boa noite"
+                    reproduzirVozSaudacao(`Olá, ${pNome}! ${saudacao.charAt(0).toUpperCase() + saudacao.slice(1)}!`, { semEsperarRede: true }).catch(() => {})
+                  }
                 }
               } else if (res && (res.isUnknown || res.id === "unknown")) {
                 setPessoaNaEspera((prev) =>
@@ -1682,13 +1697,14 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
   return (
     <div className="relative min-h-screen w-full bg-secondary">
-      {/* Vídeo em tela cheia */}
+      {/* Vídeo em tela cheia - invertido horizontalmente para não ficar espelhado */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="absolute inset-0 h-full w-full object-cover"
+        className="absolute inset-0 h-full w-full object-cover -scale-x-100"
+        style={{ transform: "scaleX(-1)" }}
       />
 
       {/* Logo no topo esquerdo */}

@@ -454,7 +454,8 @@ export default function RegistrarPontoModal() {
         autoPlay 
         playsInline 
         muted 
-        className="absolute inset-0 h-full w-full object-cover" 
+        className="absolute inset-0 h-full w-full object-cover -scale-x-100" 
+        style={{ transform: "scaleX(-1)" }}
       />
 
       {/* Logo no topo esquerdo */}

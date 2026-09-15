@@ -50,64 +50,63 @@ export function BalaoFalaRobo({
     return () => clearInterval(id)
   }, [pessoaNaEspera])
 
-  let titulo = "IA Vitall • Mensagem do Dia"
+  let nome = ""
   let mensagem = LEMBRETES_CLINICA[indiceLembrete]
-  let badge = "Assistente Ativo"
-  let badgeCor = "bg-teal-400"
 
   if (pessoaNaEspera) {
     if (pessoaNaEspera.id !== "unknown") {
-      titulo = `Olá, ${pessoaNaEspera.primeiroNome}! 👋`
+      nome = pessoaNaEspera.primeiroNome
       mensagem = falaIa || gerarLembreteContextual(pessoaNaEspera.primeiroNome)
-      badge = "Identificado"
-      badgeCor = "bg-emerald-400"
     } else {
-      titulo = "Olá! Chegue mais perto 🙂"
-      mensagem = "Posicione seu rosto ou toque na tela para abrir a câmera e bater seu ponto."
-      badge = "Reconhecimento Ativo"
-      badgeCor = "bg-amber-400"
+      mensagem = "Olá! Aproxime-se para registrar seu ponto."
     }
   }
 
   return (
-    <div className={`relative mx-auto w-full max-w-lg px-3 ${className}`}>
-      {/* Triângulo / Rabicho do balão apontando para o rosto do robô */}
-      <div className="mx-auto w-0 h-0 border-x-[10px] border-x-transparent border-b-[10px] border-b-slate-950/80 mb-[-1px] drop-shadow-md" />
-
-      {/* Caixa do balão com glassmorphism premium */}
+    <div className={`relative w-full max-w-md ${className}`}>
+      {/* Rabicho apontando para a esquerda (em direção ao robô em md+) */}
       <div
-        className="rounded-3xl p-5 border text-center transition-all duration-300 backdrop-blur-2xl"
+        className="hidden md:block absolute -left-2.5 top-1/2 -translate-y-1/2 w-0 h-0 border-y-[9px] border-y-transparent border-r-[11px] drop-shadow-md z-10"
+        style={{ borderRightColor: "rgba(15, 23, 42, 0.94)" }}
+      />
+      {/* Rabicho apontando para cima (em telas menores quando empilhado) */}
+      <div
+        className="md:hidden mx-auto w-0 h-0 border-x-[9px] border-x-transparent border-b-[10px] mb-[-1px] drop-shadow-md z-10"
+        style={{ borderBottomColor: "rgba(15, 23, 42, 0.94)" }}
+      />
+
+      {/* Caixa do balão com glassmorphism obsidian escuro de altíssimo nível */}
+      <div
+        className="rounded-3xl p-5 sm:p-6 border text-left transition-all duration-300 backdrop-blur-2xl relative"
         style={{
-          background: "rgba(2, 22, 28, 0.78)",
-          borderColor: "rgba(45, 212, 191, 0.38)",
+          background:
+            "linear-gradient(135deg, rgba(15, 23, 42, 0.90) 0%, rgba(3, 7, 18, 0.95) 100%)",
+          borderColor: "rgba(255, 255, 255, 0.16)",
           boxShadow:
-            "0 18px 45px -10px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.15)",
+            "0 20px 45px -10px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.16)",
         }}
       >
-        {/* Cabeçalho do balão com dot de pulso e título */}
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${badgeCor}`} />
-          <span className="text-[12px] uppercase font-bold tracking-wider text-teal-300">
-            {titulo}
-          </span>
-          <span className="text-[10px] text-white/40 border border-white/10 rounded-full px-2 py-0.2">
-            {badge}
-          </span>
-        </div>
-
-        {/* Frase dinâmica / Lembrete / Fala da IA Llama */}
-        <p
-          key={mensagem}
-          className="text-base sm:text-lg font-light text-white leading-relaxed drop-shadow-sm animate-in fade-in duration-300"
-        >
-          {mensagem}
-        </p>
-
-        {/* Dica de interação sutil */}
-        <div className="mt-3 pt-2 border-t border-white/10 flex items-center justify-center gap-1.5 text-[11px] text-white/50">
-          <span>👆</span>
-          <span>Toque na tela para registrar seu ponto</span>
-        </div>
+        {nome ? (
+          <>
+            <div className="text-base sm:text-lg font-semibold text-teal-300 mb-1 flex items-center gap-1.5">
+              <span>Olá, {nome}!</span>
+              <span>👋</span>
+            </div>
+            <p
+              key={mensagem}
+              className="text-sm sm:text-base font-light text-white/95 leading-relaxed drop-shadow-sm animate-in fade-in duration-300"
+            >
+              {mensagem}
+            </p>
+          </>
+        ) : (
+          <p
+            key={mensagem}
+            className="text-sm sm:text-base font-light text-white/90 leading-relaxed drop-shadow-sm animate-in fade-in duration-300 italic"
+          >
+            {mensagem}
+          </p>
+        )}
       </div>
     </div>
   )
