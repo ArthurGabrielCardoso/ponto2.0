@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Cliente Supabase (mesmo config do lib/supabase.ts)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-)
+export const dynamic = 'force-dynamic'
+
+function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) return null
+  return createClient(url, key, {
+    auth: { persistSession: false },
+  })
+}
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase não configurado' }, { status: 503 })
+    }
     const searchParams = request.nextUrl.searchParams
     const funcionarioId = searchParams.get('funcionarioId')
     

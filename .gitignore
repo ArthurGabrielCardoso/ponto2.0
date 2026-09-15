@@ -10,3 +10,6 @@ build/
 .DS_Store
 npm-debug.log*
 public/mediapipe/
+
+.vercel
+.env*

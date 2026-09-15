@@ -7,6 +7,7 @@ import { Clock, CheckCircle2, ArrowRight, ArrowLeft, Sparkles, Check } from "luc
 import type { DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { horaParaMinutos, minutosParaHoraStr } from "@/lib/logica-ponto-inteligente"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
+import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 import "../app/ponto-registrado/ponto-batido.css"
 
 export interface PontoRegularizacao {
@@ -495,6 +496,9 @@ export function DialogoPontoInteligente({
         {/* RODAPÉ */}
         <div className="h-4 shrink-0" />
       </div>
+
+      {/* Onda luminosa azul na borda bottom quando a voz fala */}
+      <AnimacaoVozIa />
     </div>
   )
 }

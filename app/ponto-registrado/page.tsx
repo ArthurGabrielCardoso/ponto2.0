@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation"
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
+import { gerarSaudacaoLocal } from "@/lib/gerador-falas"
 
 export default function PontoRegistradoPage() {
   const router = useRouter()
@@ -11,16 +12,9 @@ export default function PontoRegistradoPage() {
   const tipo = searchParams.get("tipo") || "Entrada"
   const hora = searchParams.get("hora") || new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
   const data = searchParams.get("data") || new Date().toLocaleDateString("pt-BR")
-  const primeiroNome = nome.split(" ")[0]
 
-  const mensagem = (() => {
-    const t = tipo.toLowerCase().trim()
-    if (t.includes("entrada")) return `Excelente dia, ${primeiroNome}!`
-    if (t.includes("saída") && t.includes("almoço")) return `Excelente almoço, ${primeiroNome}!`
-    if (t.includes("retorno")) return `Excelente retorno ao trabalho, ${primeiroNome}!`
-    if (t.includes("saída") || t.includes("saida")) return `Excelente noite, ${primeiroNome}!`
-    return `Excelente trabalho, ${primeiroNome}!`
-  })()
+  const saudacao = gerarSaudacaoLocal({ nome, tipoPonto: tipo, dataHora: new Date() })
+  const mensagem = saudacao.visual
 
   return (
     <TelaPontoSucesso

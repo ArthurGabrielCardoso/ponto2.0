@@ -31,6 +31,29 @@ export function isSupabaseAvailable(): boolean {
   return !!supabase
 }
 
+/**
+ * Abre a conexao com o Supabase antes de alguem precisar dela.
+ *
+ * Existe por causa de um sintoma bem especifico do tablet: bater dois pontos
+ * seguidos e instantaneo, mas a primeira batida depois de horas parado demora.
+ * Nao e o reconhecimento — e a primeira requisicao, que paga DNS, TLS e o
+ * servidor frio. Como as batidas reais sao de tres em tres horas, a conexao
+ * esta sempre fria justamente quando importa.
+ *
+ * Chamado quando um rosto aparece na protecao de tela: a pessoa ainda esta
+ * andando ate o tablet, e nesse tempo a conexao fica pronta.
+ *
+ * De proposito nao devolve nada e engole erros: e aquecimento, nao consulta.
+ */
+export async function aquecerConexaoSupabase(): Promise<void> {
+  try {
+    if (!supabase) return
+    await supabase.from("registros_ponto").select("id").limit(1)
+  } catch {
+    /* aquecimento: falhar aqui nao muda nada para quem bate o ponto */
+  }
+}
+
 // Buscar funcionários com tratamento de erros aprimorado
 export async function buscarFuncionarios(): Promise<Funcionario[]> {
   const LOCAL_CACHE_KEY = "vitall_cached_funcionarios"
@@ -651,11 +674,23 @@ export async function registrarMultiplosPontos(
 }
 
 // Registrar ponto de um funcionário consultando a sequência real no banco de dados
+//
+// `registrosHojeConhecidos` evita ida ao banco no caminho crítico: a tela de ponto
+// já carregou os registros do dia enquanto a pessoa lia "Sorria para registrar",
+// e o cooldown de 60s só pode ser disparado por um registro de hoje. Sem ele o
+// comportamento é o de antes (busca no banco).
 export async function registrarPonto(
   funcionarioId: string,
   nomeFuncionario: string,
   tipoForcado?: string,
-  localizacao?: CoordenadasLocalizacao | null
+  localizacao?: CoordenadasLocalizacao | null,
+  registrosHojeConhecidos?: RegistroPonto[],
+  /**
+   * Instante real da batida. Só é usado pela fila offline, que grava horas
+   * depois do fato: o registro tem que carimbar quando a pessoa bateu, nunca
+   * quando a internet voltou.
+   */
+  dataHoraForcada?: string
 ): Promise<ResultadoRegistroPonto> {
   try {
     if (!isSupabaseAvailable()) {
@@ -663,11 +698,17 @@ export async function registrarPonto(
       throw new Error("Supabase indisponível")
     }
 
-    const agora = new Date()
-    const dataHoraIso = agora.toISOString()
+    const agora = dataHoraForcada ? new Date(dataHoraForcada) : new Date()
+    const dataHoraIso = dataHoraForcada || agora.toISOString()
 
-    // 1. Buscar último registro para checagem de cooldown (60 segundos)
-    const ultimoRegistro = await buscarUltimoRegistroPonto(funcionarioId)
+    // 1. Registros de hoje — servem tanto para o cooldown quanto para deduzir o
+    // próximo tipo. Uma consulta só, em vez das duas que existiam aqui.
+    const registrosHoje =
+      registrosHojeConhecidos ?? (await buscarRegistrosHoje(funcionarioId))
+
+    // buscarRegistrosHoje devolve em ordem crescente: o último é o mais recente.
+    const ultimoRegistro: RegistroPonto | null =
+      registrosHoje.length > 0 ? registrosHoje[registrosHoje.length - 1] : null
 
     if (ultimoRegistro) {
       const tsUltimo = new Date(ultimoRegistro.data_hora).getTime()
@@ -691,8 +732,7 @@ export async function registrarPonto(
 
     let tipo = tipoForcado
 
-    // 2. Buscar todos os registros de hoje no Supabase para saber o próximo tipo com precisão
-    const registrosHoje = await buscarRegistrosHoje(funcionarioId)
+    // 2. Deduzir o próximo tipo a partir dos registros já carregados acima
     const quantidadeHoje = registrosHoje.length
 
     if (!tipo) {

@@ -1,19 +1,44 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { ArrowLeft, ArrowRight, Volume2, LayoutDashboard } from "lucide-react"
+import {
+  ArrowLeft,
+  ArrowRight,
+  Volume2,
+  LayoutDashboard,
+  Sparkles,
+  RefreshCw,
+} from "lucide-react"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import { DialogoPontoInteligente } from "@/components/dialogo-ponto-inteligente"
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
+import { ModalCheckinHumor } from "@/components/modal-checkin-humor"
+import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
+import { obterSaudacaoInteligente } from "@/lib/ia-saudacao"
+import { buscarFuncionarios } from "@/lib/supabase"
 import type { DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
+
+interface FuncionarioSimulacao {
+  id: string
+  nome: string
+  apelidoPrincipal: string
+  cargo?: string
+}
+
+const FUNCIONARIOS_REAIS_BASE: FuncionarioSimulacao[] = [
+  { id: "1", nome: "Arthur Gabriel", apelidoPrincipal: "Tu", cargo: "Desenvolvimento" },
+  { id: "2", nome: "Jéssica Ferreira", apelidoPrincipal: "Jé", cargo: "Operações" },
+  { id: "3", nome: "Julliana", apelidoPrincipal: "Ju", cargo: "Gestão" },
+]
 
 interface SlideItem {
   id: string
   titulo: string
   categoria: string
+  icone: string
   vozTexto: string
-  tipo: "ponto_batido" | "dialogo"
+  tipo: "sandbox_ia" | "checkin_humor" | "ponto_batido" | "dialogo"
   dadosPonto?: {
     nome: string
     tipo: string
@@ -27,114 +52,125 @@ interface SlideItem {
   }
 }
 
-const SLIDES: SlideItem[] = [
+const SLIDES_BASE: SlideItem[] = [
   {
-    id: "entrada",
-    titulo: "Ponto Batido: Entrada",
-    categoria: "Design Ponto Registrado",
-    vozTexto: "Excelente dia e um ótimo trabalho, Arthur! Seu ponto foi registrado com sucesso.",
-    tipo: "ponto_batido",
+    id: "sandbox_ia",
+    titulo: "Simulador IA Real",
+    categoria: "Motor Inteligente",
+    icone: "⚡",
+    vozTexto: "Excelente dia, Tu! Vamos com tudo produzir muito hoje!",
+    tipo: "sandbox_ia",
+  },
+  {
+    id: "checkin_humor_interativo",
+    titulo: "Check-in de Humor",
+    categoria: "Experiência de Entrada",
+    icone: "😄",
+    vozTexto: "Como você está se sentindo hoje?",
+    tipo: "checkin_humor",
     dadosPonto: {
-      nome: "Arthur Gabriel",
+      nome: "Jéssica Ferreira",
       tipo: "Entrada",
-      hora: "08:02:15",
-      data: "20/08/2026",
-      mensagem: "Excelente dia, Arthur!",
+      hora: "08:00",
+      data: "Hoje",
+      mensagem: "Como você está se sentindo hoje?",
     },
   },
   {
-    id: "saida_almoco",
-    titulo: "Ponto Batido: Saída Almoço",
-    categoria: "Design Ponto Registrado",
-    vozTexto: "Excelente almoço e bom apetite, Arthur! Aproveite seu descanso.",
+    id: "arthur_sexta_noite",
+    titulo: "Arthur • Sexta Fim (Sem Sáb)",
+    categoria: "Cultura & Fim de Semana",
+    icone: "🎉",
+    vozTexto: "Excelente final de semana e bom descanso, Tu! Aproveite bastante!",
     tipo: "ponto_batido",
     dadosPonto: {
       nome: "Arthur Gabriel",
-      tipo: "Saída Almoço",
-      hora: "12:04:30",
-      data: "20/08/2026",
-      mensagem: "Excelente almoço, Arthur!",
+      tipo: "Fim de Expediente",
+      hora: "18:00",
+      data: "Sexta-feira",
+      mensagem: "Excelente final de semana, Arthur!",
     },
   },
   {
-    id: "retorno_almoco",
-    titulo: "Ponto Batido: Retorno Almoço",
-    categoria: "Design Ponto Registrado",
-    vozTexto: "Excelente retorno ao trabalho, Arthur! Bom foco no seu turno da tarde.",
+    id: "jessica_sexta_sabado",
+    titulo: "Jéssica • Sexta Fim (Com Sáb)",
+    categoria: "Jornada com Sábado",
+    icone: "📅",
+    vozTexto: "Excelente descanso e até amanhã, Jé! Nos vemos no sábado!",
+    tipo: "ponto_batido",
+    dadosPonto: {
+      nome: "Jéssica Ferreira",
+      tipo: "Fim de Expediente",
+      hora: "18:00",
+      data: "Sexta-feira",
+      mensagem: "Excelente descanso e até amanhã, Jéssica!",
+    },
+  },
+  {
+    id: "julliana_entrada",
+    titulo: "Julliana • Entrada com Energia",
+    categoria: "Boas-vindas Nobres",
+    icone: "🌅",
+    vozTexto: "Excelente dia, Ju! Que seu turno seja muito produtivo e abençoado!",
+    tipo: "ponto_batido",
+    dadosPonto: {
+      nome: "Julliana",
+      tipo: "Entrada",
+      hora: "08:02",
+      data: "Segunda-feira",
+      mensagem: "Excelente dia, Julliana!",
+    },
+  },
+  {
+    id: "jessica_almoco",
+    titulo: "Jéssica • Saída Almoço",
+    categoria: "Pausa de Almoço",
+    icone: "🥪",
+    vozTexto: "Excelente almoço e bom apetite, Jé! Recarregue as energias!",
+    tipo: "ponto_batido",
+    dadosPonto: {
+      nome: "Jéssica Ferreira",
+      tipo: "Saída para Almoço",
+      hora: "12:00",
+      data: "Quarta-feira",
+      mensagem: "Excelente almoço, Jéssica!",
+    },
+  },
+  {
+    id: "arthur_retorno",
+    titulo: "Arthur • Retorno Almoço",
+    categoria: "Retorno da Tarde",
+    icone: "⚡",
+    vozTexto: "Excelente retorno, Tu! Bora fazer uma tarde brilhante!",
     tipo: "ponto_batido",
     dadosPonto: {
       nome: "Arthur Gabriel",
-      tipo: "Retorno Almoço",
-      hora: "13:05:42",
-      data: "20/08/2026",
-      mensagem: "Excelente retorno ao trabalho, Arthur!",
+      tipo: "Retorno do Almoço",
+      hora: "13:00",
+      data: "Quarta-feira",
+      mensagem: "Excelente retorno, Arthur!",
     },
   },
   {
-    id: "saida_fim",
-    titulo: "Ponto Batido: Saída Fim de Expediente",
-    categoria: "Design Ponto Registrado",
-    vozTexto: "Excelente noite e bom descanso, Arthur! Dever cumprido, até amanhã!",
-    tipo: "ponto_batido",
-    dadosPonto: {
-      nome: "Arthur Gabriel",
-      tipo: "Saída",
-      hora: "18:01:10",
-      data: "20/08/2026",
-      mensagem: "Excelente noite, Arthur!",
-    },
-  },
-  {
-    id: "diag_entrada",
-    titulo: "Verificação: Esqueceu Entrada da Manhã",
-    categoria: "Diálogo Inteligente",
-    vozTexto: "Olá, Arthur! Notamos que você ainda não registrou sua entrada hoje. Você está entrando agora ou saindo para o almoço?",
-    tipo: "dialogo",
-    dadosDialogo: {
-      nome: "Arthur Gabriel",
-      diagnostico: {
-        tipo: "PERGUNTA_ENTRADA_OU_ALMOCO",
-        horariosGrade: { entrada: "08:00", saidaAlmoco: "12:00", retornoAlmoco: "13:00", saida: "18:00" },
-        registrosHoje: [],
-        proximoTipoSugerido: "Entrada",
-        horariosSugeridos: { horaChegada: "08:00" },
-      },
-    },
-  },
-  {
-    id: "diag_almoco",
-    titulo: "Verificação: Esqueceu Almoço",
-    categoria: "Diálogo Inteligente",
-    vozTexto: "Olá, Arthur! Você não registrou o almoço hoje. Você está saindo para o almoço agora ou encerrando seu expediente?",
-    tipo: "dialogo",
-    dadosDialogo: {
-      nome: "Arthur Gabriel",
-      diagnostico: {
-        tipo: "PERGUNTA_ALMOCO_OU_SAIDA",
-        horariosGrade: { entrada: "08:00", saidaAlmoco: "12:00", retornoAlmoco: "13:00", saida: "18:00" },
-        registrosHoje: [{ id: "1", funcionario_id: "1", nome_funcionario: "Arthur Gabriel", data_hora: new Date().toISOString(), tipo: "Entrada", created_at: new Date().toISOString() }],
-        proximoTipoSugerido: "Saída Almoço",
-        horariosSugeridos: { horaSaidaAlmoco: "12:00" },
-      },
-    },
-  },
-  {
-    id: "diag_retorno",
-    titulo: "Verificação: Esqueceu Retorno do Almoço (Caso Jéssica)",
-    categoria: "Diálogo Inteligente",
-    vozTexto: "Olá, Jéssica! Parece que você esqueceu de registrar o retorno do seu almoço. Que horas você voltou?",
+    id: "dialogo_horario_incomum",
+    titulo: "Diálogo Inteligente (Hora Incomum)",
+    categoria: "IA & Tolerância",
+    icone: "❓",
+    vozTexto: "Excelente tarde, Jé! Notei que este horário é diferente da sua rotina habitual. Deseja confirmar?",
     tipo: "dialogo",
     dadosDialogo: {
       nome: "Jéssica Ferreira",
       diagnostico: {
-        tipo: "PERGUNTA_RETORNO_OU_SAIDA",
-        horariosGrade: { entrada: "08:00", saidaAlmoco: "13:00", retornoAlmoco: "14:00", saida: "18:00" },
-        registrosHoje: [
-          { id: "1", funcionario_id: "2", nome_funcionario: "Jéssica Ferreira", data_hora: new Date().toISOString(), tipo: "Entrada", created_at: new Date().toISOString() },
-          { id: "2", funcionario_id: "2", nome_funcionario: "Jéssica Ferreira", data_hora: new Date().toISOString(), tipo: "Saída Almoço", created_at: new Date().toISOString() },
-        ],
+        tipo: "PERGUNTA_ALMOCO_OU_SAIDA",
         proximoTipoSugerido: "Saída",
-        horariosSugeridos: { horaRetornoAlmoco: "14:00" },
+        mensagemPergunta: "Detectamos um horário próximo ao almoço e à saída. O que deseja registrar?",
+        horariosGrade: {
+          entrada: "08:00",
+          saidaAlmoco: "12:00",
+          retornoAlmoco: "13:00",
+          saida: "18:00",
+        },
+        registrosHoje: [],
       },
     },
   },
@@ -142,187 +178,336 @@ const SLIDES: SlideItem[] = [
 
 export function ShowcaseCarrossel() {
   const [slideAtual, setSlideAtual] = useState(0)
-  const [tempoRestante, setTempoRestante] = useState(15)
-  const [falando, setFalando] = useState(false)
+  const [funcionarios, setFuncionarios] = useState<FuncionarioSimulacao[]>(FUNCIONARIOS_REAIS_BASE)
 
-  const touchStartXRef = useRef<number | null>(null)
-  const mouseStartXRef = useRef<number | null>(null)
-  const isDraggingRef = useRef(false)
+  // Estados do Simulador Interativo de IA (Slide 0)
+  const [sandboxNome, setSandboxNome] = useState("Arthur Gabriel")
+  const [sandboxTipo, setSandboxTipo] = useState<"Entrada" | "Saída Almoço" | "Retorno Almoço" | "Saída">("Saída")
+  const [sandboxDia, setSandboxDia] = useState<"Sexta" | "Segunda" | "Quarta" | "Sábado">("Sexta")
+  const [sandboxSabado, setSandboxSabado] = useState(false)
+  const [sandboxHumor] = useState("excelente")
+  const [sandboxGerando, setSandboxGerando] = useState(false)
+  const [sandboxResultado, setSandboxResultado] = useState<{
+    visual: string
+    voz: string
+    origem: string
+    tempoMs: number
+  } | null>(null)
 
-  const totalSlides = SLIDES.length
-  const current = SLIDES[slideAtual]
+  // Carrega funcionários reais do Supabase
+  useEffect(() => {
+    buscarFuncionarios()
+      .then((lista) => {
+        if (lista && lista.length > 0) {
+          const map = lista.map((f) => ({
+            id: f.id,
+            nome: f.nome,
+            apelidoPrincipal: f.nome.split(" ")[0],
+          }))
+          const nomesExistentes = new Set(map.map((m) => m.nome.toLowerCase()))
+          FUNCIONARIOS_REAIS_BASE.forEach((fb) => {
+            if (!nomesExistentes.has(fb.nome.toLowerCase())) {
+              map.unshift(fb)
+            }
+          })
+          setFuncionarios(map)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const totalSlides = SLIDES_BASE.length
+  const current = SLIDES_BASE[slideAtual]
 
   const avancarSlide = useCallback(() => {
     setSlideAtual((prev) => (prev + 1) % totalSlides)
   }, [totalSlides])
 
   const falarSlideAtual = useCallback(() => {
-    setFalando(true)
-    reproduzirVozSaudacao(current.vozTexto)
-    setTimeout(() => setFalando(false), 4000)
-  }, [current.vozTexto])
+    const textoParaFalar = current.tipo === "sandbox_ia" && sandboxResultado ? sandboxResultado.voz : current.vozTexto
+    reproduzirVozSaudacao(textoParaFalar)
+  }, [current, sandboxResultado])
 
-  useEffect(() => {
-    falarSlideAtual()
-    setTempoRestante(15)
-  }, [slideAtual, falarSlideAtual])
+  // Executa geração na Sandbox de IA com dados reais
+  const executarGeracaoIa = useCallback(async () => {
+    setSandboxGerando(true)
+    const inicio = performance.now()
 
-  // Temporizador de 15 segundos para avançar automaticamente
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTempoRestante((prev) => {
-        if (prev <= 1) {
-          setSlideAtual((idx) => (idx + 1) % totalSlides)
-          return 15
-        }
-        return prev - 1
+    const agora = new Date()
+    const mapaDias: Record<string, number> = { Segunda: 1, Quarta: 3, Sexta: 5, Sábado: 6 }
+    const targetDay = mapaDias[sandboxDia] ?? 5
+    const diff = targetDay - agora.getDay()
+    const dataSimulada = new Date(agora)
+    dataSimulada.setDate(agora.getDate() + diff)
+
+    if (sandboxTipo === "Entrada") dataSimulada.setHours(8, 0, 0)
+    else if (sandboxTipo === "Saída Almoço") dataSimulada.setHours(12, 0, 0)
+    else if (sandboxTipo === "Retorno Almoço") dataSimulada.setHours(13, 0, 0)
+    else dataSimulada.setHours(18, 0, 0)
+
+    try {
+      const res = await obterSaudacaoInteligente({
+        nome: sandboxNome,
+        tipoPonto: sandboxTipo,
+        dataHora: dataSimulada,
+        trabalhaSabado: sandboxSabado,
+        humor: sandboxHumor,
       })
-    }, 1000)
 
-    return () => clearInterval(timer)
-  }, [totalSlides])
+      const fim = performance.now()
+      const tempoMs = Math.round(fim - inicio)
 
-  // Navegação por teclado
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight") {
-        setSlideAtual((prev) => (prev + 1) % totalSlides)
-      } else if (e.key === "ArrowLeft") {
-        setSlideAtual((prev) => (prev - 1 + totalSlides) % totalSlides)
-      } else if (e.key === " " || e.key === "Enter") {
-        falarSlideAtual()
-      }
+      setSandboxResultado({
+        visual: res.visual,
+        voz: res.voz,
+        origem: res.origem || "groq_ia",
+        tempoMs,
+      })
+
+      reproduzirVozSaudacao(res.voz)
+    } catch {
+      // Fallback
+    } finally {
+      setSandboxGerando(false)
     }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [totalSlides, falarSlideAtual])
-
-  // Gestos de Swipe
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartXRef.current = e.touches[0].clientX
-  }
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null) return
-    const diff = touchStartXRef.current - e.changedTouches[0].clientX
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) {
-        setSlideAtual((prev) => (prev + 1) % totalSlides)
-      } else {
-        setSlideAtual((prev) => (prev - 1 + totalSlides) % totalSlides)
-      }
-    }
-    touchStartXRef.current = null
-  }
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    mouseStartXRef.current = e.clientX
-    isDraggingRef.current = true
-  }
-
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (!isDraggingRef.current || mouseStartXRef.current === null) return
-    const diff = mouseStartXRef.current - e.clientX
-    if (Math.abs(diff) > 60) {
-      if (diff > 0) {
-        setSlideAtual((prev) => (prev + 1) % totalSlides)
-      } else {
-        setSlideAtual((prev) => (prev - 1 + totalSlides) % totalSlides)
-      }
-    }
-    isDraggingRef.current = false
-    mouseStartXRef.current = null
-  }
-
-  const handleScreenClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement
-    if (target.closest("button") || target.closest("a") || target.closest("input")) return
-    falarSlideAtual()
-  }
+  }, [sandboxNome, sandboxTipo, sandboxDia, sandboxSabado, sandboxHumor])
 
   return (
-    <div
-      className="fixed inset-0 z-50 w-full h-full bg-white select-none overflow-hidden cursor-pointer"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onClick={handleScreenClick}
-    >
-      {/* BARRA SUPERIOR FLUTUANTE DE CONTROLE E PROGRESSO */}
-      <div className="absolute top-0 left-0 right-0 z-50 pointer-events-auto">
-        <div className="w-full h-1.5 bg-gray-200/80 overflow-hidden">
-          <div
-            className="h-full transition-all duration-1000 ease-linear"
-            style={{
-              width: `${(tempoRestante / 15) * 100}%`,
-              background: "linear-gradient(90deg, #c69e6b 0%, #1db9b3 100%)",
-            }}
-          />
-        </div>
-
-        <div className="flex items-center justify-between px-4 sm:px-8 py-3 bg-black/75 backdrop-blur-xl text-white shadow-lg border-b border-white/10 text-xs sm:text-sm">
+    <div className="fixed inset-0 z-50 w-full h-full bg-slate-100 text-slate-900 select-none overflow-hidden flex flex-col justify-between">
+      {/* 1. BARRA SUPERIOR EM MODO LIGHT */}
+      <header className="relative z-50 bg-white border-b border-slate-200 px-4 py-3 shrink-0 flex flex-col gap-2 shadow-sm">
+        <div className="flex items-center justify-between gap-4 max-w-7xl mx-auto w-full">
+          {/* Logo e Voltar para Dashboard */}
           <div className="flex items-center gap-3">
             <Link
               href="/dashboard"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 transition-colors font-medium"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 transition-all text-xs font-semibold border border-slate-200"
             >
-              <LayoutDashboard className="w-4 h-4" />
-              <span className="hidden sm:inline">Dashboard</span>
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Painel</span>
             </Link>
-            <div className="flex items-center gap-2 font-semibold text-amber-300">
-              <span>{current.categoria}:</span>
-              <span className="text-white font-bold">{current.titulo}</span>
+
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#a67c4e]">Showcase:</span>
+              <span className="text-xs text-slate-700 font-bold">{current.titulo}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="hidden md:inline-block text-[11px] text-gray-300 mr-2">
-              💡 Toque na tela para repetir a voz | Deslize para mudar ({tempoRestante}s)
-            </span>
-
+          {/* Controles de Navegação e Ouvir Voz */}
+          <div className="flex items-center gap-2.5">
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                falarSlideAtual()
-              }}
-              className={`p-2 rounded-lg transition-colors ${falando ? "bg-amber-500 text-white animate-pulse" : "bg-white/15 hover:bg-white/25 text-white"}`}
-              title="Repetir Voz"
+              type="button"
+              onClick={falarSlideAtual}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-amber-50 hover:bg-amber-100 text-[#a67c4e] border border-amber-200 transition-all active:scale-95 cursor-pointer shadow-xs"
+              title="Ouvir saudação em áudio"
             >
-              <Volume2 className="w-4 h-4" />
+              <Volume2 className="w-3.5 h-3.5 text-[#c69e6b]" />
+              <span>Ouvir Voz</span>
             </button>
 
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setSlideAtual((prev) => (prev - 1 + totalSlides) % totalSlides)
-              }}
-              className="p-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
-              title="Anterior"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-
-            <span className="font-mono text-xs px-2 font-bold text-amber-200">
-              {slideAtual + 1} / {totalSlides}
-            </span>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setSlideAtual((prev) => (prev + 1) % totalSlides)
-              }}
-              className="p-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
-              title="Próximo"
-            >
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setSlideAtual((prev) => (prev - 1 + totalSlides) % totalSlides)}
+                className="p-1 rounded-sm hover:bg-white text-slate-700 transition-colors cursor-pointer"
+                title="Anterior"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <span className="font-mono text-xs px-2 font-bold text-slate-800">
+                {slideAtual + 1} / {totalSlides}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSlideAtual((prev) => (prev + 1) % totalSlides)}
+                className="p-1 rounded-sm hover:bg-white text-slate-700 transition-colors cursor-pointer"
+                title="Próximo"
+              >
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* CONTEÚDO DO SLIDE */}
-      <div className="w-full h-full pt-10">
+        {/* ABAS DE NAVEGAÇÃO RÁPIDA */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 max-w-7xl mx-auto w-full scrollbar-none">
+          {SLIDES_BASE.map((slide, idx) => {
+            const isAtivo = slideAtual === idx
+            return (
+              <button
+                key={slide.id}
+                type="button"
+                onClick={() => setSlideAtual(idx)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                  isAtivo
+                    ? "bg-[#c69e6b] text-white font-bold shadow-xs"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
+                }`}
+              >
+                <span>{slide.icone}</span>
+                <span>{slide.titulo}</span>
+              </button>
+            )
+          })}
+        </div>
+      </header>
+
+      {/* 2. ÁREA CENTRAL DE CONTEÚDO */}
+      <main className="relative flex-1 w-full h-full overflow-hidden flex items-center justify-center">
+        {/* SLIDE 0: SIMULADOR DE IA COM COLABORADORES REAIS */}
+        {current.tipo === "sandbox_ia" && (
+          <div className="relative w-full h-full flex items-center justify-center p-4 sm:p-8">
+            <div className="relative z-10 max-w-3xl w-full bg-white rounded-lg border border-slate-200 p-6 sm:p-8 shadow-md space-y-5">
+              {/* Header do Simulador */}
+              <div className="border-b border-slate-200 pb-4">
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                  <span>Simulador de Voz & IA</span>
+                  <span className="text-xs px-2 py-0.5 rounded-sm bg-amber-50 text-[#a67c4e] border border-amber-200 font-mono">
+                    Groq Llama 3.3 70B
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Simulação com os colaboradores reais da empresa respeitando a cultura <strong>"Excelente..."</strong>
+                </p>
+              </div>
+
+              {/* Controles de Simulação */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                {/* Colaborador Real */}
+                <div className="space-y-1.5">
+                  <label className="text-slate-600 font-bold uppercase tracking-wider text-[10px]">Colaborador Real</label>
+                  <select
+                    value={sandboxNome}
+                    onChange={(e) => setSandboxNome(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-2 text-slate-900 font-medium focus:border-[#c69e6b] outline-none cursor-pointer"
+                  >
+                    {funcionarios.map((f) => (
+                      <option key={f.id} value={f.nome} className="text-slate-900">
+                        {f.nome} ({f.apelidoPrincipal})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Tipo de Ponto */}
+                <div className="space-y-1.5">
+                  <label className="text-slate-600 font-bold uppercase tracking-wider text-[10px]">Tipo de Registro</label>
+                  <select
+                    value={sandboxTipo}
+                    onChange={(e) => setSandboxTipo(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-2 text-slate-900 font-medium focus:border-[#c69e6b] outline-none cursor-pointer"
+                  >
+                    <option value="Entrada">🌅 Entrada</option>
+                    <option value="Saída Almoço">🥪 Saída Almoço</option>
+                    <option value="Retorno Almoço">⚡ Retorno Almoço</option>
+                    <option value="Saída">🌙 Saída Fim</option>
+                  </select>
+                </div>
+
+                {/* Dia da Semana */}
+                <div className="space-y-1.5">
+                  <label className="text-slate-600 font-bold uppercase tracking-wider text-[10px]">Dia da Semana</label>
+                  <select
+                    value={sandboxDia}
+                    onChange={(e) => setSandboxDia(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-2 text-slate-900 font-medium focus:border-[#c69e6b] outline-none cursor-pointer"
+                  >
+                    <option value="Sexta">🎉 Sexta-feira (Sextou!)</option>
+                    <option value="Segunda">🚀 Segunda-feira (Início)</option>
+                    <option value="Quarta">⚡ Quarta-feira</option>
+                    <option value="Sábado">📅 Sábado</option>
+                  </select>
+                </div>
+
+                {/* Trabalha no Sábado */}
+                <div className="space-y-1.5">
+                  <label className="text-slate-600 font-bold uppercase tracking-wider text-[10px]">Trabalha Sábado?</label>
+                  <button
+                    type="button"
+                    onClick={() => setSandboxSabado(!sandboxSabado)}
+                    className={`w-full py-2 px-3 rounded-md font-bold border transition-all text-center cursor-pointer ${
+                      sandboxSabado
+                        ? "bg-amber-50 border-amber-300 text-[#a67c4e]"
+                        : "bg-slate-50 border-slate-300 text-slate-600"
+                    }`}
+                  >
+                    {sandboxSabado ? "✅ Sim (até amanhã)" : "❌ Não (bom fds)"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Botão de Disparo */}
+              <div>
+                <button
+                  type="button"
+                  onClick={executarGeracaoIa}
+                  disabled={sandboxGerando}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-md bg-gradient-to-r from-[#c69e6b] to-[#b38850] hover:from-[#b38850] hover:to-[#9e7542] text-white font-bold text-sm shadow-sm active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {sandboxGerando ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Gerando com IA & Sintetizando Voz...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>Gerar Fala Inteligente com IA do Groq</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Resultado */}
+              {sandboxResultado ? (
+                <div className="p-4 rounded-md bg-slate-50 border border-slate-200 space-y-2 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-[#a67c4e]">
+                      Fala Gerada ({sandboxResultado.origem === "groq_ia" ? "Groq Llama 3.3 70B" : "Catálogo Inteligente"})
+                    </span>
+                    <span className="text-slate-500 font-mono">Latência: {sandboxResultado.tempoMs}ms</span>
+                  </div>
+
+                  <p className="text-base font-bold text-slate-900 leading-relaxed">
+                    "{sandboxResultado.voz}"
+                  </p>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-xs">
+                    <span className="text-slate-600">
+                      Na tela: <strong className="text-slate-900">{sandboxResultado.visual}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => reproduzirVozSaudacao(sandboxResultado.voz)}
+                      className="text-[#c69e6b] hover:text-[#a67c4e] font-bold underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      Repetir Áudio
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-md bg-slate-50 border border-dashed border-slate-300 text-center text-xs text-slate-500">
+                  💡 Clique no botão dourado para gerar e ouvir a voz em tempo real!
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* SLIDE 1: CHECK-IN DE HUMOR INTERATIVO */}
+        {current.tipo === "checkin_humor" && (
+          <div className="w-full h-full">
+            <ModalCheckinHumor
+              key="showcase-humor-modal"
+              nome={current.dadosPonto?.nome || "Jéssica Ferreira"}
+              onConfirmar={() => {}}
+              onFechar={avancarSlide}
+            />
+          </div>
+        )}
+
+        {/* SLIDES DE PONTO BATIDO */}
         {current.tipo === "ponto_batido" && current.dadosPonto && (
           <TelaPontoSucesso
             key={current.id}
@@ -331,12 +516,14 @@ export function ShowcaseCarrossel() {
             hora={current.dadosPonto.hora}
             data={current.dadosPonto.data}
             mensagem={current.dadosPonto.mensagem}
-            durationMs={15000}
+            falaVoz={current.vozTexto}
+            durationMs={20000}
             onVoltar={avancarSlide}
             modoDemonstracao={true}
           />
         )}
 
+        {/* SLIDES DE DIÁLOGO INTELIGENTE */}
         {current.tipo === "dialogo" && current.dadosDialogo && (
           <DialogoPontoInteligente
             key={current.id}
@@ -347,7 +534,10 @@ export function ShowcaseCarrossel() {
             modoDemonstracao={true}
           />
         )}
-      </div>
+      </main>
+
+      {/* 3. ONDA LUMINOSA NA BASE */}
+      <AnimacaoVozIa />
     </div>
   )
 }

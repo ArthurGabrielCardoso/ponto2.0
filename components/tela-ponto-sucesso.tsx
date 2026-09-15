@@ -3,24 +3,32 @@
 import React, { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
+import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
+import { EmojisFlutuantes } from "@/components/emojis-flutuantes"
+import { QrEspelho } from "@/components/qr-espelho"
 
 interface TelaPontoSucessoProps {
+  /** Id do funcionário — sem ele o QR do espelho não aparece. */
+  funcionarioId?: string
   nome: string
   tipo: string
   hora: string
   data: string
   mensagem?: string
+  falaVoz?: string
   durationMs?: number
   onVoltar: () => void
   modoDemonstracao?: boolean
 }
 
 export function TelaPontoSucesso({
+  funcionarioId,
   nome,
   tipo,
   hora,
   data,
   mensagem,
+  falaVoz,
   durationMs = 30000,
   onVoltar,
   modoDemonstracao = false,
@@ -31,6 +39,8 @@ export function TelaPontoSucesso({
   // 3. "revelar": Ícone 100% ancorado -> surge a logo, badge e lado esquerdo (1500ms+)
   const [fase, setFase] = useState<"centro" | "deslizando" | "revelar">("centro")
   const [timeLeft, setTimeLeft] = useState(Math.round(durationMs / 1000))
+  // Com o QR aberto a contagem para: a pessoa está com o celular na mão.
+  const [contagemPausada, setContagemPausada] = useState(false)
   const onVoltarRef = useRef(onVoltar)
 
   useEffect(() => {
@@ -55,6 +65,11 @@ export function TelaPontoSucesso({
 
   useEffect(() => {
     setTimeLeft(Math.round(durationMs / 1000))
+  }, [durationMs, tipo, nome])
+
+  useEffect(() => {
+    if (contagemPausada) return
+
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -67,7 +82,7 @@ export function TelaPontoSucesso({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [durationMs, tipo, nome])
+  }, [contagemPausada, durationMs, tipo, nome])
 
   const iconeAncorado = fase === "deslizando" || fase === "revelar"
   const conteudoVisivel = fase === "revelar"
@@ -195,15 +210,24 @@ export function TelaPontoSucesso({
         <div className="relative z-10 flex-1 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-10 max-w-5xl mx-auto w-full my-auto px-2">
           {/* LADO ESQUERDO: Saudação e Card de Informações */}
           <div
-            className={`w-full md:w-[46%] space-y-4 sm:space-y-5 text-center md:text-left transition-all duration-600 ease-out ${
+            className={`w-full md:w-[52%] space-y-3 sm:space-y-4 text-center md:text-left transition-all duration-600 ease-out ${
               conteudoVisivel
                 ? "opacity-100 translate-x-0 translate-y-0"
                 : "opacity-0 -translate-x-6 md:-translate-y-2 pointer-events-none"
             }`}
           >
+            {/* Aqui havia um par de olhos, herdado da tela de espera.
+                Saiu: nesta tela o ponto já está batido, e o que a pessoa
+                precisa ver é o próprio nome, o tipo e a hora. Um rosto
+                competindo com isso só divide a atenção num momento em que ela
+                já está indo embora. Os olhos ficam onde fazem falta — na
+                espera, chamando quem chega. */}
+
             {/* Saudação com Nome */}
-            <div className="space-y-1">
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight drop-shadow-sm">
+            <div className="space-y-2">
+              {/* Um degrau menor em cada faixa: os olhos passaram a ocupar
+                  espaço acima e a saudação precisava devolver altura. */}
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight drop-shadow-sm">
                 <span style={{ color: cenario.greetingColor }}>
                   {mensagem || `Excelente trabalho, ${nome.split(" ")[0]}!`}
                 </span>
@@ -211,8 +235,8 @@ export function TelaPontoSucesso({
             </div>
 
             {/* Card de Informações Retangular */}
-            <div className={`rounded-2xl p-5 sm:p-6 space-y-3.5 ${cenario.cardClass}`}>
-              <div className={`flex items-center justify-between border-b pb-2.5 ${cenario.cardDivider}`}>
+            <div className={`rounded-2xl p-4 sm:p-5 space-y-2.5 ${cenario.cardClass}`}>
+              <div className={`flex items-center justify-between border-b pb-2 ${cenario.cardDivider}`}>
                 <span className={`text-xs uppercase font-bold tracking-wider ${cenario.cardLabel}`}>Tipo</span>
                 <span className={`font-bold text-sm px-3.5 py-1 rounded-md ${cenario.tagClass}`}>
                   {tipo}
@@ -222,7 +246,7 @@ export function TelaPontoSucesso({
               <div className="flex items-center justify-between">
                 <div>
                   <span className={`text-xs uppercase font-bold tracking-wider block ${cenario.cardLabel}`}>Horário Registrado</span>
-                  <span className={`text-2xl sm:text-3xl font-bold tracking-tight font-mono ${cenario.timeText}`}>{hora}</span>
+                  <span className={`text-xl sm:text-2xl font-bold tracking-tight font-mono ${cenario.timeText}`}>{hora}</span>
                 </div>
                 <div className="text-right">
                   <span className={`text-xs uppercase font-bold tracking-wider block ${cenario.cardLabel}`}>Data</span>
@@ -264,7 +288,7 @@ export function TelaPontoSucesso({
             }`}
           >
             <div className="relative flex items-center justify-center">
-              <IlustracaoPontoAnimada tipo={tipo} className="w-72 h-72 sm:w-88 sm:h-88 md:w-[420px] md:h-[420px] lg:w-[480px] lg:h-[480px]" />
+              <IlustracaoPontoAnimada tipo={tipo} className="w-64 h-64 sm:w-80 sm:h-80 md:w-[380px] md:h-[380px] lg:w-[430px] lg:h-[430px]" />
             </div>
           </div>
         </div>
@@ -272,6 +296,22 @@ export function TelaPontoSucesso({
         {/* RODAPÉ */}
         <div className="relative z-10 h-4 shrink-0" />
       </div>
+
+      {/* QR do espelho de ponto. Abrir pausa o retorno automático: sacar o
+          celular, desbloquear e abrir a câmera não cabe em 15 segundos. */}
+      {funcionarioId && (
+        <QrEspelho
+          funcionarioId={funcionarioId}
+          nome={nome}
+          onAbrirFechar={(aberto) => setContagemPausada(aberto)}
+        />
+      )}
+
+      {/* Emojis da própria saudação subindo enquanto a IA fala */}
+      <EmojisFlutuantes texto={mensagem} />
+
+      {/* Onda luminosa azul na borda bottom quando a voz fala */}
+      <AnimacaoVozIa />
     </div>
   )
 }
