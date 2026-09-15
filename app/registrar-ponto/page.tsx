@@ -574,8 +574,32 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    * jogado fora de propósito: o que importa é o caminho ter passado pela GPU.
    * Só roda quando NÃO há ninguém no quadro — se alguém chegou, quem manda é a
    * batida de verdade, nunca o aquecimento.
+   *
+   * POR QUE 5 SEGUNDOS, E NÃO 25 COMO ANTES
+   *
+   * A primeira leitura real de ms_ocioso_antes mediu a queda: 7.332 ms parado
+   * e a olhada seguinte custou 875 ms; batidas em sequência, 176 a 185 ms. A
+   * GPU esfria em menos de dez segundos.
+   *
+   * Isso inverte a conta de custo. A 25 s ela esfria entre um aquecimento e o
+   * outro, então CADA aquecimento paga preço de frio (~900 ms) e ainda assim
+   * esfria de novo antes da próxima batida — gasta e não entrega. A 5 s ela
+   * nunca esfria, e cada aquecimento custa ~180 ms. O trabalho por minuto
+   * acaba sendo praticamente o mesmo (~2,2 s), com a diferença de que este
+   * funciona.
+   *
+   * 7 s foi considerado e descartado: fica em cima do único ponto que
+   * medimos (7,3 s já custou 875 ms), ou seja, na fronteira do que sabemos.
+   *
+   * Sobre desgaste: durante a proteção de tela o tablet já roda uma detecção
+   * a cada INTERVALO_DETECCAO_OCIOSA_MS para mover os olhos. Uma olhada
+   * pesada a cada 5 s é ~3,6% em cima disso.
+   *
+   * ms_ocioso_antes continua gravando em toda batida, então a curva de
+   * esfriamento vai ficando mais nítida e este número pode ser reajustado com
+   * dado em vez de estimativa.
    */
-  const INTERVALO_AQUECIMENTO_PESADO_MS = 25 * 1000
+  const INTERVALO_AQUECIMENTO_PESADO_MS = 5 * 1000
   /**
    * Faixa de horas em que vale a pena manter a rede pesada acordada.
    *
