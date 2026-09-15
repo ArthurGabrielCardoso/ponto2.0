@@ -34,6 +34,7 @@ import {
 } from "@/lib/ia-saudacao"
 import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
 import { prepararSom, tocarConfirmacao, tocarSucesso } from "@/lib/som-ponto"
+import { useCssRevelacao, DURACAO_REVELACAO_MS } from "@/components/revelacao-do-centro"
 import { reproduzirVozSaudacao, prepararVozSaudacao } from "@/lib/tts-audio"
 import * as telemetria from "@/lib/telemetria-reconhecimento"
 import {
@@ -118,11 +119,12 @@ function SuccessAnimation({ tipo }: { tipo: string }) {
  * lados ao mesmo tempo e FICA. O movimento do centro para fora é o mesmo
  * gesto de uma barra de progresso completando: diz "terminou", não "atenção".
  *
- * `expandindo` é o segundo ato: quando o ponto foi gravado, a barra derrama
- * uma cortina esmeralda tela abaixo, e a tela de sucesso entra por baixo
- * dela. Sem isso a troca de tela era um corte seco.
+ * A emenda com a tela de sucesso não é mais feita aqui: quem faz é a
+ * revelação do centro, a mesma transição de rota da VitallCam. Uma cortina
+ * esmeralda descendo por cima disso seria movimento demais para o mesmo
+ * instante.
  */
-function MolduraTopo({ expandindo = false }: { expandindo?: boolean }) {
+function MolduraTopo() {
   return (
     <>
       <style>{`
@@ -130,22 +132,14 @@ function MolduraTopo({ expandindo = false }: { expandindo?: boolean }) {
           from { transform: scaleX(0); }
           to   { transform: scaleX(1); }
         }
-        @keyframes cortinaDesce {
-          from { opacity: 0; transform: scaleY(0); }
-          to   { opacity: 1; transform: scaleY(1); }
-        }
         .barra-topo {
           transform-origin: center;
           animation: barraDoCentro .34s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
-        .cortina-sucesso {
-          transform-origin: top;
-          animation: cortinaDesce .22s cubic-bezier(0.4, 0, 0.2, 1) both;
-        }
         /* Quem pediu menos movimento no sistema recebe o estado final direto:
            o sinal continua sendo dado, sem a animação. */
         @media (prefers-reduced-motion: reduce) {
-          .barra-topo, .cortina-sucesso { animation: none; }
+          .barra-topo { animation: none; }
         }
       `}</style>
 
@@ -172,15 +166,6 @@ function MolduraTopo({ expandindo = false }: { expandindo?: boolean }) {
         }}
       />
 
-      {expandindo && (
-        <div
-          className="fixed inset-0 z-30 pointer-events-none cortina-sucesso"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(16,185,129,0.62) 0%, rgba(16,185,129,0.34) 55%, rgba(16,185,129,0.14) 100%)",
-          }}
-        />
-      )}
     </>
   )
 }
@@ -245,17 +230,11 @@ function Screensaver({
   onTap,
   onSegredo,
   olhar,
-  saindo,
-  origem,
 }: {
-  onTap: (e: React.MouseEvent) => void
+  onTap: () => void
   onSegredo: () => void
   /** Direção em que a pessoa detectada está. null = ninguém à vista. */
   olhar: { x: number; y: number } | null
-  /** A película está se abrindo para revelar a câmera. */
-  saindo: boolean
-  /** Ponto de onde o círculo abre, em % da tela. Onde o dedo encostou. */
-  origem: { x: number; y: number }
 }) {
   // Gesto escondido: 10 toques no canto inferior direito abrem o modo teste.
   // Fica no canto e exige repetição justamente para ninguém cair nele sem querer.
@@ -343,49 +322,16 @@ function Screensaver({
 
   return (
     <div
-      className={`absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden${saindo ? " ss-abrindo" : " backdrop-blur-xl"}`}
+      className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden backdrop-blur-xl"
       style={{
         background: "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
-        // O DESFOQUE SAI NO INSTANTE DO TOQUE, e isto não é detalhe.
-        //
-        // Um backdrop-filter de 20 px em tela cheia é composto pela GPU a cada
-        // quadro. Durante a abertura ele estaria animando um recorte circular
-        // por cima desse desfoque — nas MESMAS duas unidades da Mali-G57 que
-        // nesse exato momento estão rodando o primeiro passe completo, que é o
-        // mais caro da batida inteira.
-        //
-        // Ou seja: manter o desfoque aqui competiria por GPU justamente com a
-        // parte que este trabalho inteiro passou o dia protegendo. E ele nem
-        // faz falta: a película está desaparecendo.
-        backdropFilter: saindo ? "none" : "blur(20px)",
-        WebkitBackdropFilter: saindo ? "none" : "blur(20px)",
-        // O buraco do círculo abre exatamente onde o dedo encostou, não no
-        // centro geométrico: a tela responde ao gesto da pessoa, e não a uma
-        // coreografia que ignora onde ela tocou.
-        ["--abrir-x" as string]: `${origem.x}%`,
-        ["--abrir-y" as string]: `${origem.y}%`,
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
       }}
       onClick={onTap}
     >
       <style>{`
         @keyframes fadeUp{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
-        /* A película não some: ela ABRE. O clip-path recorta um círculo que
-           cresce do dedo até passar do canto mais distante da tela, revelando
-           a câmera por baixo. 140% cobre a diagonal de qualquer proporção. */
-        @keyframes peliculaAbre {
-          from { clip-path: circle(0% at var(--abrir-x) var(--abrir-y)); opacity: 1; }
-          to   { clip-path: circle(140% at var(--abrir-x) var(--abrir-y)); opacity: 0; }
-        }
-        .ss-abrindo {
-          animation: peliculaAbre .42s cubic-bezier(0.4, 0, 0.2, 1) both;
-          pointer-events: none;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .ss-abrindo { animation: none; opacity: 0; }
-        }
-        @keyframes smoothNameFade{0%{opacity:0;transform:translateY(4px);filter:blur(3px)}100%{opacity:1;transform:translateY(0);filter:blur(0)}}
-        .ss-fade{animation:fadeUp .6s ease-out both}
-        .ss-name-smooth{display:inline-block;animation:smoothNameFade .8s cubic-bezier(0.22, 1, 0.36, 1) both}
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
@@ -458,7 +404,7 @@ function Screensaver({
             // toque segue adiante, com o mesmo evento, para o círculo abrir no
             // lugar certo.
             e.stopPropagation()
-            onTap(e)
+            onTap()
           }}
         >
           <div
@@ -605,11 +551,16 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // vista, e aí eles voltam a vaguear sozinhos.
   const [olharDaCamera, setOlharDaCamera] = useState<{ x: number; y: number } | null>(null)
   /**
-   * A película está abrindo. Dura o tempo da animação e só controla PIXEL —
-   * o reconhecimento já começou antes dela.
+   * Marca a película que está se abrindo. É PURAMENTE COSMÉTICA: uma camada
+   * própria, por fora da proteção de tela, que já foi desmontada.
+   *
+   * Nenhum estado do app depende dela. A versão anterior punha o
+   * `setScreensaver(false)` dentro de um `setTimeout` da animação — se algo
+   * naquele caminho falhasse, a película nunca saía, a câmera ficava escondida
+   * atrás dela e o reconhecimento não começava. Animação não pode ter esse
+   * poder sobre o ponto.
    */
-  const [saindoDaEspera, setSaindoDaEspera] = useState(false)
-  const [origemDaAbertura, setOrigemDaAbertura] = useState({ x: 50, y: 50 })
+  const [peliculaSaindo, setPeliculaSaindo] = useState(0)
   const timerAberturaRef = useRef<number | null>(null)
   const ultimaDeteccaoOciosaRef = useRef(0)
   /**
@@ -741,6 +692,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const COOLDOWN_MS = 60 * 1000
   // Com que frequência a tela de humor aparece na entrada (fora de cooldown).
   const CHANCE_CHECKIN_HUMOR = 0.55
+
+  // Registra o @property e as duas classes da revelação uma vez só.
+  useCssRevelacao()
 
   // Prefetch da página de sucesso
   useEffect(() => {
@@ -1582,7 +1536,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       window.clearTimeout(timerAberturaRef.current)
       timerAberturaRef.current = null
     }
-    setSaindoDaEspera(false)
+    setPeliculaSaindo(0)
     setScreensaver(true)
   }
 
@@ -1635,7 +1589,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           está sendo gravado. Continua visível durante `registroCompleto`, aí
           com a cortina, para emendar na tela de sucesso sem corte seco. */}
       {recognizedPerson && recognizedPerson.isSmiling && !showSuccess && (
-        <MolduraTopo expandindo={recognizedPerson.registroCompleto} />
+        <MolduraTopo />
       )}
 
       {/* Status em Glassmorphism Dourado - Pessoa reconhecida (segue visível ao sorrir) */}
@@ -1681,52 +1635,60 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         </div>
       )}
 
+      {/* Película se abrindo — camada cosmética, por fora da proteção de tela.
+          A câmera já está visível por baixo; o buraco cresce do centro e come
+          a película. Mesma mecânica da transição de rotas da VitallCam.
+          `pointer-events-none` e fim totalmente transparente: mesmo que a
+          limpeza falhe, ela não bloqueia nada. */}
+      {peliculaSaindo > 0 && (
+        <div
+          key={peliculaSaindo}
+          className="fixed inset-0 z-40 pointer-events-none abrir-do-centro"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
+          }}
+        />
+      )}
+
       {/* Proteção de tela */}
       {screensaver && (
         <Screensaver
           olhar={olharDaCamera}
-          onTap={(e) => {
-            // O laço de reconhecimento lê `screensaverRef`, não o estado, e
-            // por isso o primeiro passe completo começa neste instante, com o
-            // círculo ainda abrindo.
-            //
-            // REGISTRO DE UM ERRO, para ninguém repetir: isto foi apresentado
-            // como um GANHO da animação. Não é. O ref já era virado aqui antes
-            // da animação existir, então o reconhecimento já começava no mesmo
-            // instante. A abertura em círculo não economiza um milissegundo —
-            // ela faz a tela responder ao toque, que é outro tipo de valor.
-            //
-            // O que a animação PODE custar está tratado no `backdropFilter`
-            // abaixo.
+          onTap={() => {
+            // Tudo que o app precisa acontece AQUI, de forma síncrona. A
+            // animação vem depois e não tem voto nenhum sobre isso.
             screensaverRef.current = false
+            setScreensaver(false)
             telemetria.registrarToque()
             // Único gesto garantido da batida: é aqui, e só aqui, que dá para
             // destravar o áudio do navegador.
             prepararSom()
             resetInactivityTimer()
 
-            // O círculo abre de onde o dedo encostou.
-            const alvo = e.currentTarget as HTMLElement
-            const r = alvo.getBoundingClientRect()
-            setOrigemDaAbertura({
-              x: r.width ? ((e.clientX - r.left) / r.width) * 100 : 50,
-              y: r.height ? ((e.clientY - r.top) / r.height) * 100 : 50,
-            })
-            setSaindoDaEspera(true)
+            // A película vira uma camada à parte, que se abre do centro por
+            // cima da câmera já visível. Se o timer abaixo nunca rodar, ela
+            // termina totalmente transparente e sem captar toque — pior caso
+            // é uma camada invisível esquecida, não um ponto travado.
+            setPeliculaSaindo((n) => n + 1)
             if (timerAberturaRef.current) window.clearTimeout(timerAberturaRef.current)
-            timerAberturaRef.current = window.setTimeout(() => {
-              setScreensaver(false)
-              setSaindoDaEspera(false)
-            }, 420)
+            timerAberturaRef.current = window.setTimeout(
+              () => setPeliculaSaindo(0),
+              DURACAO_REVELACAO_MS + 120
+            )
           }}
-          saindo={saindoDaEspera}
-          origem={origemDaAbertura}
           onSegredo={() => setModoTeste(true)}
         />
       )}
 
       {/* Tela de sucesso de Ponto Registrado — Zero Scroll, Animação do Centro para Direita & Dourado */}
+      {/* A tela de ponto batido nasce de dentro de um círculo que cresce do
+          centro — a mesma transição de rota da VitallCam, na direção dela: o
+          conteúdo NOVO é que é revelado. `fixed inset-0` porque a máscara
+          precisa de uma caixa do tamanho da tela para o raio em % fazer
+          sentido. */}
       {showSuccess && recognizedPerson && (
+        <div className="fixed inset-0 z-50 revelar-do-centro">
         <TelaPontoSucesso
           funcionarioId={recognizedPerson.id}
           nome={recognizedPerson.nome}
@@ -1738,6 +1700,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           durationMs={30000}
           onVoltar={resetToInitialState}
         />
+        </div>
       )}
 
       {/* Modal / Tela de Check-in de Humor no Padrão Ponto Batido (Ocasional) */}
