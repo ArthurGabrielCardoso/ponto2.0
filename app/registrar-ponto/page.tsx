@@ -652,17 +652,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   /**
    * Quanto tempo de sorriso CONTÍNUO o ponto exige.
    *
-   * Antes era 1 quadro: sorriu num piscar de olhos, gravou. Rápido demais para
-   * ser um gesto — qualquer expressão de passagem batia o ponto, e a pessoa
-   * nem chegava a sorrir de fato.
-   *
-   * MEDIDO EM TEMPO, NÃO EM QUADROS, e isso importa. A olhada completa varia
-   * de ~185 ms com a GPU quente a ~900 ms com ela fria (medido hoje, várias
-   * vezes). "Oito quadros" seria 1,5 s quente e 7 s frio — a mesma regra
-   * escrita no código valendo coisas completamente diferentes na prática.
-   * Relógio é relógio em qualquer temperatura.
+   * 1,0s de sorriso contínuo medido no relógio: rápido, natural e sem disparos acidentais.
    */
-  const TEMPO_DE_SORRISO_MS = 1500
+  const TEMPO_DE_SORRISO_MS = 1000
   const SMILE_THRESHOLD = 0.40
   // De quanto em quanto tempo a identidade é reconferida com o passe completo.
   // É esta janela que pega a troca de pessoa na frente da câmera.
@@ -1724,8 +1716,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         </div>
       )}
 
-      {/* Indicador em Glassmorphism Dourado — Posicione seu rosto na câmera (Sem bolinha) */}
-      {!screensaver && !showSuccess && !recognizedPerson && modelsReady && cameraActive && (
+      {/* Indicador em Glassmorphism Dourado — Posicione seu rosto na câmera (Sem bolinha)
+          Só aparece quando a película já saiu 100% (peliculaSaindo === 0) */}
+      {!screensaver && peliculaSaindo === 0 && !showSuccess && !recognizedPerson && modelsReady && cameraActive && (
         <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none animate-in fade-in duration-300">
           <div
             className="py-4 px-6 border-t backdrop-blur-xl text-white text-center"
