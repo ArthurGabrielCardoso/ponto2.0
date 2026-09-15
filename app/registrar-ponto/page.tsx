@@ -27,7 +27,6 @@ import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/d
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
 import { ModalCheckinHumor } from "@/components/modal-checkin-humor"
 import { OndaOrganicaDourada } from "@/components/onda-organica-dourada"
-import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import {
   obterSaudacaoInteligente,
   gerarSaudacaoLocalDoDia,
@@ -35,6 +34,7 @@ import {
 } from "@/lib/ia-saudacao"
 import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
 import { prepararSom, tocarConfirmacao, tocarSucesso } from "@/lib/som-ponto"
+import { reproduzirVozSaudacao, prepararVozSaudacao } from "@/lib/tts-audio"
 import * as telemetria from "@/lib/telemetria-reconhecimento"
 import {
   enfileirarPonto,
@@ -942,17 +942,25 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     const chave = `${func.id}|${tipo}`
     if (prefetchSaudacaoRef.current?.chave === chave) return
 
-    prefetchSaudacaoRef.current = {
-      chave,
-      promise: obterSaudacaoInteligente({
-        nome: func.nome,
-        tipoPonto: tipo,
-        dataHora: new Date(),
-        trabalhaSabado: !!func.horarios?.sabado?.ativo,
-      }).catch(() =>
-        gerarSaudacaoLocalDoDia({ nome: func.nome, tipoPonto: tipo, dataHora: new Date() })
-      ),
-    }
+    const promessaSaudacao = obterSaudacaoInteligente({
+      nome: func.nome,
+      tipoPonto: tipo,
+      dataHora: new Date(),
+      trabalhaSabado: !!func.horarios?.sabado?.ativo,
+    }).catch(() =>
+      gerarSaudacaoLocalDoDia({ nome: func.nome, tipoPonto: tipo, dataHora: new Date() })
+    )
+
+    // Assim que a frase existe, o áudio dela já começa a ser baixado — em
+    // paralelo com a pessoa andando até o tablet e sorrindo. Quando a tela de
+    // sucesso entrar, o MP3 já está no cache e a voz sai no mesmo instante.
+    //
+    // Isto virou necessário porque a batida encurtou: com 25 s de batida o
+    // /api/tts cabia folgado no meio; com 2,1 s, a funcionária já saiu da sala
+    // quando a voz começa.
+    void promessaSaudacao.then((sd) => prepararVozSaudacao(sd?.voz)).catch(() => {})
+
+    prefetchSaudacaoRef.current = { chave, promise: promessaSaudacao }
   }
 
   // Loop de reconhecimento — back-to-back sem throttle, serializado pelo isProcessingRef.
@@ -1398,7 +1406,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // Antes da voz, de propósito: a nota fecha a frase que a confirmação
       // abriu, e a saudação falada entra em seguida sem disputar com ela.
       tocarSucesso()
-      reproduzirVozSaudacao(mensagemVoz)
+      // `semEsperarRede`: se o adiantamento acima não deu conta (frase
+      // diferente da prevista, rede lenta), a voz do navegador fala AGORA em
+      // vez de esperar o MP3. Voz pior na hora serve; voz boa falando para
+      // uma sala vazia não serve para nada.
+      reproduzirVozSaudacao(mensagemVoz, { semEsperarRede: true })
 
       // Fecha a medição no mesmo instante em que a pessoa vê a tela pronta.
       // Disparado e esquecido: não segura nada.
@@ -1514,7 +1526,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
       setRecognizedPerson(completed)
       setShowSuccess(true)
-      reproduzirVozSaudacao(saudacaoIa.voz || completed.mensagem)
+      reproduzirVozSaudacao(saudacaoIa.voz || completed.mensagem, { semEsperarRede: true })
 
       // Gerenciar lembretes automáticos de almoço por voz na regularização inteligente
       const tl = tipoExibicao.toLowerCase()
