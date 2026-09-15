@@ -343,11 +343,22 @@ function Screensaver({
 
   return (
     <div
-      className={`absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden backdrop-blur-xl${saindo ? " ss-abrindo" : ""}`}
+      className={`absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden${saindo ? " ss-abrindo" : " backdrop-blur-xl"}`}
       style={{
         background: "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
+        // O DESFOQUE SAI NO INSTANTE DO TOQUE, e isto não é detalhe.
+        //
+        // Um backdrop-filter de 20 px em tela cheia é composto pela GPU a cada
+        // quadro. Durante a abertura ele estaria animando um recorte circular
+        // por cima desse desfoque — nas MESMAS duas unidades da Mali-G57 que
+        // nesse exato momento estão rodando o primeiro passe completo, que é o
+        // mais caro da batida inteira.
+        //
+        // Ou seja: manter o desfoque aqui competiria por GPU justamente com a
+        // parte que este trabalho inteiro passou o dia protegendo. E ele nem
+        // faz falta: a película está desaparecendo.
+        backdropFilter: saindo ? "none" : "blur(20px)",
+        WebkitBackdropFilter: saindo ? "none" : "blur(20px)",
         // O buraco do círculo abre exatamente onde o dedo encostou, não no
         // centro geométrico: a tela responde ao gesto da pessoa, e não a uma
         // coreografia que ignora onde ela tocou.
@@ -1627,14 +1638,18 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         <Screensaver
           olhar={olharDaCamera}
           onTap={(e) => {
-            // ORDEM IMPORTA, e é ela que faz a animação custar zero.
+            // O laço de reconhecimento lê `screensaverRef`, não o estado, e
+            // por isso o primeiro passe completo começa neste instante, com o
+            // círculo ainda abrindo.
             //
-            // O laço de reconhecimento lê `screensaverRef`, não o estado. Ao
-            // virar o ref primeiro, o primeiro passe completo começa AGORA,
-            // enquanto o círculo ainda está abrindo. Os ~420 ms da animação
-            // acontecem por cima de trabalho que já está rodando, em vez de
-            // antes dele. É tempo que antes era gasto esperando o React
-            // desmontar a película.
+            // REGISTRO DE UM ERRO, para ninguém repetir: isto foi apresentado
+            // como um GANHO da animação. Não é. O ref já era virado aqui antes
+            // da animação existir, então o reconhecimento já começava no mesmo
+            // instante. A abertura em círculo não economiza um milissegundo —
+            // ela faz a tela responder ao toque, que é outro tipo de valor.
+            //
+            // O que a animação PODE custar está tratado no `backdropFilter`
+            // abaixo.
             screensaverRef.current = false
             telemetria.registrarToque()
             // Único gesto garantido da batida: é aqui, e só aqui, que dá para
