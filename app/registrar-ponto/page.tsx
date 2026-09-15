@@ -726,9 +726,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   /**
    * Quanto tempo de sorriso CONTÍNUO o ponto exige.
    *
-   * 1,0s de sorriso contínuo medido no relógio: rápido, natural e sem disparos acidentais.
+   * 700ms de sorriso contínuo medido no relógio: mais ágil e natural, sem perder a precisão contra disparos acidentais.
    */
-  const TEMPO_DE_SORRISO_MS = 1000
+  const TEMPO_DE_SORRISO_MS = 700
   const SMILE_THRESHOLD = 0.40
   // De quanto em quanto tempo a identidade é reconferida com o passe completo.
   // É esta janela que pega a troca de pessoa na frente da câmera.
