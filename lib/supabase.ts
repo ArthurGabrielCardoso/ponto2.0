@@ -31,6 +31,29 @@ export function isSupabaseAvailable(): boolean {
   return !!supabase
 }
 
+/**
+ * Abre a conexao com o Supabase antes de alguem precisar dela.
+ *
+ * Existe por causa de um sintoma bem especifico do tablet: bater dois pontos
+ * seguidos e instantaneo, mas a primeira batida depois de horas parado demora.
+ * Nao e o reconhecimento — e a primeira requisicao, que paga DNS, TLS e o
+ * servidor frio. Como as batidas reais sao de tres em tres horas, a conexao
+ * esta sempre fria justamente quando importa.
+ *
+ * Chamado quando um rosto aparece na protecao de tela: a pessoa ainda esta
+ * andando ate o tablet, e nesse tempo a conexao fica pronta.
+ *
+ * De proposito nao devolve nada e engole erros: e aquecimento, nao consulta.
+ */
+export async function aquecerConexaoSupabase(): Promise<void> {
+  try {
+    if (!supabase) return
+    await supabase.from("registros_ponto").select("id").limit(1)
+  } catch {
+    /* aquecimento: falhar aqui nao muda nada para quem bate o ponto */
+  }
+}
+
 // Buscar funcionários com tratamento de erros aprimorado
 export async function buscarFuncionarios(): Promise<Funcionario[]> {
   const LOCAL_CACHE_KEY = "vitall_cached_funcionarios"

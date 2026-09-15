@@ -19,7 +19,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { DotLottieReact } from "@lottiefiles/dotlottie-react"
-import { registrarPonto, buscarRegistrosHoje, buscarFuncionarioPorId, registrarMultiplosPontos, buscarFuncionarios } from "@/lib/supabase"
+import { registrarPonto, buscarRegistrosHoje, buscarFuncionarioPorId, registrarMultiplosPontos, buscarFuncionarios, aquecerConexaoSupabase } from "@/lib/supabase"
 import type { Funcionario, RegistroPonto } from "@/lib/types"
 import type { CoordenadasLocalizacao } from "@/lib/geolocation"
 import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
@@ -466,6 +466,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const [humorSelecionado, setHumorSelecionado] = useState<string | null>(null)
   const lastFaceSeenRef = useRef<number>(0)
   const isRegisteringRef = useRef(false)
+  /** Passes completos seguidos que não confirmaram quem está na frente. */
+  const falhasSeguidasRef = useRef(0)
+  /** Já há alguém na frente do tablet durante a proteção de tela. */
+  const rostoNaEsperaRef = useRef(false)
   const isProcessingRef = useRef(false)
   const pendingTipoRef = useRef<string | null>(null)
   const pendingTipoPromiseRef = useRef<Promise<string> | null>(null)
@@ -546,6 +550,19 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const INVERTER_OLHAR_X = true
   // De quanto em quanto tempo procurar um rosto enquanto a tela está em espera.
   const INTERVALO_DETECCAO_OCIOSA_MS = 180
+  /**
+   * Quantos passes completos seguidos precisam falhar para a identificação cair.
+   *
+   * Antes era 1: um único frame ruim — a cabeça virando alguns graus, um borrão
+   * de movimento, o rosto meio fora do quadro — apagava quem estava
+   * identificado. Era isso que fazia a moldura esmeralda acender, escrever
+   * "Registrando" e sumir: o passe barato via o sorriso e acendia o verde, e no
+   * mesmo ciclo o passe completo errava o rosto e zerava tudo.
+   *
+   * Três é o suficiente para atravessar um tropeço e baixo o bastante para a
+   * troca de pessoa na frente da câmera continuar rápida (~3 passes completos).
+   */
+  const FALHAS_PARA_PERDER_IDENTIDADE = 3
   const COOLDOWN_MS = 60 * 1000
   // Com que frequência a tela de humor aparece na entrada (fora de cooldown).
   const CHANCE_CHECKIN_HUMOR = 0.55
@@ -757,8 +774,18 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           const rosto = await detectFaceFast(video)
           if (!rosto) {
             setOlharDaCamera(null)
+            rostoNaEsperaRef.current = false
             return
           }
+          // Alguém apareceu na frente do tablet. Ainda não se sabe quem, mas já
+          // dá para abrir a conexão com o banco enquanto a pessoa termina de
+          // chegar. É o que tira a lentidão da primeira batida depois de horas
+          // parado — as de três em três horas, que são justamente as reais.
+          if (!rostoNaEsperaRef.current) {
+            rostoNaEsperaRef.current = true
+            aquecerConexaoSupabase()
+          }
+
           // Centro do rosto (0..1) vira direção do olhar (-1..1). O eixo
           // vertical fica mais contido: olhar muito para baixo esconde os olhos
           // atrás da própria pálpebra.
@@ -832,18 +859,33 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           const result = await recognizeFace(video, SMILE_THRESHOLD)
           ultimaVerificacaoIdentidadeRef.current = Date.now()
           if (result) {
-            // Se o rosto detectado for desconhecido / não cadastrado (ex: Dra. Ana):
+            // Rosto detectado, mas não bateu com ninguém cadastrado.
+            //
+            // Isto NÃO é o mesmo que "chegou outra pessoa": na maior parte das
+            // vezes é a mesma pessoa num frame ruim — a cabeça virando, um
+            // borrão, o rosto meio cortado. Derrubar a identificação no
+            // primeiro tropeço era o que fazia a moldura acender e sumir, e o
+            // que obrigava a pessoa a se reapresentar depois de mexer a cabeça.
+            //
+            // Então a identificação só cai depois de algumas falhas seguidas.
+            // Isso não afrouxa nada de segurança: gravar o ponto continua
+            // exigindo um passe completo que bateu de verdade, logo abaixo.
             if (result.isUnknown || result.id === "unknown") {
-              if (recognizedPersonRef.current) {
-                console.log("⚠️ Rosto não cadastrado na câmera — limpando identificação anterior")
-                setRecognizedPerson(null)
-              }
               lastFaceSeenRef.current = Date.now()
+              if (recognizedPersonRef.current) {
+                falhasSeguidasRef.current += 1
+                if (falhasSeguidasRef.current >= FALHAS_PARA_PERDER_IDENTIDADE) {
+                  console.log("⚠️ Rosto não confirmado em vários passes — limpando identificação")
+                  setRecognizedPerson(null)
+                  falhasSeguidasRef.current = 0
+                }
+              }
               return
             }
 
             // Rosto válido de funcionário cadastrado!
             lastFaceSeenRef.current = Date.now()
+            falhasSeguidasRef.current = 0
 
             const isDifferentPerson = !current || current.id !== result.id
             const isSmiling = result.isSmiling
@@ -876,9 +918,18 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               await handleRegistro(updated)
             }
           } else {
-            // Se nenhum rosto for detectado na câmera por mais de 600ms, reseta
-            if (current && Date.now() - lastFaceSeenRef.current > 600) {
-              setRecognizedPerson(null)
+            // Nenhum rosto no frame. Mesma lógica de antes: uma falha isolada
+            // não derruba ninguém. 600ms era curto demais — quem se inclina
+            // para ler a tela some do quadro por mais tempo que isso.
+            if (current) {
+              falhasSeguidasRef.current += 1
+              const sumiuDeVerdade =
+                falhasSeguidasRef.current >= FALHAS_PARA_PERDER_IDENTIDADE &&
+                Date.now() - lastFaceSeenRef.current > 1500
+              if (sumiuDeVerdade) {
+                setRecognizedPerson(null)
+                falhasSeguidasRef.current = 0
+              }
             }
           }
         } finally {
@@ -1208,6 +1259,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       successTimeoutRef.current = null
     }
     isRegisteringRef.current = false
+    falhasSeguidasRef.current = 0
+    rostoNaEsperaRef.current = false
     prefetchSaudacaoRef.current = null
     setShowSuccess(false)
     setRecognizedPerson(null)
