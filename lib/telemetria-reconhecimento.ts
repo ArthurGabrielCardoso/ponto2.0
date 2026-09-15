@@ -38,6 +38,11 @@ interface Medida {
   msConsultaRegistros?: number
   msSaudacaoIa?: number
 
+  /** Ms que a rede pesada passou parada antes desta tentativa. */
+  msOcioso?: number | null
+  /** Ms desde a última batida concluída neste tablet. */
+  msDesdeUltimoPonto?: number | null
+
   falhasDesconhecido: number
   perdasIdentidade: number
   menorDistancia?: number
@@ -50,6 +55,15 @@ interface Medida {
 
 let atual: Medida | null = null
 let ambiente: { backend: string; gpu: string; userAgent: string } | null = null
+
+/**
+ * Instante da última batida concluída, para medir o intervalo entre uma e
+ * outra. Existe por uma queixa específica: duas batidas seguidas são
+ * instantâneas, mas a primeira depois de horas parada demora. Sem gravar esse
+ * intervalo, "estava parado há muito tempo" continua sendo impressão; com ele,
+ * dá para cruzar o intervalo contra o tempo do passe e ver se a relação é real.
+ */
+let ultimoPontoEm: number | null = null
 
 /** Mediana. Resistente ao primeiro quadro, que é sempre o mais lento. */
 function p50(v: number[]): number | null {
@@ -87,11 +101,18 @@ export function iniciarTentativa() {
   if (atual) return // já há uma em andamento
   atual = {
     inicio: performance.now(),
+    msDesdeUltimoPonto:
+      ultimoPontoEm === null ? null : Math.round(performance.now() - ultimoPontoEm),
     passesBaratos: [],
     passesCompletos: [],
     falhasDesconhecido: 0,
     perdasIdentidade: 0,
   }
+}
+
+/** Quanto tempo a rede pesada ficou sem rodar antes desta tentativa. */
+export function registrarOciosidade(ms: number | null) {
+  if (atual) atual.msOcioso = ms === null ? null : Math.round(ms)
 }
 
 export function registrarPasseBarato(ms: number) {
@@ -166,6 +187,7 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
   if (m.passesCompletos.length === 0 && desfecho !== "ponto_batido") return
 
   const fim = performance.now()
+  if (desfecho === "ponto_batido") ultimoPontoEm = fim
   const ms = (de?: number, ate?: number) =>
     de !== undefined && ate !== undefined ? Math.round(ate - de) : null
 
@@ -183,6 +205,13 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
     ms_total: Math.round(fim - m.inicio),
     ms_passe_barato_p50: p50(m.passesBaratos),
     ms_passe_completo_p50: p50(m.passesCompletos),
+    // O primeiro passe separado da mediana é o que distingue "a GPU estava
+    // fria e o primeiro olhar pagou a conta" de "este tablet é lento o tempo
+    // todo". Só com a mediana os dois casos têm a mesma cara.
+    ms_primeiro_passe_completo:
+      m.passesCompletos.length > 0 ? Math.round(m.passesCompletos[0]) : null,
+    ms_ocioso_antes: m.msOcioso ?? null,
+    ms_desde_ultimo_ponto: m.msDesdeUltimoPonto ?? null,
     ms_consulta_registros: m.msConsultaRegistros ?? null,
     ms_saudacao_ia: m.msSaudacaoIa ?? null,
     passes_baratos: m.passesBaratos.length,

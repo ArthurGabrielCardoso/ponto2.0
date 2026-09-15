@@ -509,6 +509,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // vista, e aí eles voltam a vaguear sozinhos.
   const [olharDaCamera, setOlharDaCamera] = useState<{ x: number; y: number } | null>(null)
   const ultimaDeteccaoOciosaRef = useRef(0)
+  /**
+   * Quando a rede pesada rodou pela última vez, seja de verdade ou por
+   * aquecimento. É daqui que sai tanto o aquecimento da espera quanto o
+   * `ms_ocioso_antes` da telemetria — o número que finalmente diz se "parado há
+   * muito tempo" é mesmo o que deixa a batida lenta.
+   */
+  const ultimoPassePesadoRef = useRef(0)
   const tipoTesteRef = useRef("auto")
   const gravarNoBancoRef = useRef(false)
   const forcarHumorRef = useRef(false)
@@ -552,6 +559,24 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const INVERTER_OLHAR_X = true
   // De quanto em quanto tempo procurar um rosto enquanto a tela está em espera.
   const INTERVALO_DETECCAO_OCIOSA_MS = 180
+  /**
+   * De quanto em quanto tempo rodar um passe COMPLETO de mentira enquanto
+   * ninguém está na frente do tablet.
+   *
+   * O motivo é a queixa mais concreta que temos: duas batidas seguidas são
+   * instantâneas, mas a primeira depois de três horas parada demora. A espera
+   * só exercitava o detector barato (192x144, entrada 96). A rede de descritor
+   * — que é o que custa caro — ficava horas sem rodar, e o Android trata isso
+   * como deve tratar: baixa o clock da GPU e despeja da memória o que não está
+   * sendo usado. Quando alguém enfim chega, o primeiro passe paga tudo isso de
+   * volta.
+   *
+   * Então mantemos a rede pesada acordada de tempos em tempos. O resultado é
+   * jogado fora de propósito: o que importa é o caminho ter passado pela GPU.
+   * Só roda quando NÃO há ninguém no quadro — se alguém chegou, quem manda é a
+   * batida de verdade, nunca o aquecimento.
+   */
+  const INTERVALO_AQUECIMENTO_PESADO_MS = 25 * 1000
   /**
    * Quantos passes completos seguidos precisam falhar para a identificação cair.
    *
@@ -787,6 +812,14 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               rostoNaEsperaRef.current = false
               telemetria.encerrarTentativa("nao_identificado", modoTesteRef.current)
             }
+            // Ninguém à vista: momento certo de manter a rede pesada acordada.
+            // Fica aqui dentro, e não antes do detector, porque aquecimento
+            // nunca pode atrasar quem chegou — se há rosto no quadro, este
+            // trecho sequer é alcançado.
+            if (Date.now() - ultimoPassePesadoRef.current > INTERVALO_AQUECIMENTO_PESADO_MS) {
+              await recognizeFace(video, SMILE_THRESHOLD)
+              ultimoPassePesadoRef.current = Date.now()
+            }
             return
           }
           // Alguém apareceu na frente do tablet. Ainda não se sabe quem, mas já
@@ -796,6 +829,15 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           if (!rostoNaEsperaRef.current) {
             rostoNaEsperaRef.current = true
             aquecerConexaoSupabase()
+            // Quanto tempo a rede pesada passou sem rodar antes desta pessoa
+            // chegar. É a variável que o Arthur descreveu na mão ("duas
+            // seguidas é rápido, de três em três horas é lento") virando
+            // número, para o próximo ajuste sair de dado e não de palpite.
+            telemetria.registrarOciosidade(
+              ultimoPassePesadoRef.current === 0
+                ? null
+                : Date.now() - ultimoPassePesadoRef.current
+            )
             // O cronômetro da tentativa começa aqui, no instante em que alguém
             // aparece — não quando é identificado. O tempo até identificar é
             // justamente uma das medidas que interessam.
@@ -881,6 +923,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           const tCompleto = performance.now()
           const result = await recognizeFace(video, SMILE_THRESHOLD)
           telemetria.registrarPasseCompleto(performance.now() - tCompleto)
+          ultimoPassePesadoRef.current = Date.now()
           ultimaVerificacaoIdentidadeRef.current = Date.now()
           if (result) {
             telemetria.registrarComparacao(!result.isUnknown, result.distancia, result.limiar)
