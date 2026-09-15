@@ -346,19 +346,40 @@ function Screensaver({
       {/* Centro: Olhos da IA + Saudação com Nome Rotativo a cada 5s + Instrução de Toque */}
       <div className="text-center text-white px-6 ss-fade">
         {/* Os olhos ficam aqui e em nenhum outro lugar da espera: é o que faz o
-            tablet parado parecer acordado e convidar a pessoa a chegar. */}
+            tablet parado parecer acordado e convidar a pessoa a chegar.
+            
+            O painel escuro em volta é o que transforma dois retângulos em um
+            ROSTO. Solto sobre o teal, o par de olhos flutuava sem âncora; com
+            uma superfície própria por trás, o cérebro fecha a figura sozinho e
+            passa a ler uma cara olhando para quem chega. */}
         <div className="mb-6 flex justify-center sm:mb-8">
-          {/* Com alguém à vista os olhos seguem a pessoa; sozinhos, voltam a
-              vaguear. É a câmera que já roda para o reconhecimento, então isso
-              não custa nada de novo. */}
-          <OlhosRobo
-            largura={215}
-            cor="#ffffff"
-            olhar={olhar ?? undefined}
-            ocioso={!olhar}
-            piscar
-            piscadinha
-          />
+          <div
+            className="rounded-[2rem] px-10 py-7 sm:px-12 sm:py-8"
+            style={{
+              background: "rgba(3, 32, 38, 0.38)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.10), 0 12px 34px -14px rgba(0,0,0,0.55)",
+              border: "1px solid rgba(255,255,255,0.10)",
+            }}
+          >
+            {/* `ocioso={false}` sempre: os olhos ficam PARADOS e só se mexem
+                quando alguém se mexe na frente da câmera. Vagar sozinho dava
+                movimento o tempo todo, e movimento constante esconde o
+                movimento que significa alguma coisa — não dava para perceber
+                que ele estava seguindo a pessoa, porque ele nunca parava.
+                
+                `piscadinha` também sai: a piscada de um olho só fecha uma
+                pálpebra por 230 ms, e no meio de uma cara parada isso lê como
+                careta, não como charme. O piscar normal, dos dois olhos,
+                continua — é o que mantém a cara viva. */}
+            <OlhosRobo
+              largura={215}
+              cor="#ffffff"
+              olhar={olhar ?? { x: 0, y: 0 }}
+              ocioso={false}
+              piscar
+            />
+          </div>
         </div>
 
         <h2 className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight flex items-center justify-center flex-wrap">

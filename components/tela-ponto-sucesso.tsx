@@ -5,7 +5,6 @@ import Image from "next/image"
 import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 import { EmojisFlutuantes } from "@/components/emojis-flutuantes"
-import { OlhosRobo } from "@/components/olhos-robo"
 import { QrEspelho } from "@/components/qr-espelho"
 
 interface TelaPontoSucessoProps {
@@ -217,19 +216,12 @@ export function TelaPontoSucesso({
                 : "opacity-0 -translate-x-6 md:-translate-y-2 pointer-events-none"
             }`}
           >
-            {/* Olhos da IA: dão um rosto para a voz que fala a saudação.
-                Ficam discretos e menores que no screensaver — aqui quem manda
-                na tela é a mensagem, não eles. */}
-            <div className="flex justify-center md:justify-start">
-              <OlhosRobo
-                humor="feliz"
-                largura={145}
-                cor={cenario.greetingColor}
-                ocioso={false}
-                piscar
-                reagirAVoz
-              />
-            </div>
+            {/* Aqui havia um par de olhos, herdado da tela de espera.
+                Saiu: nesta tela o ponto já está batido, e o que a pessoa
+                precisa ver é o próprio nome, o tipo e a hora. Um rosto
+                competindo com isso só divide a atenção num momento em que ela
+                já está indo embora. Os olhos ficam onde fazem falta — na
+                espera, chamando quem chega. */}
 
             {/* Saudação com Nome */}
             <div className="space-y-2">
