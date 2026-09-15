@@ -34,6 +34,7 @@ import {
   type RespostaSaudacao,
 } from "@/lib/ia-saudacao"
 import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
+import * as telemetria from "@/lib/telemetria-reconhecimento"
 import {
   enfileirarPonto,
   removerDaFila,
@@ -50,6 +51,7 @@ import {
   recognizeFace,
   detectSmileOnly,
   detectFaceFast,
+  getBackend,
 } from "@/lib/face-recognition-client"
 
 // Animação temática: emoji por 3.5s → depois Lottie check original
@@ -619,6 +621,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       try {
         if (mounted) setLoadingStatus("Carregando modelos de reconhecimento...")
         await initModels()
+        // Registra o ambiente do tablet uma vez: qual backend o TFJS conseguiu
+        // (webgl, wasm ou cpu) e qual GPU. É a primeira coisa que a telemetria
+        // precisa responder — a diferença entre webgl e cpu é de ordens de
+        // grandeza, e hoje isso é palpite.
+        telemetria.iniciarAmbiente(getBackend())
 
         // 3. Carregar descritores dos funcionários
         if (mounted) setLoadingStatus("Carregando funcionários...")
@@ -774,7 +781,12 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           const rosto = await detectFaceFast(video)
           if (!rosto) {
             setOlharDaCamera(null)
-            rostoNaEsperaRef.current = false
+            if (rostoNaEsperaRef.current) {
+              // Apareceu e foi embora sem bater nada. A telemetria descarta
+              // tentativas sem nenhum passe completo, então isso não vira lixo.
+              rostoNaEsperaRef.current = false
+              telemetria.encerrarTentativa("nao_identificado", modoTesteRef.current)
+            }
             return
           }
           // Alguém apareceu na frente do tablet. Ainda não se sabe quem, mas já
@@ -784,6 +796,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           if (!rostoNaEsperaRef.current) {
             rostoNaEsperaRef.current = true
             aquecerConexaoSupabase()
+            // O cronômetro da tentativa começa aqui, no instante em que alguém
+            // aparece — não quando é identificado. O tempo até identificar é
+            // justamente uma das medidas que interessam.
+            telemetria.iniciarTentativa()
           }
 
           // Centro do rosto (0..1) vira direção do olhar (-1..1). O eixo
@@ -809,6 +825,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       try {
         const current = recognizedPersonRef.current
         resetInactivityTimer()
+        // Idempotente: se a tentativa já começou na proteção de tela, não faz
+        // nada. Cobre quem toca no tablet antes de ser detectado.
+        telemetria.iniciarTentativa()
 
         isProcessingRef.current = true
         try {
@@ -828,7 +847,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             Date.now() - ultimaVerificacaoIdentidadeRef.current > RE_VERIFICACAO_IDENTIDADE_MS
 
           if (current && !identidadeVencida) {
+            const t0 = performance.now()
             const smile = await detectSmileOnly(video, SMILE_THRESHOLD)
+            telemetria.registrarPasseBarato(performance.now() - t0)
 
             if (!smile) {
               // O passe barato detecta em resolução menor que o completo, então ele
@@ -850,15 +871,19 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
             // Sorriu: acende a moldura esmeralda na hora e confirma a identidade no
             // passe completo abaixo antes de gravar qualquer coisa.
+            telemetria.registrarSorriso()
             if (!current.isSmiling) {
               setRecognizedPerson({ ...current, isSmiling: true, smileFrames: 1 })
             }
           }
 
           // Reconhecimento completo: identificação + sorriso em 1 passe no Web Worker
+          const tCompleto = performance.now()
           const result = await recognizeFace(video, SMILE_THRESHOLD)
+          telemetria.registrarPasseCompleto(performance.now() - tCompleto)
           ultimaVerificacaoIdentidadeRef.current = Date.now()
           if (result) {
+            telemetria.registrarComparacao(!result.isUnknown, result.distancia, result.limiar)
             // Rosto detectado, mas não bateu com ninguém cadastrado.
             //
             // Isto NÃO é o mesmo que "chegou outra pessoa": na maior parte das
@@ -878,6 +903,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                   console.log("⚠️ Rosto não confirmado em vários passes — limpando identificação")
                   setRecognizedPerson(null)
                   falhasSeguidasRef.current = 0
+                  telemetria.registrarPerdaDeIdentidade()
                 }
               }
               return
@@ -907,6 +933,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                 pendingTipoPromiseRef.current = null
                 console.log(`✅ Funcionário identificado: ${result.nome} (${result.similarity.toFixed(0)}%)`)
               }
+              telemetria.registrarIdentificacao(result.id)
               setRecognizedPerson(updated)
             }
 
@@ -1022,10 +1049,12 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // Registros do dia: normalmente já resolvidos pelo prefetch disparado na
       // identificação, então este await volta na hora.
       const prefetch = prefetchRegistrosRef.current
+      const tRegistros = performance.now()
       const registrosHoje =
         prefetch && prefetch.id === person.id
           ? await prefetch.promise
           : await buscarRegistrosHoje(person.id).catch(() => [] as RegistroPonto[])
+      telemetria.registrarConsultaRegistros(performance.now() - tRegistros)
 
       let tipo: string
       let emCooldown = false
@@ -1067,6 +1096,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // que é síncrono. A IA nunca segura a tela.
       const trabalhaSabado = !!funcObj.horarios?.sabado?.ativo
       const chaveSaudacao = `${person.id}|${tipo}`
+      const tSaudacao = performance.now()
       const saudacaoIa: RespostaSaudacao =
         prefetchSaudacaoRef.current?.chave === chaveSaudacao
           ? await prefetchSaudacaoRef.current.promise
@@ -1076,6 +1106,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               dataHora: now,
               trabalhaSabado,
             })
+
+      telemetria.registrarSaudacaoIa(performance.now() - tSaudacao)
 
       const mensagemVisual = emCooldown
         ? `Olá, ${primeiroNome}! Seu ponto (${tipo}) já foi registrado recentemente.`
@@ -1111,6 +1143,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       setRecognizedPerson(completed)
       setShowSuccess(true)
       reproduzirVozSaudacao(mensagemVoz)
+
+      // Fecha a medição no mesmo instante em que a pessoa vê a tela pronta.
+      // Disparado e esquecido: não segura nada.
+      telemetria.registrarTelaSucesso(tipo)
+      telemetria.encerrarTentativa("ponto_batido", modoTesteRef.current)
 
       // A tela já está na frente da pessoa — grava no Supabase em segundo plano.
       // A localização sai do cache do rastreamento, sem esperar fix novo de GPS.
@@ -1244,6 +1281,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const resetInactivityTimer = () => {
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current)
     inactivityTimerRef.current = window.setTimeout(() => {
+      telemetria.encerrarTentativa("desistiu", modoTesteRef.current)
       setScreensaver(true)
       setRecognizedPerson(null)
       setDialogoInteligente(null)
@@ -1258,6 +1296,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       clearTimeout(successTimeoutRef.current)
       successTimeoutRef.current = null
     }
+    // Se ainda havia medição aberta aqui, a tentativa não virou ponto: ou a
+    // pessoa desistiu, ou o diálogo de regularização foi cancelado. Interessa
+    // saber quantas vezes isso acontece.
+    telemetria.encerrarTentativa("desistiu", modoTesteRef.current)
     isRegisteringRef.current = false
     falhasSeguidasRef.current = 0
     rostoNaEsperaRef.current = false
