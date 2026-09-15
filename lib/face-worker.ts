@@ -80,6 +80,21 @@ async function loadFaceApi() {
   return faceapi
 }
 
+/**
+ * Distância euclidiana máxima entre o descritor de 128 números do rosto na
+ * câmera e o que está cadastrado, para considerar que é a mesma pessoa.
+ *
+ * Estava 0.45. O padrão da biblioteca — e o valor que a documentação dela
+ * recomenda para rostos de 150x150 — é 0.6. Um corte em 0.45 é bem mais
+ * rígido, e é por isso que virar um pouco a cabeça bastava para a pessoa
+ * virar "desconhecida": a distância passava de 0.45 com facilidade.
+ *
+ * A telemetria grava a distância CRUA de cada tentativa, então este número
+ * deixa de ser palpite: com alguns dias de uso real dá para ver a distribuição
+ * e saber onde o corte deveria estar de fato.
+ */
+const LIMIAR_DISTANCIA = 0.6
+
 const TINY_INPUT_SIZE = 96
 const TINY_SCORE_THRESHOLD = 0.5
 const WORK_WIDTH = 192
@@ -261,7 +276,7 @@ function handleLoadDescriptors(
     }
   }
 
-  faceMatcher = labeled.length > 0 ? new faceapi!.FaceMatcher(labeled, 0.45) : null
+  faceMatcher = labeled.length > 0 ? new faceapi!.FaceMatcher(labeled, LIMIAR_DISTANCIA) : null
   console.log(`[face-worker] ${employeeMap.size} funcionário(s) carregado(s)`)
   return employeeMap.size
 }
@@ -350,8 +365,10 @@ async function handleRecognize(bitmap: ImageBitmap, smileThreshold: number) {
 
   const best = faceMatcher.findBestMatch(det.descriptor)
   
-  // Se o rosto foi detectado na câmera mas NÃO é de nenhum funcionário cadastrado (ou distância > 0.45):
-  if (best.label === "unknown" || best.distance > 0.45) {
+  // Rosto detectado, mas não é de ninguém cadastrado — ou ficou longe demais.
+  // A distância vai junto mesmo quando não bate: é ela que diz se a rejeição
+  // foi por pouco (limiar apertado) ou por muito (outra pessoa mesmo).
+  if (best.label === "unknown" || best.distance > LIMIAR_DISTANCIA) {
     return {
       id: "unknown",
       nome: "Rosto não reconhecido",
@@ -359,6 +376,8 @@ async function handleRecognize(bitmap: ImageBitmap, smileThreshold: number) {
       isUnknown: true,
       isSmiling: false,
       smileConfidence: 0,
+      distancia: best.distance,
+      limiar: LIMIAR_DISTANCIA,
     }
   }
 
@@ -371,6 +390,8 @@ async function handleRecognize(bitmap: ImageBitmap, smileThreshold: number) {
       isUnknown: true,
       isSmiling: false,
       smileConfidence: 0,
+      distancia: best.distance,
+      limiar: LIMIAR_DISTANCIA,
     }
   }
 
@@ -383,6 +404,8 @@ async function handleRecognize(bitmap: ImageBitmap, smileThreshold: number) {
     isUnknown: false,
     isSmiling: happy >= smileThreshold,
     smileConfidence: happy * 100,
+    distancia: best.distance,
+    limiar: LIMIAR_DISTANCIA,
   }
 }
 

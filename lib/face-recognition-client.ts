@@ -50,6 +50,15 @@ export interface RecognitionResult {
   isUnknown?: boolean
   isSmiling: boolean
   smileConfidence: number
+  /**
+   * Distância euclidiana crua entre o descritor do rosto na câmera e o melhor
+   * candidato cadastrado. Vem preenchida mesmo quando NÃO bateu — é ela que
+   * diz se a rejeição foi por pouco ou por muito, e é o número que a
+   * telemetria usa para descobrir onde o limiar deveria estar.
+   */
+  distancia?: number
+  /** Limiar em vigor no momento da comparação, para ler a distância acima. */
+  limiar?: number
 }
 
 /**
