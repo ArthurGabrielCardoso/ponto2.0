@@ -41,7 +41,31 @@ let funcionariosCarregados: Funcionario[] = []
 const CAPTURA_RECONHECIMENTO = { largura: 256, altura: 192 }
 const CAPTURA_SORRISO = { largura: 192, altura: 144 }
 // Depois de uma queda de GPU, o resto da sessão roda em WASM.
-let backendForcado: "wasm" | undefined
+let backendForcado: "wasm" | "cpu" | undefined
+
+/**
+ * Escolhe o backend na mão, antes de `initModels()`.
+ *
+ * Existe para um experimento que não dá para decidir na teoria: neste tablet,
+ * o WebGL passa por um driver Mali dentro de um WebView do Android. Em GPU
+ * fraca com driver ruim, WASM+SIMD às vezes GANHA do WebGL — os modelos são
+ * pequenos, e o custo de empurrar textura para a GPU e trazer resultado de
+ * volta pode passar do custo de simplesmente calcular na CPU.
+ *
+ * "Às vezes" é o problema: depende do aparelho, e a única resposta honesta vem
+ * de rodar dos dois jeitos NO tablet e comparar `ms_passe_completo_p50`. Como
+ * o backend ativo já vai gravado em cada linha da telemetria, a comparação sai
+ * sozinha do banco depois.
+ *
+ * Inerte por padrão: sem `?backend=` na URL, nada muda.
+ */
+export function definirBackendManual(b: "wasm" | "cpu" | null) {
+  if (modelsLoaded || modelsLoading) {
+    console.warn("[face-client] backend já inicializado; ?backend= ignorado")
+    return
+  }
+  backendForcado = b ?? undefined
+}
 
 export interface RecognitionResult {
   id: string
@@ -171,29 +195,88 @@ function ehFalhaDeGpu(erro: unknown): boolean {
 }
 
 /**
- * Captura um frame do video como ImageBitmap (transferível).
- * Usa resizeWidth/Height quando suportado pra já vir downscaled do browser.
+ * Telas de captura reaproveitadas, uma por tamanho pedido.
+ *
+ * Alocar OffscreenCanvas a cada quadro devolveria ao coletor de lixo alguns
+ * megabytes por segundo — num tablet fraco isso sozinho vira engasgo. São dois
+ * tamanhos no total (sorriso e reconhecimento), então o mapa nunca cresce.
+ */
+const telasDeCaptura = new Map<string, OffscreenCanvas>()
+
+/** Quanto tempo a última captura levou, em ms. Lido pela telemetria. */
+let ultimaCapturaMs = 0
+
+/**
+ * Quanto a última captura de frame custou, em ms.
+ *
+ * Existe porque a primeira telemetria real levantou uma suspeita que não dá
+ * para resolver no olho: o passe BARATO — só o detector minúsculo, que tem
+ * ~190 mil parâmetros — levou 648 ms no tablet. Um modelo desse tamanho não
+ * justifica 648 ms nem em hardware ruim. Ou seja: uma parte grande do tempo
+ * pode não estar na rede neural, e sim no caminho até ela. Medindo a captura
+ * separado, o próximo dia de uso diz qual das duas é.
+ */
+export function getUltimaCapturaMs(): number {
+  return ultimaCapturaMs
+}
+
+/**
+ * Captura um frame do vídeo como ImageBitmap (transferível).
+ *
+ * ANTES: `createImageBitmap(video, { resizeWidth, resizeHeight })`. A API é
+ * mais direta e a intenção era deixar o browser redimensionar em código
+ * nativo. O problema é que, no Chromium do Android, o quadro do vídeo vive
+ * numa textura da GPU, e pedir resize nessa chamada pode forçar o caminho
+ * lento: trazer o quadro para a CPU e redimensionar em software. É justamente
+ * o tipo de custo que aparece como "o tablet é lento" sem ser culpa do modelo.
+ *
+ * AGORA: desenhar o vídeo num canvas do tamanho final — `drawImage` escala na
+ * GPU — e entregar o resultado com `transferToImageBitmap`, que é uma troca de
+ * posse, sem cópia.
+ *
+ * Isto é uma HIPÓTESE, não um fato medido neste tablet: por isso a captura
+ * passou a ser cronometrada separadamente. Se `ms_captura_p50` vier baixo e o
+ * passe continuar caro, a suspeita morre e o problema é mesmo a rede neural.
  */
 async function videoToBitmap(
   video: HTMLVideoElement,
   largura: number,
   altura: number
 ): Promise<ImageBitmap> {
-  // Verificar se o vídeo está pronto
   if (!video.videoWidth || !video.videoHeight || video.readyState < 2) {
     throw new Error("Vídeo não está pronto para captura")
   }
 
+  const t0 = performance.now()
   try {
-    // Opções de resize são nativas e rápidas (quando suportadas).
-    return await createImageBitmap(video, {
+    if (typeof OffscreenCanvas !== "undefined") {
+      const chave = `${largura}x${altura}`
+      let tela = telasDeCaptura.get(chave)
+      if (!tela) {
+        tela = new OffscreenCanvas(largura, altura)
+        telasDeCaptura.set(chave, tela)
+      }
+      const ctx = tela.getContext("2d", { alpha: false, willReadFrequently: false })
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, largura, altura)
+        const bitmap = tela.transferToImageBitmap()
+        ultimaCapturaMs = performance.now() - t0
+        return bitmap
+      }
+    }
+
+    // Sem OffscreenCanvas: o caminho antigo continua valendo.
+    const bitmap = await createImageBitmap(video, {
       resizeWidth: largura,
       resizeHeight: altura,
       resizeQuality: "low",
     } as ImageBitmapOptions)
+    ultimaCapturaMs = performance.now() - t0
+    return bitmap
   } catch {
-    // Fallback: sem resize, deixa o worker fazer
-    return await createImageBitmap(video)
+    const bitmap = await createImageBitmap(video)
+    ultimaCapturaMs = performance.now() - t0
+    return bitmap
   }
 }
 
