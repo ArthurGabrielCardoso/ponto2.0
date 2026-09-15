@@ -619,6 +619,28 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     recognizedPersonRef.current = recognizedPerson
   }, [recognizedPerson])
 
+  /**
+   * Troca quem está identificado, escrevendo no ref NO MESMO INSTANTE.
+   *
+   * O efeito acima só roda depois que o React confirma a renderização. Isso
+   * era invisível enquanto um passe completo custava 4 s: sobrava tempo de
+   * sobra para a tela atualizar entre um passe e o outro.
+   *
+   * Com o passe em 184 ms, deixou de sobrar. O laço volta antes do React
+   * confirmar, lê `recognizedPersonRef.current` ainda nulo, conclui que
+   * ninguém foi identificado e roda outro passe completo — repetidamente. A
+   * telemetria pegou isso no ato: 19 passes completos e ZERO passes baratos
+   * numa batida em que a pessoa já tinha sido reconhecida no primeiro.
+   *
+   * Ou seja: o ganho de velocidade criou um bug que a lentidão escondia. O
+   * ref passa a ser escrito de forma síncrona; o estado continua igual, para
+   * a tela.
+   */
+  const definirPessoa = (p: RecognizedPerson | null) => {
+    recognizedPersonRef.current = p
+    setRecognizedPerson(p)
+  }
+
   useEffect(() => {
     showSuccessRef.current = showSuccess
   }, [showSuccess])
@@ -928,7 +950,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
             if (!smile.isSmiling) {
               if (current.isSmiling) {
-                setRecognizedPerson({ ...current, isSmiling: false, smileFrames: 0 })
+                definirPessoa({ ...current, isSmiling: false, smileFrames: 0 })
               }
               return
             }
@@ -936,7 +958,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // Sorriu: acende a moldura esmeralda na hora.
             telemetria.registrarSorriso()
             if (!current.isSmiling) {
-              setRecognizedPerson({ ...current, isSmiling: true, smileFrames: 1 })
+              definirPessoa({ ...current, isSmiling: true, smileFrames: 1 })
             }
 
             // === Por que dá para gravar aqui, sem mais um passe completo ===
@@ -993,7 +1015,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                 falhasSeguidasRef.current += 1
                 if (falhasSeguidasRef.current >= FALHAS_PARA_PERDER_IDENTIDADE) {
                   console.log("⚠️ Rosto não confirmado em vários passes — limpando identificação")
-                  setRecognizedPerson(null)
+                  definirPessoa(null)
                   falhasSeguidasRef.current = 0
                   telemetria.registrarPerdaDeIdentidade()
                 }
@@ -1008,6 +1030,12 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
             const isDifferentPerson = !current || current.id !== result.id
             const isSmiling = result.isSmiling
+            // O sorriso também precisa ser cronometrado quando quem o vê é o
+            // passe completo. Sem isto, toda batida que não passa pelo ramo
+            // barato grava ms_ate_sorrir e ms_sorriso_ate_confirmar em branco
+            // — foi o que aconteceu nas três primeiras batidas com o código
+            // novo, e é justamente a etapa que falta medir.
+            if (isSmiling) telemetria.registrarSorriso()
             const smileFrames = isSmiling ? (isDifferentPerson ? 1 : current.smileFrames + 1) : 0
 
             const updated: RecognizedPerson = {
@@ -1027,7 +1055,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                 console.log(`✅ Funcionário identificado: ${result.nome} (${result.similarity.toFixed(0)}%)`)
               }
               telemetria.registrarIdentificacao(result.id)
-              setRecognizedPerson(updated)
+              definirPessoa(updated)
             }
 
             // Adianta a consulta dos registros do dia enquanto a pessoa sorri.
@@ -1048,7 +1076,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                 falhasSeguidasRef.current >= FALHAS_PARA_PERDER_IDENTIDADE &&
                 Date.now() - lastFaceSeenRef.current > 1500
               if (sumiuDeVerdade) {
-                setRecognizedPerson(null)
+                definirPessoa(null)
                 falhasSeguidasRef.current = 0
               }
             }
