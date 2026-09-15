@@ -49,7 +49,6 @@ import {
   loadDescriptors,
   getFuncionariosCarregados,
   recognizeFace,
-  detectSmileOnly,
   detectFaceFast,
   getBackend,
   getUltimaCapturaMs,
@@ -488,7 +487,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     ts: number
     promise: Promise<RegistroPonto[]>
   } | null>(null)
-  const ultimaVerificacaoIdentidadeRef = useRef(0)
   // Saudação da IA já pedida durante os segundos em que a pessoa sorri, para
   // não gastar o tempo dela esperando a rede depois do sorriso.
   const prefetchSaudacaoRef = useRef<{
@@ -518,16 +516,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    * muito tempo" é mesmo o que deixa a batida lenta.
    */
   const ultimoPassePesadoRef = useRef(0)
-  /**
-   * Quem foi confirmado por um passe completo de verdade, e quando.
-   *
-   * Diferente de `ultimaVerificacaoIdentidadeRef`, que marca QUALQUER passe
-   * completo: aqui só entra passe que bateu com alguém cadastrado. É o que
-   * permite gravar o ponto no sorriso sem rodar um segundo passe idêntico —
-   * sem abrir mão da regra de que todo ponto exige um passe completo que
-   * bateu de verdade.
-   */
-  const ultimaConfirmacaoRef = useRef<{ id: string; em: number } | null>(null)
   const tipoTesteRef = useRef("auto")
   const gravarNoBancoRef = useRef(false)
   const forcarHumorRef = useRef(false)
@@ -561,7 +549,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const SMILE_THRESHOLD = 0.40
   // De quanto em quanto tempo a identidade é reconferida com o passe completo.
   // É esta janela que pega a troca de pessoa na frente da câmera.
-  const RE_VERIFICACAO_IDENTIDADE_MS = 800
   // Confirmação visual da moldura esmeralda antes de trocar de tela.
   const PULSO_CONFIRMACAO_MS = 220
   // A câmera frontal NÃO está espelhada no vídeo: quem está à esquerda de quem
@@ -940,86 +927,40 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
         isProcessingRef.current = true
         try {
-          // === Duas velocidades ===
-          // O passe completo (detector + landmarks + descritor 128D + expressões)
-          // é caro: a rede de descritor sozinha domina o custo do frame. Rodá-lo em
-          // TODO frame, como estava, fazia a espera pelo sorriso ficar lenta no
-          // tablet — o sorriso só era amostrado a cada passe completo.
+          // === Uma velocidade só, e é a rápida ===
           //
-          // Agora, quem já está identificado é acompanhado por um passe barato
-          // (detector + expressões). O passe completo volta a rodar só quando:
-          //   - ninguém está identificado ainda;
-          //   - passaram RE_VERIFICACAO_IDENTIDADE_MS desde a última conferência
-          //     (é isto que pega a troca de pessoa na frente da câmera);
-          //   - alguém sorriu — a identidade é confirmada antes de gravar o ponto.
-          const identidadeVencida =
-            Date.now() - ultimaVerificacaoIdentidadeRef.current > RE_VERIFICACAO_IDENTIDADE_MS
-
-          if (current && !identidadeVencida) {
-            const t0 = performance.now()
-            const smile = await detectSmileOnly(video, SMILE_THRESHOLD)
-            telemetria.registrarPasseBarato(performance.now() - t0)
-            telemetria.registrarCaptura(getUltimaCapturaMs())
-
-            if (!smile) {
-              // O passe barato detecta em resolução menor que o completo, então ele
-              // erra o rosto com mais facilidade. Quem limpa a identificação é
-              // sempre o passe completo — aqui só forçamos que ele rode já no
-              // próximo frame, para não piscar o nome de quem continua na frente.
-              ultimaVerificacaoIdentidadeRef.current = 0
-              return
-            }
-
-            lastFaceSeenRef.current = Date.now()
-
-            if (!smile.isSmiling) {
-              if (current.isSmiling) {
-                definirPessoa({ ...current, isSmiling: false, smileFrames: 0 })
-              }
-              return
-            }
-
-            // Sorriu: acende a moldura esmeralda na hora.
-            telemetria.registrarSorriso()
-            if (!current.isSmiling) {
-              definirPessoa({ ...current, isSmiling: true, smileFrames: 1 })
-            }
-
-            // === Por que dá para gravar aqui, sem mais um passe completo ===
-            //
-            // Este ramo só roda quando `identidadeVencida` é falso, ou seja,
-            // quando o último passe completo tem menos de
-            // RE_VERIFICACAO_IDENTIDADE_MS. Se esse passe confirmou ESTA
-            // pessoa, a regra de sempre — "todo ponto exige um passe completo
-            // que bateu de verdade" — já está satisfeita por ele.
-            //
-            // O passe que rodava aqui embaixo perguntava de novo, para a mesma
-            // pessoa, dentro da mesma janela que o sistema já trata como
-            // confiável. Custava ~925 ms no tablet e não respondia nada novo.
-            //
-            // A janela de confiança é a MESMA de antes, de propósito: isto
-            // remove trabalho repetido, não afrouxa a verificação. Fora da
-            // janela, ou se quem foi confirmado for outra pessoa, o passe
-            // completo abaixo continua valendo.
-            const confirmacao = ultimaConfirmacaoRef.current
-            if (
-              confirmacao &&
-              confirmacao.id === current.id &&
-              Date.now() - confirmacao.em <= RE_VERIFICACAO_IDENTIDADE_MS
-            ) {
-              telemetria.registrarConfirmacao()
-              await handleRegistro({ ...current, isSmiling: true, smileFrames: 1 })
-              return
-            }
-          }
-
+          // Aqui existia um mecanismo de duas velocidades: quem já estava
+          // identificado era acompanhado por um passe BARATO (detector menor +
+          // expressões, 192x144 entrada 96), e o passe COMPLETO só voltava a
+          // cada 800 ms. A ideia era boa e, no tablet lento, funcionava.
+          //
+          // A telemetria de seis batidas seguidas mostrou que ela se inverteu:
+          //
+          //     id 8   barato 463 ms   completo 192 ms   2.41x
+          //     id 11  barato 351 ms   completo 175 ms   2.01x
+          //     id 12  barato 348 ms   completo 194 ms   1.79x
+          //     id 13  barato 376 ms   completo 189 ms   1.99x
+          //
+          // O passe "barato" ficou DUAS VEZES MAIS CARO que o completo. O
+          // motivo é o mesmo frio/quente que este trabalho todo perseguiu: o
+          // passe completo roda a cada quadro e vive quente; o barato roda
+          // duas ou três vezes por batida, com outro shape de entrada, e paga
+          // aquecimento de shader toda vez. A otimização virou pedágio.
+          //
+          // Então some. Um shape só, sempre quente, ~190 ms — e de quebra o
+          // sorriso passa a ser amostrado a cada 190 ms em vez de a cada
+          // 350-900 ms, e some a corrida entre o laço e o render que obrigou a
+          // escrever a identidade no ref de forma síncrona.
+          //
+          // Se algum dia o aparelho voltar a ficar lento (passe completo acima
+          // de ~600 ms), vale reconsiderar: com a GPU fria a conta se inverte
+          // de novo, como nas linhas 9 e 10 (barato 422 ms, completo 925 ms).
           // Reconhecimento completo: identificação + sorriso em 1 passe no Web Worker
           const tCompleto = performance.now()
           const result = await recognizeFace(video, SMILE_THRESHOLD)
           telemetria.registrarPasseCompleto(performance.now() - tCompleto)
           telemetria.registrarCaptura(getUltimaCapturaMs())
           ultimoPassePesadoRef.current = Date.now()
-          ultimaVerificacaoIdentidadeRef.current = Date.now()
           if (result) {
             telemetria.registrarComparacao(!result.isUnknown, result.distancia, result.limiar)
             // Rosto detectado, mas não bateu com ninguém cadastrado.
@@ -1050,7 +991,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // Rosto válido de funcionário cadastrado!
             lastFaceSeenRef.current = Date.now()
             falhasSeguidasRef.current = 0
-            ultimaConfirmacaoRef.current = { id: result.id, em: Date.now() }
 
             const isDifferentPerson = !current || current.id !== result.id
             const isSmiling = result.isSmiling
