@@ -46,6 +46,7 @@ import {
 import { OlhosRobo } from "@/components/olhos-robo"
 import { agendarLembretesAlmoco, cancelarLembretesAlmoco, sincronizarSessoesAlmocoDoDia, type InfoAlmocoAtivo } from "@/lib/lembretes-almoco"
 import { ModalQRAlmoco } from "@/components/modal-qr-almoco"
+import { BalaoFalaRobo } from "@/components/balao-fala-robo"
 import "../ponto-registrado/ponto-batido.css"
 import {
   initModels,
@@ -250,12 +251,16 @@ function Screensaver({
   onSegredo,
   olhar,
   onSelecionarAlmoco,
+  pessoaNaEspera,
+  falaIa,
 }: {
   onTap: () => void
   onSegredo: () => void
   /** Direção em que a pessoa detectada está. null = ninguém à vista. */
   olhar: { x: number; y: number } | null
   onSelecionarAlmoco?: (item: InfoAlmocoAtivo) => void
+  pessoaNaEspera?: { id: string; nome: string; primeiroNome: string } | null
+  falaIa?: string | null
 }) {
   // Gesto escondido: 10 toques no canto inferior direito abrem o modo teste.
   // Fica no canto e exige repetição justamente para ninguém cair nele sem querer.
@@ -357,32 +362,28 @@ function Screensaver({
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      {/* Canto Superior Esquerdo: Relógio Menor e Discreto */}
+      {/* Canto Superior Esquerdo: Relógio Menor e Discreto (+1px font-size) */}
       <div className="absolute top-5 left-6 sm:top-7 sm:left-8 z-30 pointer-events-none ss-fade">
-        <p className="text-2xl sm:text-[28px] font-light text-white/90 tracking-wider" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <p className="text-[27px] sm:text-[31px] font-light text-white/95 tracking-wider" style={{ fontVariantNumeric: "tabular-nums" }}>
           {time}
         </p>
       </div>
 
-      {/* Centro: Olhos da IA + Saudação com Nome Rotativo a cada 5s + Instrução de Toque */}
-      <div className="text-center text-white px-6 ss-fade">
-        {/* Os olhos ficam aqui e em nenhum outro lugar da espera: é o que faz o
-            tablet parado parecer acordado e convidar a pessoa a chegar.
-            
-            O painel escuro em volta é o que transforma dois retângulos em um
-            ROSTO. Reduzido e elevado para dar mais respiro à tela. */}
-        <div className="-mt-3 sm:-mt-5 mb-4 sm:mb-6 flex justify-center -translate-y-2">
+      {/* Centro: Olhos do Robô Ampliados + Balão de Fala Inteligente */}
+      <div className="text-center text-white px-4 ss-fade w-full max-w-xl flex flex-col items-center">
+        {/* Rosto do robô com presença ampliada e vidro nobre */}
+        <div className="flex justify-center -mt-2 sm:-mt-4 mb-4">
           <div
-            className="rounded-2xl px-6 py-3.5 sm:px-7 sm:py-4"
+            className="rounded-[2.5rem] px-8 py-5 sm:px-11 sm:py-6"
             style={{
-              background: "rgba(3, 32, 38, 0.42)",
+              background: "rgba(3, 32, 38, 0.45)",
               boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.12), 0 10px 28px -10px rgba(0,0,0,0.55)",
-              border: "1px solid rgba(255,255,255,0.12)",
+                "inset 0 1px 0 rgba(255,255,255,0.14), 0 16px 40px -12px rgba(0,0,0,0.6)",
+              border: "1px solid rgba(255,255,255,0.14)",
             }}
           >
             <OlhosRobo
-              largura={210}
+              largura={255}
               cor="#ffffff"
               olhar={olhar ?? { x: 0, y: 0 }}
               ocioso={false}
@@ -391,20 +392,11 @@ function Screensaver({
           </div>
         </div>
 
-        <h2 className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight flex items-center justify-center flex-wrap">
-          <span>{periodo},</span>
-          {nomeAtual ? (
-            <span key={nomeAtual} className="ss-name-smooth font-normal ml-2 sm:ml-3">
-              {nomeAtual}!
-            </span>
-          ) : (
-            <span className="font-normal ml-2">!</span>
-          )}
-        </h2>
-
-        <p className="text-base sm:text-lg text-white/70 font-light mt-4 sm:mt-5 tracking-wide">
-          Toque na tela para registrar o ponto
-        </p>
+        {/* Balão de Fala Dinâmico com IA Llama, Lembretes e Identificação */}
+        <BalaoFalaRobo
+          pessoaNaEspera={pessoaNaEspera ?? null}
+          falaIa={falaIa}
+        />
       </div>
 
       {/* Canto inferior direito: área invisível do gesto do modo teste.
@@ -582,6 +574,15 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const funcionarioAlmocoModalRef = useRef<InfoAlmocoAtivo | null>(null)
   const [pessoaDetectadaModal, setPessoaDetectadaModal] = useState<{ id: string; nome: string } | null>(null)
 
+  // Pessoa detectada na tela de descanso para o balão de fala da IA
+  const [pessoaNaEspera, setPessoaNaEspera] = useState<{
+    id: string
+    nome: string
+    primeiroNome: string
+  } | null>(null)
+  const [falaIaEspera, setFalaIaEspera] = useState<string | null>(null)
+  const ultimoReconhecimentoEsperaRef = useRef(0)
+
   useEffect(() => {
     funcionarioAlmocoModalRef.current = funcionarioAlmocoModal
   }, [funcionarioAlmocoModal])
@@ -671,9 +672,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    * quem está quase pronta, e curto o bastante para ninguém perceber.
    */
   const TETO_SAUDACAO_IA_MS = 120
-  // Acompanhamento direto do usuário: sem inversão artificial para que quando
-  // a pessoa for para a direita, os olhos olhem para a direita dela.
-  const INVERTER_OLHAR_X = false
+  // Câmera espelhada do tablet: inverte o eixo X para que os olhos acompanhem o rosto perfeitamente.
+  const INVERTER_OLHAR_X = true
   // De quanto em quanto tempo procurar um rosto enquanto a tela está em espera.
   const INTERVALO_DETECCAO_OCIOSA_MS = 180
   /**
@@ -961,7 +961,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     // Durante o 1,5s em que o colaborador sorri, o áudio já fica baixado em memória no cache.
     void prepararVozSaudacao(fallback.voz)
 
-    // 3. Em paralelo, dispara a tentativa de saudação inteligente com Groq
+    // 3. Em paralelo, dispara a tentativa de saudação inteligente com Groq (Llama)
     const promessaSaudacao = obterSaudacaoInteligente({
       nome: func.nome,
       tipoPonto: tipo,
@@ -971,6 +971,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       .then((sd) => {
         if (sd?.voz) {
           void prepararVozSaudacao(sd.voz)
+        }
+        if (sd?.visual) {
+          setFalaIaEspera(sd.visual)
         }
         return sd
       })
@@ -1006,8 +1009,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
         isProcessingRef.current = true
         try {
-          // Se o modal de confirmação de almoço estiver aberto, rodamos o passe completo
-          // para identificar a pessoa em frente à câmera e liberar ou negar amigavelmente
+          // Se o modal de confirmação de almoço estiver aberto, roda identificação para validar a pessoa
           if (funcionarioAlmocoModalRef.current) {
             const result = await recognizeFace(video, SMILE_THRESHOLD)
             if (result && !result.isUnknown && result.id !== "unknown") {
@@ -1022,6 +1024,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           const rosto = await detectFaceFast(video)
           if (!rosto) {
             setOlharDaCamera(null)
+            setPessoaNaEspera(null)
+            setFalaIaEspera(null)
             if (rostoNaEsperaRef.current) {
               // Apareceu e foi embora sem bater nada. A telemetria descarta
               // tentativas sem nenhum passe completo, então isso não vira lixo.
@@ -1029,9 +1033,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               telemetria.encerrarTentativa("nao_identificado", modoTesteRef.current)
             }
             // Ninguém à vista: momento certo de manter a rede pesada acordada.
-            // Fica aqui dentro, e não antes do detector, porque aquecimento
-            // nunca pode atrasar quem chegou — se há rosto no quadro, este
-            // trecho sequer é alcançado.
             const hora = new Date().getHours()
             const dentroDoExpediente =
               hora >= HORA_INICIO_AQUECIMENTO && hora < HORA_FIM_AQUECIMENTO
@@ -1044,10 +1045,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             }
             return
           }
-          // Alguém apareceu na frente do tablet. Ainda não se sabe quem, mas já
-          // dá para abrir a conexão com o banco enquanto a pessoa termina de
-          // chegar. É o que tira a lentidão da primeira batida depois de horas
-          // parado — as de três em três horas, que são justamente as reais.
+
+          // Alguém apareceu na frente do tablet
           if (!rostoNaEsperaRef.current) {
             rostoNaEsperaRef.current = true
             aquecerConexaoSupabase()
@@ -1073,9 +1072,33 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             )
           }
 
+          // Identificação em segundo plano para o balão de fala da tela de espera
+          if (Date.now() - ultimoReconhecimentoEsperaRef.current > 1200) {
+            ultimoReconhecimentoEsperaRef.current = Date.now()
+            void recognizeFace(video, SMILE_THRESHOLD).then((res) => {
+              if (res && !res.isUnknown && res.id !== "unknown") {
+                const func = funcionariosMapRef.current.get(res.id)
+                if (func) {
+                  setPessoaNaEspera({
+                    id: func.id,
+                    nome: func.nome,
+                    primeiroNome: func.nome.split(" ")[0],
+                  })
+                  prefetchRegistrosDoDia(func.id)
+                }
+              } else if (res && (res.isUnknown || res.id === "unknown")) {
+                setPessoaNaEspera((prev) =>
+                  prev?.id && prev.id !== "unknown"
+                    ? prev
+                    : { id: "unknown", nome: "Visitante", primeiroNome: "Visitante" }
+                )
+              }
+            }).catch(() => {})
+          }
+
           // Centro do rosto (0..1) vira direção do olhar (-1..1).
-          // Ganho aumentado em X e Y para acompanhar o rosto com amplitude real.
-          const x = Math.max(-1, Math.min(1, (rosto.centroX * 2 - 1) * 1.35))
+          // Com INVERTER_OLHAR_X para acompanhar perfeitamente o rosto na câmera espelhada!
+          const x = Math.max(-1, Math.min(1, (rosto.centroX * 2 - 1) * (INVERTER_OLHAR_X ? -1 : 1) * 1.35))
           const y = Math.max(-1, Math.min(1, (rosto.centroY * 2 - 1) * 1.3))
 
           // Deadzone reduzida para 0.03 para responder a movimentos menores e mais fluidos
@@ -1757,6 +1780,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       {screensaver && (
         <Screensaver
           olhar={olharDaCamera}
+          pessoaNaEspera={pessoaNaEspera}
+          falaIa={falaIaEspera}
           onSelecionarAlmoco={(f) => {
             setPessoaDetectadaModal(null)
             setFuncionarioAlmocoModal(f)
