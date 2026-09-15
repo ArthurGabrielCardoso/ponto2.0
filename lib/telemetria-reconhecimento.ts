@@ -29,8 +29,10 @@ export type Desfecho = "ponto_batido" | "desistiu" | "nao_identificado"
 
 interface Medida {
   inicio: number
+  tocouEm?: number
   identificadoEm?: number
   sorriuEm?: number
+  confirmadoEm?: number
   telaSucessoEm?: number
 
   passesBaratos: number[]
@@ -162,6 +164,32 @@ export function registrarPerdaDeIdentidade() {
   if (atual) atual.perdasIdentidade += 1
 }
 
+/**
+ * A pessoa tocou na proteção de tela.
+ *
+ * Existe para separar duas coisas que estavam somadas num número só. O
+ * "tempo até identificar" começava quando um rosto aparecia na câmera, mas
+ * entre aparecer e ser identificado há um toque na tela — que é tempo da
+ * PESSOA, não do tablet. Somados, os dois viram um número que não se pode
+ * otimizar nem defender: cortar 1 s de "2,7 s" não quer dizer nada se 1,5 s
+ * daquilo era alguém decidindo encostar o dedo.
+ */
+export function registrarToque() {
+  if (atual && atual.tocouEm === undefined) atual.tocouEm = performance.now()
+}
+
+/**
+ * O passe completo que confirma a identidade depois do sorriso terminou.
+ *
+ * Separa o pós-sorriso em duas metades: o custo da confirmação e o custo de
+ * pintar a tela. Hoje as duas somam 2,3 s, das quais ~1,2 s não tem
+ * explicação — e enquanto forem um número só, não tem como saber qual das
+ * duas atacar.
+ */
+export function registrarConfirmacao() {
+  if (atual && atual.confirmadoEm === undefined) atual.confirmadoEm = performance.now()
+}
+
 export function registrarIdentificacao(funcionarioId: string) {
   if (!atual) return
   atual.funcionarioId = funcionarioId
@@ -216,6 +244,14 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
     ms_ate_identificar: ms(m.inicio, m.identificadoEm),
     ms_ate_sorrir: ms(m.identificadoEm, m.sorriuEm),
     ms_ate_tela_sucesso: ms(m.sorriuEm, m.telaSucessoEm),
+    // As quatro abaixo abrem as duas de cima. Rosto → toque é a pessoa;
+    // toque → identificada é o tablet. Sorriso → confirmado é a rede neural;
+    // confirmado → tela é render e navegação. Sem esse corte, otimizar aqui
+    // é escolher alvo no escuro.
+    ms_ate_tocar: ms(m.inicio, m.tocouEm),
+    ms_do_toque_ate_identificar: ms(m.tocouEm, m.identificadoEm),
+    ms_sorriso_ate_confirmar: ms(m.sorriuEm, m.confirmadoEm),
+    ms_confirmar_ate_tela: ms(m.confirmadoEm, m.telaSucessoEm),
     ms_total: Math.round(fim - m.inicio),
     ms_captura_p50: p50(m.capturas),
     ms_passe_barato_p50: p50(m.passesBaratos),

@@ -518,6 +518,16 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    * muito tempo" é mesmo o que deixa a batida lenta.
    */
   const ultimoPassePesadoRef = useRef(0)
+  /**
+   * Quem foi confirmado por um passe completo de verdade, e quando.
+   *
+   * Diferente de `ultimaVerificacaoIdentidadeRef`, que marca QUALQUER passe
+   * completo: aqui só entra passe que bateu com alguém cadastrado. É o que
+   * permite gravar o ponto no sorriso sem rodar um segundo passe idêntico —
+   * sem abrir mão da regra de que todo ponto exige um passe completo que
+   * bateu de verdade.
+   */
+  const ultimaConfirmacaoRef = useRef<{ id: string; em: number } | null>(null)
   const tipoTesteRef = useRef("auto")
   const gravarNoBancoRef = useRef(false)
   const forcarHumorRef = useRef(false)
@@ -923,11 +933,37 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               return
             }
 
-            // Sorriu: acende a moldura esmeralda na hora e confirma a identidade no
-            // passe completo abaixo antes de gravar qualquer coisa.
+            // Sorriu: acende a moldura esmeralda na hora.
             telemetria.registrarSorriso()
             if (!current.isSmiling) {
               setRecognizedPerson({ ...current, isSmiling: true, smileFrames: 1 })
+            }
+
+            // === Por que dá para gravar aqui, sem mais um passe completo ===
+            //
+            // Este ramo só roda quando `identidadeVencida` é falso, ou seja,
+            // quando o último passe completo tem menos de
+            // RE_VERIFICACAO_IDENTIDADE_MS. Se esse passe confirmou ESTA
+            // pessoa, a regra de sempre — "todo ponto exige um passe completo
+            // que bateu de verdade" — já está satisfeita por ele.
+            //
+            // O passe que rodava aqui embaixo perguntava de novo, para a mesma
+            // pessoa, dentro da mesma janela que o sistema já trata como
+            // confiável. Custava ~925 ms no tablet e não respondia nada novo.
+            //
+            // A janela de confiança é a MESMA de antes, de propósito: isto
+            // remove trabalho repetido, não afrouxa a verificação. Fora da
+            // janela, ou se quem foi confirmado for outra pessoa, o passe
+            // completo abaixo continua valendo.
+            const confirmacao = ultimaConfirmacaoRef.current
+            if (
+              confirmacao &&
+              confirmacao.id === current.id &&
+              Date.now() - confirmacao.em <= RE_VERIFICACAO_IDENTIDADE_MS
+            ) {
+              telemetria.registrarConfirmacao()
+              await handleRegistro({ ...current, isSmiling: true, smileFrames: 1 })
+              return
             }
           }
 
@@ -968,6 +1004,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // Rosto válido de funcionário cadastrado!
             lastFaceSeenRef.current = Date.now()
             falhasSeguidasRef.current = 0
+            ultimaConfirmacaoRef.current = { id: result.id, em: Date.now() }
 
             const isDifferentPerson = !current || current.id !== result.id
             const isSmiling = result.isSmiling
@@ -998,6 +1035,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
             // Registra ponto instantaneamente no 1º frame com sorriso da pessoa identificada
             if (isSmiling && smileFrames >= SMILE_FRAMES_REQUIRED) {
+              telemetria.registrarConfirmacao()
               await handleRegistro(updated)
             }
           } else {
@@ -1469,6 +1507,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           onTap={() => {
             screensaverRef.current = false
             setScreensaver(false)
+            // Marca a fronteira entre o tempo da pessoa e o tempo do tablet.
+            telemetria.registrarToque()
             resetInactivityTimer()
           }}
           onSegredo={() => setModoTeste(true)}
