@@ -75,7 +75,7 @@ export function OlhosRobo({
       margemY,
       altura,
       alcanceX: margemX * 0.92,
-      alcanceY: margemY * 0.8,
+      alcanceY: margemY * 1.05,
     }
   }, [largura])
 
@@ -166,21 +166,18 @@ export function OlhosRobo({
 
   const idMascara = useMemo(() => `olhos-${Math.random().toString(36).slice(2, 9)}`, [])
 
-  /**
-   * Pálpebra que acompanha o olhar vertical. Olhar para baixo sem isso é só o
-   * olho descendo alguns pixels, o que não lê como olhar para baixo — num olho
-   * de verdade a pálpebra de cima desce junto.
+  /*
+   * AQUI EXISTIA A `palpebraDoOlhar`.
+   *
+   * Ela descia a pálpebra de cima quando o olhar ia para baixo, imitando um
+   * olho de verdade. A imitação era correta e o efeito, errado: pálpebra
+   * caída é a forma universal de desenhar tristeza ou sono, e o tablet
+   * passava o dia inteiro parecendo abatido para quem chegava.
+   *
+   * Um robô simpático não precisa de anatomia. Sem ela o olhar para baixo é
+   * só o olho descendo — lê menos como "olhando para baixo" e muito mais como
+   * "acordado", que é o que esta tela precisa transmitir.
    */
-  const palpebraDoOlhar = () => {
-    if (dirY <= 0.05) return null
-    return (
-      <rect
-        width={g.larguraOlho}
-        height={g.alturaOlho * 0.26 * dirY}
-        fill="black"
-      />
-    )
-  }
 
   /** Pálpebra do humor, em coordenadas locais do olho. Preto = recortado. */
   const palpebra = (ladoEsquerdo: boolean) => {
@@ -234,13 +231,20 @@ export function OlhosRobo({
       <g
         style={{
           transform: `translate(${x + deslocX}px, ${g.margemY + deslocY}px)`,
-          transition: "transform 520ms cubic-bezier(0.22, 1, 0.36, 1)",
+          // Seguir uma pessoa e vaguear sozinho pedem tempos diferentes. Com
+          // `olhar` a posição vem da câmera, que atualiza umas três vezes por
+          // segundo: uma transição de 520 ms ainda estaria a caminho do alvo
+          // antigo quando o novo chega, e o olhar ficava sempre atrasado em
+          // relação à pessoa — parecia que não seguia nada. 240 ms chega antes
+          // da próxima leitura e o movimento vira acompanhamento de verdade.
+          transition: olhar
+            ? "transform 240ms cubic-bezier(0.22, 1, 0.36, 1)"
+            : "transform 520ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}
       >
         <mask id={idLocal}>
           <rect width={g.larguraOlho} height={g.alturaOlho} rx={g.raio} fill="white" />
           {palpebra(ladoEsquerdo)}
-          {palpebraDoOlhar()}
         </mask>
         <g
           style={{
