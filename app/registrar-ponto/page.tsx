@@ -150,7 +150,7 @@ function MolduraTopo({ duracaoMs }: { duracaoMs: number }) {
       {/* A barra. Fica acima de tudo para nunca ser coberta pela barra dourada
           de status nem pelo vídeo. */}
       <div
-        className="fixed inset-x-0 top-0 z-40 h-[6px] pointer-events-none"
+        className="fixed inset-x-0 top-0 z-40 h-[5px] pointer-events-none"
         style={{ ["--tempo-sorriso" as string]: `${duracaoMs}ms` }}
       >
         <div
@@ -158,19 +158,18 @@ function MolduraTopo({ duracaoMs }: { duracaoMs: number }) {
           style={{
             background:
               "linear-gradient(90deg, rgba(16,185,129,0) 0%, rgba(52,211,153,1) 18%, rgba(110,231,183,1) 50%, rgba(52,211,153,1) 82%, rgba(16,185,129,0) 100%)",
-            boxShadow: "0 0 18px rgba(16,185,129,0.9), 0 0 42px rgba(16,185,129,0.5)",
+            boxShadow: "0 2px 6px rgba(16,185,129,0.35)",
           }}
         />
       </div>
 
-      {/* Brilho curto logo abaixo da barra: dá espessura ao sinal sem voltar a
-          fechar uma moldura em volta da pessoa. */}
+      {/* Brilho sutil curto: sem criar sombra escura sobre a câmera */}
       <div
-        className="fixed inset-x-0 top-0 z-30 h-24 pointer-events-none barra-topo"
+        className="fixed inset-x-0 top-0 z-30 h-5 pointer-events-none barra-topo"
         style={{
           ["--tempo-sorriso" as string]: `${duracaoMs}ms`,
           background:
-            "linear-gradient(180deg, rgba(16,185,129,0.34) 0%, rgba(16,185,129,0.10) 45%, rgba(16,185,129,0) 100%)",
+            "linear-gradient(180deg, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0) 100%)",
         }}
       />
 
@@ -586,6 +585,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const [falaIaEspera, setFalaIaEspera] = useState<string | null>(null)
   const ultimoReconhecimentoEsperaRef = useRef(0)
   const ultimoIdFaladoEsperaRef = useRef<string | null>(null)
+  const ultimoTimestampFalaEsperaRef = useRef(0)
+  const falhasSemRostoEsperaRef = useRef(0)
 
   useEffect(() => {
     funcionarioAlmocoModalRef.current = funcionarioAlmocoModal
@@ -1028,9 +1029,14 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           const rosto = await detectFaceFast(video)
           if (!rosto) {
             setOlharDaCamera(null)
-            setPessoaNaEspera(null)
-            setFalaIaEspera(null)
-            ultimoIdFaladoEsperaRef.current = null
+            falhasSemRostoEsperaRef.current += 1
+            // Só desassocia a pessoa da tela de espera após ~3s sem nenhum rosto
+            // (evita piscar o balão ou reiniciar a fala por causa de 1 frame de jitter)
+            if (falhasSemRostoEsperaRef.current >= 15) {
+              setPessoaNaEspera(null)
+              setFalaIaEspera(null)
+              ultimoIdFaladoEsperaRef.current = null
+            }
             if (rostoNaEsperaRef.current) {
               // Apareceu e foi embora sem bater nada. A telemetria descarta
               // tentativas sem nenhum passe completo, então isso não vira lixo.
@@ -1077,10 +1083,16 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             )
           }
 
+          // Rosto visível: reseta contador de falhas
+          falhasSemRostoEsperaRef.current = 0
+
           // Identificação em segundo plano para o balão de fala da tela de espera
-          if (Date.now() - ultimoReconhecimentoEsperaRef.current > 1200) {
+          if (Date.now() - ultimoReconhecimentoEsperaRef.current > 1500) {
             ultimoReconhecimentoEsperaRef.current = Date.now()
             void recognizeFace(video, SMILE_THRESHOLD).then((res) => {
+              // Se já saiu da proteção de tela (ex: tocou para registrar), não fala saudação de espera
+              if (!screensaverRef.current) return
+
               if (res && !res.isUnknown && res.id !== "unknown") {
                 const func = funcionariosMapRef.current.get(res.id)
                 if (func) {
@@ -1091,9 +1103,16 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                   })
                   prefetchRegistrosDoDia(func.id)
 
-                  // Robô fala saudação personalizada ao identificar o colaborador na tela de espera
-                  if (ultimoIdFaladoEsperaRef.current !== func.id) {
+                  // Robô fala saudação personalizada UMA ÚNICA VEZ
+                  // Cooldown estrito: 40s para a mesma pessoa e 8s entre pessoas diferentes
+                  const agora = Date.now()
+                  const mesmaPessoa = ultimoIdFaladoEsperaRef.current === func.id
+                  const tempoDesdeUltima = agora - ultimoTimestampFalaEsperaRef.current
+                  const podeFalar = (!mesmaPessoa && tempoDesdeUltima > 8000) || (mesmaPessoa && tempoDesdeUltima > 40000)
+
+                  if (podeFalar) {
                     ultimoIdFaladoEsperaRef.current = func.id
+                    ultimoTimestampFalaEsperaRef.current = agora
                     const pNome = func.nome.split(" ")[0]
                     const horaAtual = new Date().getHours()
                     let saudacao = "bom dia"
