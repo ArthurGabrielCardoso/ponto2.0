@@ -150,26 +150,26 @@ function MolduraTopo({ duracaoMs }: { duracaoMs: number }) {
       {/* A barra. Fica acima de tudo para nunca ser coberta pela barra dourada
           de status nem pelo vídeo. */}
       <div
-        className="fixed inset-x-0 top-0 z-40 h-[5px] pointer-events-none"
+        className="fixed inset-x-0 top-0 z-40 h-[8px] sm:h-[9px] pointer-events-none"
         style={{ ["--tempo-sorriso" as string]: `${duracaoMs}ms` }}
       >
         <div
           className="barra-topo h-full w-full"
           style={{
             background:
-              "linear-gradient(90deg, rgba(16,185,129,0) 0%, rgba(52,211,153,1) 18%, rgba(110,231,183,1) 50%, rgba(52,211,153,1) 82%, rgba(16,185,129,0) 100%)",
-            boxShadow: "0 2px 6px rgba(16,185,129,0.35)",
+              "linear-gradient(90deg, rgba(4,120,87,0) 0%, rgba(5,150,105,1) 15%, rgba(16,185,129,1) 50%, rgba(5,150,105,1) 85%, rgba(4,120,87,0) 100%)",
+            boxShadow: "0 2px 8px rgba(5,150,105,0.45)",
           }}
         />
       </div>
 
       {/* Brilho sutil curto: sem criar sombra escura sobre a câmera */}
       <div
-        className="fixed inset-x-0 top-0 z-30 h-5 pointer-events-none barra-topo"
+        className="fixed inset-x-0 top-0 z-30 h-4 pointer-events-none barra-topo"
         style={{
           ["--tempo-sorriso" as string]: `${duracaoMs}ms`,
           background:
-            "linear-gradient(180deg, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0) 100%)",
+            "linear-gradient(180deg, rgba(5,150,105,0.15) 0%, rgba(5,150,105,0) 100%)",
         }}
       />
 
