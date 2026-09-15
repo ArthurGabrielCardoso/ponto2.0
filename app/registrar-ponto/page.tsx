@@ -124,7 +124,7 @@ function SuccessAnimation({ tipo }: { tipo: string }) {
  * esmeralda descendo por cima disso seria movimento demais para o mesmo
  * instante.
  */
-function MolduraTopo() {
+function MolduraTopo({ duracaoMs }: { duracaoMs: number }) {
   return (
     <>
       <style>{`
@@ -134,7 +134,9 @@ function MolduraTopo() {
         }
         .barra-topo {
           transform-origin: center;
-          animation: barraDoCentro .34s cubic-bezier(0.22, 1, 0.36, 1) both;
+          /* LINEAR de propósito: esta barra virou medidor de tempo, e curva
+             com aceleração mentiria sobre quanto falta. */
+          animation: barraDoCentro var(--tempo-sorriso) linear both;
         }
         /* Quem pediu menos movimento no sistema recebe o estado final direto:
            o sinal continua sendo dado, sem a animação. */
@@ -145,7 +147,10 @@ function MolduraTopo() {
 
       {/* A barra. Fica acima de tudo para nunca ser coberta pela barra dourada
           de status nem pelo vídeo. */}
-      <div className="fixed inset-x-0 top-0 z-40 h-[6px] pointer-events-none">
+      <div
+        className="fixed inset-x-0 top-0 z-40 h-[6px] pointer-events-none"
+        style={{ ["--tempo-sorriso" as string]: `${duracaoMs}ms` }}
+      >
         <div
           className="barra-topo h-full w-full"
           style={{
@@ -161,6 +166,7 @@ function MolduraTopo() {
       <div
         className="fixed inset-x-0 top-0 z-30 h-24 pointer-events-none barra-topo"
         style={{
+          ["--tempo-sorriso" as string]: `${duracaoMs}ms`,
           background:
             "linear-gradient(180deg, rgba(16,185,129,0.34) 0%, rgba(16,185,129,0.10) 45%, rgba(16,185,129,0) 100%)",
         }}
@@ -534,6 +540,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const isRegisteringRef = useRef(false)
   /** Passes completos seguidos que não confirmaram quem está na frente. */
   const falhasSeguidasRef = useRef(0)
+  /**
+   * Quando o sorriso contínuo começou. `null` = não está sorrindo agora.
+   *
+   * Zera em qualquer passe que não veja sorriso — é isso que faz "contínuo"
+   * significar contínuo, e não "sorriu 1,5 s somados ao longo de um minuto".
+   */
+  const sorrindoDesdeRef = useRef<number | null>(null)
   /** Já há alguém na frente do tablet durante a proteção de tela. */
   const rostoNaEsperaRef = useRef(false)
   const isProcessingRef = useRef(false)
@@ -620,7 +633,20 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     return tipo
   }
 
-  const SMILE_FRAMES_REQUIRED = 1 // 1 frame sorrindo já registra instantaneamente
+  /**
+   * Quanto tempo de sorriso CONTÍNUO o ponto exige.
+   *
+   * Antes era 1 quadro: sorriu num piscar de olhos, gravou. Rápido demais para
+   * ser um gesto — qualquer expressão de passagem batia o ponto, e a pessoa
+   * nem chegava a sorrir de fato.
+   *
+   * MEDIDO EM TEMPO, NÃO EM QUADROS, e isso importa. A olhada completa varia
+   * de ~185 ms com a GPU quente a ~900 ms com ela fria (medido hoje, várias
+   * vezes). "Oito quadros" seria 1,5 s quente e 7 s frio — a mesma regra
+   * escrita no código valendo coisas completamente diferentes na prática.
+   * Relógio é relógio em qualquer temperatura.
+   */
+  const TEMPO_DE_SORRISO_MS = 1500
   const SMILE_THRESHOLD = 0.40
   // De quanto em quanto tempo a identidade é reconferida com o passe completo.
   // É esta janela que pega a troca de pessoa na frente da câmera.
@@ -1103,6 +1129,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                   console.log("⚠️ Rosto não confirmado em vários passes — limpando identificação")
                   definirPessoa(null)
                   falhasSeguidasRef.current = 0
+                  sorrindoDesdeRef.current = null
                   telemetria.registrarPerdaDeIdentidade()
                 }
               }
@@ -1121,18 +1148,28 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // — foi o que aconteceu nas três primeiras batidas com o código
             // novo, e é justamente a etapa que falta medir.
             if (isSmiling) telemetria.registrarSorriso()
-            // O som acompanha a barra verde: os dois dizem a mesma coisa, no
-            // mesmo instante. Só na transição para sorrindo, senão repetiria a
-            // cada passe enquanto a pessoa continua sorrindo.
-            if (isSmiling && !current?.isSmiling) tocarConfirmacao()
-            const smileFrames = isSmiling ? (isDifferentPerson ? 1 : current.smileFrames + 1) : 0
+
+            // === Cronômetro do sorriso contínuo ===
+            // Qualquer passe sem sorriso zera. É o que separa "sorriu 1,5 s
+            // seguidos" de "sorriu 1,5 s somados ao longo de um minuto".
+            if (!isSmiling || isDifferentPerson) {
+              sorrindoDesdeRef.current = null
+            } else if (sorrindoDesdeRef.current === null) {
+              sorrindoDesdeRef.current = Date.now()
+              // O som acompanha a barra verde acendendo: os dois dizem a mesma
+              // coisa, no mesmo instante. Só na transição, senão repetiria a
+              // cada passe enquanto a pessoa continua sorrindo.
+              tocarConfirmacao()
+            }
+            const msSorrindo =
+              sorrindoDesdeRef.current === null ? 0 : Date.now() - sorrindoDesdeRef.current
 
             const updated: RecognizedPerson = {
               id: result.id,
               nome: result.nome,
               similarity: result.similarity,
               isSmiling,
-              smileFrames,
+              smileFrames: isSmiling ? 1 : 0,
               registroCompleto: false,
             }
 
@@ -1150,8 +1187,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // Adianta a consulta dos registros do dia enquanto a pessoa sorri.
             prefetchRegistrosDoDia(result.id)
 
-            // Registra ponto instantaneamente no 1º frame com sorriso da pessoa identificada
-            if (isSmiling && smileFrames >= SMILE_FRAMES_REQUIRED) {
+            // Grava só depois do sorriso inteiro. A barra verde no topo leva
+            // exatamente TEMPO_DE_SORRISO_MS para ir do centro às duas pontas,
+            // então ela não é enfeite: é o medidor. Quem está sorrindo vê
+            // quanto falta, e quem desiste no meio vê a barra sumir.
+            if (isSmiling && msSorrindo >= TEMPO_DE_SORRISO_MS) {
               telemetria.registrarConfirmacao()
               await handleRegistro(updated)
             }
@@ -1545,6 +1585,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     telemetria.encerrarTentativa("desistiu", modoTesteRef.current)
     isRegisteringRef.current = false
     falhasSeguidasRef.current = 0
+    sorrindoDesdeRef.current = null
     rostoNaEsperaRef.current = false
     prefetchSaudacaoRef.current = null
     setShowSuccess(false)
@@ -1610,7 +1651,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           está sendo gravado. Continua visível durante `registroCompleto`, aí
           com a cortina, para emendar na tela de sucesso sem corte seco. */}
       {recognizedPerson && recognizedPerson.isSmiling && !showSuccess && (
-        <MolduraTopo />
+        <MolduraTopo duracaoMs={TEMPO_DE_SORRISO_MS} />
       )}
 
       {/* Status em Glassmorphism Dourado - Pessoa reconhecida (segue visível ao sorrir) */}
@@ -1630,7 +1671,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               {recognizedPerson.nome}
             </div>
             <div className="text-sm sm:text-base font-medium text-amber-100/95 tracking-wide drop-shadow-sm">
-              {recognizedPerson.isSmiling ? "Registrando seu ponto..." : "Sorria para registrar seu ponto"}
+              {/* "Registrando" mentia: durante o sorriso ainda não está
+                  registrando nada, está esperando. E quem lê "registrando" e vê
+                  que nada acontece conclui que travou. "Segure o sorriso" diz o
+                  que fazer, e a barra no topo diz por quanto tempo. */}
+              {recognizedPerson.isSmiling
+                ? "Segure o sorriso..."
+                : "Sorria para registrar seu ponto"}
             </div>
           </div>
         </div>
