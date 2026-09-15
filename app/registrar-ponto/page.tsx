@@ -34,6 +34,7 @@ import {
   type RespostaSaudacao,
 } from "@/lib/ia-saudacao"
 import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
+import { prepararSom, tocarConfirmacao, tocarSucesso } from "@/lib/som-ponto"
 import * as telemetria from "@/lib/telemetria-reconhecimento"
 import {
   enfileirarPonto,
@@ -104,27 +105,82 @@ function SuccessAnimation({ tipo }: { tipo: string }) {
 // Screensaver com relógio em tempo real e saudação dinâmica
 // Efeito de moldura luminosa e cantos futuristas nas bordas da tela ao identificar pessoa
 // Moldura luminosa esmeralda pulsante ativada exclusivamente ao sorrir
-function ViewfinderBorder() {
+/**
+ * Sinal de "rosto confirmado, gravando".
+ *
+ * ANTES era uma moldura nos quatro lados piscando a cada 0,45 s. Piscar é o
+ * vocabulário de alerta — é o que a tela usa quando algo deu errado. Aqui o
+ * que aconteceu foi o oposto: deu certo. E, com o reconhecimento a ~190 ms, a
+ * moldura às vezes aparecia e sumia em menos de um ciclo da piscada, o que
+ * lia como falha mesmo quando o ponto entrava.
+ *
+ * AGORA é uma barra só, na borda de cima, que cresce do centro para os dois
+ * lados ao mesmo tempo e FICA. O movimento do centro para fora é o mesmo
+ * gesto de uma barra de progresso completando: diz "terminou", não "atenção".
+ *
+ * `expandindo` é o segundo ato: quando o ponto foi gravado, a barra derrama
+ * uma cortina esmeralda tela abaixo, e a tela de sucesso entra por baixo
+ * dela. Sem isso a troca de tela era um corte seco.
+ */
+function MolduraTopo({ expandindo = false }: { expandindo?: boolean }) {
   return (
     <>
       <style>{`
-        @keyframes smilePulseIntense {
-          0%, 100% {
-            border-color: rgba(52, 211, 153, 0.95);
-            box-shadow: inset 0 0 70px rgba(16, 185, 129, 0.6), 0 0 35px rgba(16, 185, 129, 0.45);
-            transform: scale(1);
-          }
-          50% {
-            border-color: rgba(16, 185, 129, 1);
-            box-shadow: inset 0 0 130px rgba(16, 185, 129, 0.95), 0 0 80px rgba(52, 211, 153, 0.85);
-            transform: scale(1.002);
-          }
+        @keyframes barraDoCentro {
+          from { transform: scaleX(0); }
+          to   { transform: scaleX(1); }
         }
-        .smile-glow-pulse {
-          animation: smilePulseIntense 0.45s ease-in-out infinite;
+        @keyframes cortinaDesce {
+          from { opacity: 0; transform: scaleY(0); }
+          to   { opacity: 1; transform: scaleY(1); }
+        }
+        .barra-topo {
+          transform-origin: center;
+          animation: barraDoCentro .34s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .cortina-sucesso {
+          transform-origin: top;
+          animation: cortinaDesce .22s cubic-bezier(0.4, 0, 0.2, 1) both;
+        }
+        /* Quem pediu menos movimento no sistema recebe o estado final direto:
+           o sinal continua sendo dado, sem a animação. */
+        @media (prefers-reduced-motion: reduce) {
+          .barra-topo, .cortina-sucesso { animation: none; }
         }
       `}</style>
-      <div className="fixed inset-0 pointer-events-none z-20 border-[7px] sm:border-[8px] smile-glow-pulse" />
+
+      {/* A barra. Fica acima de tudo para nunca ser coberta pela barra dourada
+          de status nem pelo vídeo. */}
+      <div className="fixed inset-x-0 top-0 z-40 h-[6px] pointer-events-none">
+        <div
+          className="barra-topo h-full w-full"
+          style={{
+            background:
+              "linear-gradient(90deg, rgba(16,185,129,0) 0%, rgba(52,211,153,1) 18%, rgba(110,231,183,1) 50%, rgba(52,211,153,1) 82%, rgba(16,185,129,0) 100%)",
+            boxShadow: "0 0 18px rgba(16,185,129,0.9), 0 0 42px rgba(16,185,129,0.5)",
+          }}
+        />
+      </div>
+
+      {/* Brilho curto logo abaixo da barra: dá espessura ao sinal sem voltar a
+          fechar uma moldura em volta da pessoa. */}
+      <div
+        className="fixed inset-x-0 top-0 z-30 h-24 pointer-events-none barra-topo"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(16,185,129,0.34) 0%, rgba(16,185,129,0.10) 45%, rgba(16,185,129,0) 100%)",
+        }}
+      />
+
+      {expandindo && (
+        <div
+          className="fixed inset-0 z-30 pointer-events-none cortina-sucesso"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(16,185,129,0.62) 0%, rgba(16,185,129,0.34) 55%, rgba(16,185,129,0.14) 100%)",
+          }}
+        />
+      )}
     </>
   )
 }
@@ -189,11 +245,17 @@ function Screensaver({
   onTap,
   onSegredo,
   olhar,
+  saindo,
+  origem,
 }: {
-  onTap: () => void
+  onTap: (e: React.MouseEvent) => void
   onSegredo: () => void
   /** Direção em que a pessoa detectada está. null = ninguém à vista. */
   olhar: { x: number; y: number } | null
+  /** A película está se abrindo para revelar a câmera. */
+  saindo: boolean
+  /** Ponto de onde o círculo abre, em % da tela. Onde o dedo encostou. */
+  origem: { x: number; y: number }
 }) {
   // Gesto escondido: 10 toques no canto inferior direito abrem o modo teste.
   // Fica no canto e exige repetição justamente para ninguém cair nele sem querer.
@@ -281,16 +343,35 @@ function Screensaver({
 
   return (
     <div
-      className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden backdrop-blur-xl"
+      className={`absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden backdrop-blur-xl${saindo ? " ss-abrindo" : ""}`}
       style={{
         background: "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
+        // O buraco do círculo abre exatamente onde o dedo encostou, não no
+        // centro geométrico: a tela responde ao gesto da pessoa, e não a uma
+        // coreografia que ignora onde ela tocou.
+        ["--abrir-x" as string]: `${origem.x}%`,
+        ["--abrir-y" as string]: `${origem.y}%`,
       }}
       onClick={onTap}
     >
       <style>{`
         @keyframes fadeUp{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
+        /* A película não some: ela ABRE. O clip-path recorta um círculo que
+           cresce do dedo até passar do canto mais distante da tela, revelando
+           a câmera por baixo. 140% cobre a diagonal de qualquer proporção. */
+        @keyframes peliculaAbre {
+          from { clip-path: circle(0% at var(--abrir-x) var(--abrir-y)); opacity: 1; }
+          to   { clip-path: circle(140% at var(--abrir-x) var(--abrir-y)); opacity: 0; }
+        }
+        .ss-abrindo {
+          animation: peliculaAbre .42s cubic-bezier(0.4, 0, 0.2, 1) both;
+          pointer-events: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .ss-abrindo { animation: none; opacity: 0; }
+        }
         @keyframes smoothNameFade{0%{opacity:0;transform:translateY(4px);filter:blur(3px)}100%{opacity:1;transform:translateY(0);filter:blur(0)}}
         .ss-fade{animation:fadeUp .6s ease-out both}
         .ss-name-smooth{display:inline-block;animation:smoothNameFade .8s cubic-bezier(0.22, 1, 0.36, 1) both}
@@ -361,8 +442,12 @@ function Screensaver({
         <div
           className="absolute bottom-6 left-4 right-4 sm:left-6 sm:right-6 z-40 pointer-events-auto ss-fade"
           onClick={(e) => {
+            // O card de almoço engole o clique para não abrir a película por
+            // baixo dele, mas quem toca aqui também quer bater ponto — então o
+            // toque segue adiante, com o mesmo evento, para o círculo abrir no
+            // lugar certo.
             e.stopPropagation()
-            onTap()
+            onTap(e)
           }}
         >
           <div
@@ -508,6 +593,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // Para onde os olhos da proteção de tela estão olhando. null = ninguém à
   // vista, e aí eles voltam a vaguear sozinhos.
   const [olharDaCamera, setOlharDaCamera] = useState<{ x: number; y: number } | null>(null)
+  /**
+   * A película está abrindo. Dura o tempo da animação e só controla PIXEL —
+   * o reconhecimento já começou antes dela.
+   */
+  const [saindoDaEspera, setSaindoDaEspera] = useState(false)
+  const [origemDaAbertura, setOrigemDaAbertura] = useState({ x: 50, y: 50 })
+  const timerAberturaRef = useRef<number | null>(null)
   const ultimaDeteccaoOciosaRef = useRef(0)
   /**
    * Quando a rede pesada rodou pela última vez, seja de verdade ou por
@@ -1024,6 +1116,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // — foi o que aconteceu nas três primeiras batidas com o código
             // novo, e é justamente a etapa que falta medir.
             if (isSmiling) telemetria.registrarSorriso()
+            // O som acompanha a barra verde: os dois dizem a mesma coisa, no
+            // mesmo instante. Só na transição para sorrindo, senão repetiria a
+            // cada passe enquanto a pessoa continua sorrindo.
+            if (isSmiling && !current?.isSmiling) tocarConfirmacao()
             const smileFrames = isSmiling ? (isDifferentPerson ? 1 : current.smileFrames + 1) : 0
 
             const updated: RecognizedPerson = {
@@ -1252,6 +1348,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
       setRecognizedPerson(completed)
       setShowSuccess(true)
+      // Antes da voz, de propósito: a nota fecha a frase que a confirmação
+      // abriu, e a saudação falada entra em seguida sem disputar com ela.
+      tocarSucesso()
       reproduzirVozSaudacao(mensagemVoz)
 
       // Fecha a medição no mesmo instante em que a pessoa vê a tela pronta.
@@ -1420,6 +1519,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     setMostrarCheckinHumor(false)
     setHumorSelecionado(null)
     isProcessingRef.current = false
+    if (timerAberturaRef.current) {
+      window.clearTimeout(timerAberturaRef.current)
+      timerAberturaRef.current = null
+    }
+    setSaindoDaEspera(false)
     setScreensaver(true)
   }
 
@@ -1468,9 +1572,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         />
       </div>
 
-      {/* Moldura luminosa esmeralda — Exibida exclusivamente quando a pessoa sorri */}
-      {recognizedPerson && recognizedPerson.isSmiling && !recognizedPerson.registroCompleto && !showSuccess && (
-        <ViewfinderBorder />
+      {/* Barra esmeralda no topo — acende quando o rosto é confirmado e o ponto
+          está sendo gravado. Continua visível durante `registroCompleto`, aí
+          com a cortina, para emendar na tela de sucesso sem corte seco. */}
+      {recognizedPerson && recognizedPerson.isSmiling && !showSuccess && (
+        <MolduraTopo expandindo={recognizedPerson.registroCompleto} />
       )}
 
       {/* Status em Glassmorphism Dourado - Pessoa reconhecida (segue visível ao sorrir) */}
@@ -1520,13 +1626,38 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       {screensaver && (
         <Screensaver
           olhar={olharDaCamera}
-          onTap={() => {
+          onTap={(e) => {
+            // ORDEM IMPORTA, e é ela que faz a animação custar zero.
+            //
+            // O laço de reconhecimento lê `screensaverRef`, não o estado. Ao
+            // virar o ref primeiro, o primeiro passe completo começa AGORA,
+            // enquanto o círculo ainda está abrindo. Os ~420 ms da animação
+            // acontecem por cima de trabalho que já está rodando, em vez de
+            // antes dele. É tempo que antes era gasto esperando o React
+            // desmontar a película.
             screensaverRef.current = false
-            setScreensaver(false)
-            // Marca a fronteira entre o tempo da pessoa e o tempo do tablet.
             telemetria.registrarToque()
+            // Único gesto garantido da batida: é aqui, e só aqui, que dá para
+            // destravar o áudio do navegador.
+            prepararSom()
             resetInactivityTimer()
+
+            // O círculo abre de onde o dedo encostou.
+            const alvo = e.currentTarget as HTMLElement
+            const r = alvo.getBoundingClientRect()
+            setOrigemDaAbertura({
+              x: r.width ? ((e.clientX - r.left) / r.width) * 100 : 50,
+              y: r.height ? ((e.clientY - r.top) / r.height) * 100 : 50,
+            })
+            setSaindoDaEspera(true)
+            if (timerAberturaRef.current) window.clearTimeout(timerAberturaRef.current)
+            timerAberturaRef.current = window.setTimeout(() => {
+              setScreensaver(false)
+              setSaindoDaEspera(false)
+            }, 420)
           }}
+          saindo={saindoDaEspera}
+          origem={origemDaAbertura}
           onSegredo={() => setModoTeste(true)}
         />
       )}
