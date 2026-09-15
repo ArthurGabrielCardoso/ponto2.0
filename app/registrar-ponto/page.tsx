@@ -53,6 +53,7 @@ import {
   detectFaceFast,
   getBackend,
   getUltimaCapturaMs,
+  definirBackendManual,
 } from "@/lib/face-recognition-client"
 
 // Animação temática: emoji por 3.5s → depois Lottie check original
@@ -646,6 +647,15 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // 2. Carregar modelos face-api.js (cached pelo browser após 1o load)
       try {
         if (mounted) setLoadingStatus("Carregando modelos de reconhecimento...")
+        // `?backend=wasm` ou `?backend=cpu` força o motor de cálculo, para
+        // medir no próprio tablet o que não dá para decidir na teoria: se o
+        // WebGL, passando por driver Mali dentro de um WebView, realmente ganha
+        // do WASM+SIMD aqui. Sem o parâmetro nada muda — o padrão continua
+        // sendo webgl → wasm → cpu.
+        const backendPedido = new URLSearchParams(window.location.search).get("backend")
+        if (backendPedido === "wasm" || backendPedido === "cpu") {
+          definirBackendManual(backendPedido)
+        }
         await initModels()
         // Registra o ambiente do tablet uma vez: qual backend o TFJS conseguiu
         // (webgl, wasm ou cpu) e qual GPU. É a primeira coisa que a telemetria

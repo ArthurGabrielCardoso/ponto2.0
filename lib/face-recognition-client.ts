@@ -41,7 +41,31 @@ let funcionariosCarregados: Funcionario[] = []
 const CAPTURA_RECONHECIMENTO = { largura: 256, altura: 192 }
 const CAPTURA_SORRISO = { largura: 192, altura: 144 }
 // Depois de uma queda de GPU, o resto da sessão roda em WASM.
-let backendForcado: "wasm" | undefined
+let backendForcado: "wasm" | "cpu" | undefined
+
+/**
+ * Escolhe o backend na mão, antes de `initModels()`.
+ *
+ * Existe para um experimento que não dá para decidir na teoria: neste tablet,
+ * o WebGL passa por um driver Mali dentro de um WebView do Android. Em GPU
+ * fraca com driver ruim, WASM+SIMD às vezes GANHA do WebGL — os modelos são
+ * pequenos, e o custo de empurrar textura para a GPU e trazer resultado de
+ * volta pode passar do custo de simplesmente calcular na CPU.
+ *
+ * "Às vezes" é o problema: depende do aparelho, e a única resposta honesta vem
+ * de rodar dos dois jeitos NO tablet e comparar `ms_passe_completo_p50`. Como
+ * o backend ativo já vai gravado em cada linha da telemetria, a comparação sai
+ * sozinha do banco depois.
+ *
+ * Inerte por padrão: sem `?backend=` na URL, nada muda.
+ */
+export function definirBackendManual(b: "wasm" | "cpu" | null) {
+  if (modelsLoaded || modelsLoading) {
+    console.warn("[face-client] backend já inicializado; ?backend= ignorado")
+    return
+  }
+  backendForcado = b ?? undefined
+}
 
 export interface RecognitionResult {
   id: string
