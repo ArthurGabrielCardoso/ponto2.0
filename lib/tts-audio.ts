@@ -260,10 +260,58 @@ function tocarElementoAudio(audio: HTMLAudioElement): Promise<void> {
 }
 
 /**
+ * Baixa e guarda o áudio SEM tocar, para que a fala comece na hora depois.
+ *
+ * Existe porque a batida ficou rápida demais para o caminho antigo: a pessoa
+ * sorria, a tela de sucesso entrava em ~230 ms, e só então saía o pedido ao
+ * /api/tts. O Google leva algumas centenas de milissegundos para devolver o
+ * MP3 — tempo que antes se perdia dentro de uma batida de 25 s e ninguém
+ * notava. Com a batida em 2,1 s, a funcionária já saiu da sala quando a voz
+ * começa.
+ *
+ * Chamado quando a pessoa é identificada, em paralelo com a caminhada dela
+ * até a tela. Falha em silêncio de propósito: isto é adiantamento, e quem
+ * depende dele já tem por onde cair.
+ */
+export async function prepararVozSaudacao(texto?: string): Promise<void> {
+  if (!texto || typeof window === "undefined") return
+  const textoLimpo = limparTextoParaVoz(texto)
+  if (!textoLimpo || cacheAudioBlobs.has(textoLimpo)) return
+
+  try {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: textoLimpo }),
+    })
+    if (!res.ok) return
+    if (!(res.headers.get("content-type") || "").includes("audio/mpeg")) return
+    const blob = await res.blob()
+    cacheAudioBlobs.set(textoLimpo, URL.createObjectURL(blob))
+  } catch {
+    /* adiantamento que falha nao e problema: a fala tem o caminho normal */
+  }
+}
+
+interface OpcoesVoz {
+  /**
+   * Nao esperar a rede. Se o audio ainda nao estiver pronto, fala JA com a voz
+   * do navegador e aquece o cache em segundo plano para a proxima vez.
+   *
+   * Para a tela de ponto batido isto e o certo: uma voz pior na hora serve; a
+   * voz boa falando para uma sala vazia nao serve para nada.
+   */
+  semEsperarRede?: boolean
+}
+
+/**
  * Reproduz a saudação de voz com alta fidelidade via Google Cloud TTS.
  * Higieniza o texto para remover emojis e símbolos.
  */
-export async function reproduzirVozSaudacao(texto?: string): Promise<void> {
+export async function reproduzirVozSaudacao(
+  texto?: string,
+  opcoes: OpcoesVoz = {}
+): Promise<void> {
   if (!texto || typeof window === "undefined") return
 
   const textoLimpo = limparTextoParaVoz(texto)
@@ -295,7 +343,15 @@ export async function reproduzirVozSaudacao(texto?: string): Promise<void> {
     }
   }
 
-  // 2. Chamar o endpoint /api/tts
+  // 2. Sem cache e sem poder esperar: a voz do navegador sai no mesmo quadro,
+  // e o audio bom fica pronto para a proxima batida com esta mesma frase.
+  if (opcoes.semEsperarRede) {
+    falarComNavegador(textoLimpo)
+    void prepararVozSaudacao(textoLimpo)
+    return
+  }
+
+  // 3. Chamar o endpoint /api/tts
   try {
     const res = await fetch("/api/tts", {
       method: "POST",
