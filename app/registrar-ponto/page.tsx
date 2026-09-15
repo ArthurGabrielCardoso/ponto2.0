@@ -373,12 +373,12 @@ function Screensaver({
         </p>
       </div>
 
-      {/* Centro: Olhos do Robô Ampliados + Saudação com Nome e Coração Azul */}
-      <div className="text-center text-white px-4 ss-fade w-full max-w-xl flex flex-col items-center">
-        {/* Rosto do robô com presença ampliada e vidro nobre */}
-        <div className="flex justify-center -mt-2 sm:-mt-4 mb-4">
+      {/* Centro: Olhos do Robô Reduzidos + Saudação em Linha Única */}
+      <div className="text-center text-white px-4 ss-fade w-full max-w-2xl flex flex-col items-center">
+        {/* Rosto do robô reduzido e proporcional */}
+        <div className="flex justify-center -mt-2 sm:-mt-3 mb-4">
           <div
-            className="rounded-[2.5rem] px-8 py-5 sm:px-11 sm:py-6"
+            className="rounded-3xl px-6 py-3.5 sm:px-8 sm:py-4"
             style={{
               background: "rgba(3, 32, 38, 0.45)",
               boxShadow:
@@ -387,7 +387,7 @@ function Screensaver({
             }}
           >
             <OlhosRobo
-              largura={255}
+              largura={195}
               cor="#ffffff"
               olhar={olhar ?? { x: 0, y: 0 }}
               ocioso={false}
@@ -396,22 +396,22 @@ function Screensaver({
           </div>
         </div>
 
-        {/* Saudação com rotação ou nome fixo + coração azul ao reconhecer */}
-        <h2 className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight flex items-center justify-center flex-wrap">
-          <span>{periodo},</span>
+        {/* Saudação com rotação ou nome fixo + coração azul - TUDO NA MESMA LINHA */}
+        <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-light tracking-tight flex items-center justify-center whitespace-nowrap flex-nowrap">
+          <span className="shrink-0">{periodo},</span>
           {nomeExibido ? (
-            <span key={nomeExibido} className="ss-name-smooth font-normal ml-2 sm:ml-3 flex items-center gap-2">
+            <span key={nomeExibido} className="ss-name-smooth font-normal ml-2 sm:ml-3 flex items-center gap-1.5 sm:gap-2 shrink-0">
               <span>{nomeExibido}!</span>
               {ehPessoaReconhecida && (
-                <span className="inline-block animate-bounce text-3xl sm:text-4xl">💙</span>
+                <span className="inline-block animate-bounce text-2xl sm:text-3xl lg:text-4xl">💙</span>
               )}
             </span>
           ) : (
-            <span className="font-normal ml-2">!</span>
+            <span className="font-normal ml-2 shrink-0">!</span>
           )}
         </h2>
 
-        <p className="text-base sm:text-lg text-white/75 font-light mt-4 sm:mt-5 tracking-wide">
+        <p className="text-sm sm:text-base text-white/75 font-light mt-3 sm:mt-4 tracking-wide whitespace-nowrap">
           Toque na tela para registrar seu ponto
         </p>
       </div>
@@ -1745,12 +1745,21 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         }}
       />
 
-      {/* Camada Beauty Glow (Ring Light & Blush Suave) - Realça maçãs do rosto e lábios */}
+      {/* Camada 1: Iluminação Ring Light - Clareia o rosto no centro */}
       <div
-        className="absolute inset-0 pointer-events-none z-10 mix-blend-soft-light opacity-50"
+        className="absolute inset-0 pointer-events-none z-10 mix-blend-screen opacity-35"
         style={{
           background:
-            "radial-gradient(ellipse at 50% 45%, rgba(251, 113, 133, 0.20) 0%, rgba(244, 63, 94, 0.08) 45%, rgba(254, 205, 211, 0.03) 75%, transparent 100%)",
+            "radial-gradient(circle at 50% 45%, rgba(255, 235, 235, 0.7) 0%, rgba(255, 215, 225, 0.35) 45%, transparent 80%)",
+        }}
+      />
+
+      {/* Camada 2: Blush & Glow Rosé - Realça maçãs do rosto e lábios */}
+      <div
+        className="absolute inset-0 pointer-events-none z-10 mix-blend-soft-light opacity-85"
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 48%, rgba(251, 113, 133, 0.45) 0%, rgba(244, 63, 94, 0.25) 40%, rgba(225, 29, 72, 0.10) 70%, transparent 100%)",
         }}
       />
 

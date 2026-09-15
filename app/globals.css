@@ -143,6 +143,6 @@ video.camera-espelho {
   transform: scaleX(-1) translateZ(0) !important;
   -webkit-transform-origin: center center !important;
   transform-origin: center center !important;
-  filter: brightness(1.08) contrast(1.04) saturate(1.12);
-  -webkit-filter: brightness(1.08) contrast(1.04) saturate(1.12);
+  filter: brightness(1.22) contrast(1.08) saturate(1.28);
+  -webkit-filter: brightness(1.22) contrast(1.08) saturate(1.28);
 }
