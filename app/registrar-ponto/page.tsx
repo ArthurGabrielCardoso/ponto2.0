@@ -654,6 +654,17 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // É esta janela que pega a troca de pessoa na frente da câmera.
   // Confirmação visual da moldura esmeralda antes de trocar de tela.
   const PULSO_CONFIRMACAO_MS = 220
+  /**
+   * Quanto a tela de sucesso aceita esperar pela saudação da IA.
+   *
+   * Quando o prefetch já voltou, ele resolve em 0 a 7 ms — então este teto
+   * quase nunca é alcançado. Ele existe para o caso medido na linha 31: IA em
+   * 1.444 ms com a pessoa parada olhando a tela, por causa de uma frase.
+   *
+   * 120 ms é folgado o bastante para não roubar a saudação personalizada de
+   * quem está quase pronta, e curto o bastante para ninguém perceber.
+   */
+  const TETO_SAUDACAO_IA_MS = 120
   // A câmera frontal NÃO está espelhada no vídeo: quem está à esquerda de quem
   // olha o tablet aparece à direita do frame. Por isso o eixo X é invertido
   // para os olhos acompanharem a pessoa, e não o espelho dela. Se no tablet o
@@ -1307,22 +1318,47 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         tipo = emCooldown ? ultimoRegistro?.tipo || "Entrada" : diag.proximoTipoSugerido
       }
 
-      // Saudação da IA: normalmente já foi pedida quando a pessoa foi
-      // identificada, então este await volta na hora. Sem prefetch — troca de
-      // tipo, cooldown, primeira batida da sessão — usamos o catálogo local,
-      // que é síncrono. A IA nunca segura a tela.
+      // Saudação da IA, COM TETO DE ESPERA.
+      //
+      // O comentário aqui dizia que a IA nunca segura a tela, porque o pedido
+      // sai quando a pessoa é identificada e normalmente já voltou. A
+      // telemetria mostrou que "normalmente" não é sempre, e que quando falha
+      // custa caro. A relação apareceu limpa em doze linhas seguidas:
+      //
+      //     confirmar -> tela  =  ms_saudacao_ia + PULSO_CONFIRMACAO_MS
+      //
+      //     id 11: IA 2386 ms -> tela 2613 ms
+      //     id 31: IA 1444 ms -> tela 1675 ms
+      //     id 24: IA  624 ms -> tela  852 ms
+      //     id 29/30/32: IA 0 a 7 ms -> tela 229 a 262 ms
+      //
+      // Quem sorri rápido chega aqui antes da IA responder, e a tela fica
+      // parada esperando uma frase — com o ponto já decidido e o banco já
+      // respondido em 0 ms.
+      //
+      // Agora a espera tem teto. Quando o prefetch já voltou (o caso comum:
+      // 0 a 7 ms em três das cinco batidas de teste) nada muda. Quando
+      // demora, entra a saudação local, que é síncrona e sempre existe. A
+      // frase pode ficar menos personalizada; a tela não fica parada.
       const trabalhaSabado = !!funcObj.horarios?.sabado?.ativo
       const chaveSaudacao = `${person.id}|${tipo}`
       const tSaudacao = performance.now()
+      const saudacaoLocal = () =>
+        gerarSaudacaoLocalDoDia({
+          nome: person.nome,
+          tipoPonto: tipo,
+          dataHora: now,
+          trabalhaSabado,
+        })
       const saudacaoIa: RespostaSaudacao =
         prefetchSaudacaoRef.current?.chave === chaveSaudacao
-          ? await prefetchSaudacaoRef.current.promise
-          : gerarSaudacaoLocalDoDia({
-              nome: person.nome,
-              tipoPonto: tipo,
-              dataHora: now,
-              trabalhaSabado,
-            })
+          ? await Promise.race([
+              prefetchSaudacaoRef.current.promise.catch(() => saudacaoLocal()),
+              new Promise<RespostaSaudacao>((resolve) =>
+                setTimeout(() => resolve(saudacaoLocal()), TETO_SAUDACAO_IA_MS)
+              ),
+            ])
+          : saudacaoLocal()
 
       telemetria.registrarSaudacaoIa(performance.now() - tSaudacao)
 
