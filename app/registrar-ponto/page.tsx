@@ -562,6 +562,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // Configuração interativa dos filtros de beleza (ajustável no modo teste e persistido no tablet)
   const [filtroCamera, setFiltroCamera] = useState<ConfiguracaoFiltroCamera>(FILTRO_CAMERA_PADRAO)
   const [filtroSalvo, setFiltroSalvo] = useState(false)
+  const [abaModoTeste, setAbaModoTeste] = useState<"camera" | "batidas">("camera")
 
   // Carregar filtros salvos no tablet via localStorage
   useEffect(() => {
@@ -2049,13 +2050,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       )}
 
       {modoTeste && barraAberta && (
-        <div className="fixed top-3 right-3 z-[60] w-[260px] max-h-[90vh] overflow-y-auto rounded-xl border border-fuchsia-400/50 bg-slate-950/90 p-3 text-white shadow-2xl backdrop-blur-xl no-scrollbar">
-          <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="fixed top-3 right-3 z-[60] w-[295px] max-h-[92vh] overflow-y-auto rounded-xl border border-fuchsia-400/50 bg-slate-950/95 p-3.5 text-white shadow-2xl backdrop-blur-xl">
+          <div className="mb-2.5 flex items-center justify-between gap-2">
             <span className="rounded-md bg-fuchsia-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
               Modo teste
             </span>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-white/60">{batidasTeste}</span>
+              <span className="text-[11px] text-white/60">{batidasTeste} batidas</span>
               <button
                 type="button"
                 onClick={() => setBarraAberta(false)}
@@ -2067,202 +2068,314 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             </div>
           </div>
 
-          <p className="mb-2 text-[11px] leading-snug text-white/70">
-            Sem cooldown, sem limite de 4 por dia e sem diálogo de regularização.
-          </p>
-
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-white/50">
-            Tipo da batida
-          </label>
-          <select
-            value={tipoTeste}
-            onChange={(e) => setTipoTeste(e.target.value)}
-            className="mb-2.5 w-full rounded-md border border-white/20 bg-slate-900 px-2 py-1.5 text-xs text-white outline-none focus:border-fuchsia-400"
-          >
-            <option value="auto">Ciclo automático</option>
-            {CICLO_TIPOS_TESTE.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-
-          <label className="mb-1.5 flex cursor-pointer items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={forcarHumor}
-              onChange={(e) => setForcarHumor(e.target.checked)}
-              className="h-3.5 w-3.5 accent-fuchsia-500"
-            />
-            <span>Sempre mostrar tela de humor</span>
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={gravarNoBanco}
-              onChange={(e) => setGravarNoBanco(e.target.checked)}
-              className="h-3.5 w-3.5 accent-red-500"
-            />
-            <span className={gravarNoBanco ? "font-semibold text-red-300" : ""}>
-              Gravar no banco de verdade
-            </span>
-          </label>
-
-          <p
-            className={`mt-2 rounded-md px-2 py-1.5 text-[11px] leading-snug ${
-              gravarNoBanco
-                ? "bg-red-500/20 text-red-200"
-                : "bg-emerald-500/15 text-emerald-200"
-            }`}
-          >
-            {gravarNoBanco
-              ? "Atenção: as batidas estão indo para o registro real."
-              : "Nada é gravado. O ponto real não é afetado."}
-          </p>
-
-          {/* Ajuste Fino dos Filtros de Câmera & Beleza */}
-          <div className="mt-2.5 pt-2 border-t border-white/15 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-pink-300">
-                Filtros de Beleza
-              </span>
-              {filtroSalvo && (
-                <span className="text-[10px] font-bold text-emerald-400 animate-pulse">
-                  Salvo! ✓
-                </span>
-              )}
-            </div>
-
-            <div>
-              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
-                <span>Brilho</span>
-                <span className="font-mono font-bold text-white">{filtroCamera.brilho.toFixed(2)}x</span>
-              </div>
-              <input
-                type="range"
-                min="0.90"
-                max="1.50"
-                step="0.02"
-                value={filtroCamera.brilho}
-                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, brilho: parseFloat(e.target.value) }))}
-                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
-                <span>Corado / Saturação</span>
-                <span className="font-mono font-bold text-white">{filtroCamera.saturacao.toFixed(2)}x</span>
-              </div>
-              <input
-                type="range"
-                min="0.90"
-                max="1.60"
-                step="0.02"
-                value={filtroCamera.saturacao}
-                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, saturacao: parseFloat(e.target.value) }))}
-                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
-                <span>Contraste</span>
-                <span className="font-mono font-bold text-white">{filtroCamera.contraste.toFixed(2)}x</span>
-              </div>
-              <input
-                type="range"
-                min="0.90"
-                max="1.25"
-                step="0.01"
-                value={filtroCamera.contraste}
-                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, contraste: parseFloat(e.target.value) }))}
-                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
-                <span>Blush Rosé (Bochechas/Boca)</span>
-                <span className="font-mono font-bold text-white">{Math.round(filtroCamera.opacidadeBlush * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={filtroCamera.opacidadeBlush}
-                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, opacidadeBlush: parseFloat(e.target.value) }))}
-                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
-                <span>Luz Ring Light Central</span>
-                <span className="font-mono font-bold text-white">{Math.round(filtroCamera.opacidadeRingLight * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="0.8"
-                step="0.05"
-                value={filtroCamera.opacidadeRingLight}
-                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, opacidadeRingLight: parseFloat(e.target.value) }))}
-                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
-                <span>Centralizar Câmera (Tablet)</span>
-                <span className="font-mono font-bold text-white">{(filtroCamera.offsetHorizontal ?? 0) > 0 ? `+${filtroCamera.offsetHorizontal}` : filtroCamera.offsetHorizontal ?? 0}%</span>
-              </div>
-              <input
-                type="range"
-                min="-25"
-                max="25"
-                step="1"
-                value={filtroCamera.offsetHorizontal ?? 0}
-                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, offsetHorizontal: parseFloat(e.target.value) }))}
-                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
-                <span>Zoom / Enquadramento</span>
-                <span className="font-mono font-bold text-white">{(filtroCamera.zoom ?? 1.06).toFixed(2)}x</span>
-              </div>
-              <input
-                type="range"
-                min="1.00"
-                max="1.35"
-                step="0.02"
-                value={filtroCamera.zoom ?? 1.06}
-                onChange={(e) => setFiltroCamera((prev) => ({ ...prev, zoom: parseFloat(e.target.value) }))}
-                className="w-full accent-pink-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-              />
-            </div>
-
-            <div className="flex gap-1.5 pt-1">
-              <button
-                type="button"
-                onClick={handleSalvarFiltroCamera}
-                className="flex-1 rounded-md bg-pink-600 hover:bg-pink-500 px-2 py-1 text-[11px] font-bold text-white shadow-sm transition-colors"
-              >
-                Salvar como padrão
-              </button>
-              <button
-                type="button"
-                onClick={handleRestaurarFiltroPadrao}
-                className="rounded-md border border-white/20 px-2 py-1 text-[10px] text-white/70 hover:bg-white/10"
-              >
-                Restaurar
-              </button>
-            </div>
+          {/* Abas Alternáveis: Câmera & Filtros / Batidas */}
+          <div className="mb-3 flex rounded-lg bg-slate-900/90 p-0.5 border border-white/10">
+            <button
+              type="button"
+              onClick={() => setAbaModoTeste("camera")}
+              className={`flex-1 py-1.5 text-center text-[11px] font-medium rounded-md transition-colors ${
+                abaModoTeste === "camera"
+                  ? "bg-pink-600 text-white font-bold shadow-sm"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              📷 Câmera & Filtros
+            </button>
+            <button
+              type="button"
+              onClick={() => setAbaModoTeste("batidas")}
+              className={`flex-1 py-1.5 text-center text-[11px] font-medium rounded-md transition-colors ${
+                abaModoTeste === "batidas"
+                  ? "bg-fuchsia-600 text-white font-bold shadow-sm"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              🕒 Batidas
+            </button>
           </div>
+
+          {abaModoTeste === "camera" && (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-pink-300">
+                  Enquadramento no Tablet
+                </span>
+                {filtroSalvo && (
+                  <span className="text-[10px] font-bold text-emerald-400 animate-pulse">
+                    Salvo! ✓
+                  </span>
+                )}
+              </div>
+
+              {/* Centralizar Câmera Lateral com Slider + Botões de Toque */}
+              <div className="rounded-lg bg-slate-900/80 p-2.5 border border-white/10 space-y-1.5">
+                <div className="flex justify-between text-[11px] text-white/90">
+                  <span className="font-semibold text-pink-200">Centralizar Câmera</span>
+                  <span className="font-mono font-bold text-white">
+                    {(filtroCamera.offsetHorizontal ?? 0) > 0
+                      ? `+${filtroCamera.offsetHorizontal}%`
+                      : `${filtroCamera.offsetHorizontal ?? 0}%`}
+                  </span>
+                </div>
+                <p className="text-[9px] text-white/50 leading-tight">
+                  Compensa a lente na lateral esquerda do tablet
+                </p>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFiltroCamera((prev) => ({
+                        ...prev,
+                        offsetHorizontal: Math.max(-25, (prev.offsetHorizontal ?? 0) - 2),
+                      }))
+                    }
+                    className="h-7 w-7 rounded bg-slate-800 border border-white/15 text-xs font-bold text-white hover:bg-slate-700 active:scale-95 flex items-center justify-center shrink-0"
+                  >
+                    ◀
+                  </button>
+                  <input
+                    type="range"
+                    min="-25"
+                    max="25"
+                    step="1"
+                    value={filtroCamera.offsetHorizontal ?? 0}
+                    onChange={(e) =>
+                      setFiltroCamera((prev) => ({
+                        ...prev,
+                        offsetHorizontal: parseFloat(e.target.value),
+                      }))
+                    }
+                    className="w-full accent-pink-500 h-2 bg-slate-700 rounded-lg cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFiltroCamera((prev) => ({
+                        ...prev,
+                        offsetHorizontal: Math.min(25, (prev.offsetHorizontal ?? 0) + 2),
+                      }))
+                    }
+                    className="h-7 w-7 rounded bg-slate-800 border border-white/15 text-xs font-bold text-white hover:bg-slate-700 active:scale-95 flex items-center justify-center shrink-0"
+                  >
+                    ▶
+                  </button>
+                </div>
+              </div>
+
+              {/* Zoom com Slider + Botões */}
+              <div className="rounded-lg bg-slate-900/80 p-2.5 border border-white/10 space-y-1.5">
+                <div className="flex justify-between text-[11px] text-white/90">
+                  <span className="font-semibold text-pink-200">Zoom / Enquadramento</span>
+                  <span className="font-mono font-bold text-white">
+                    {(filtroCamera.zoom ?? 1.06).toFixed(2)}x
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFiltroCamera((prev) => ({
+                        ...prev,
+                        zoom: Math.max(1.0, parseFloat(((prev.zoom ?? 1.06) - 0.02).toFixed(2))),
+                      }))
+                    }
+                    className="h-7 w-7 rounded bg-slate-800 border border-white/15 text-xs font-bold text-white hover:bg-slate-700 active:scale-95 flex items-center justify-center shrink-0"
+                  >
+                    –
+                  </button>
+                  <input
+                    type="range"
+                    min="1.00"
+                    max="1.35"
+                    step="0.02"
+                    value={filtroCamera.zoom ?? 1.06}
+                    onChange={(e) =>
+                      setFiltroCamera((prev) => ({
+                        ...prev,
+                        zoom: parseFloat(e.target.value),
+                      }))
+                    }
+                    className="w-full accent-pink-500 h-2 bg-slate-700 rounded-lg cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFiltroCamera((prev) => ({
+                        ...prev,
+                        zoom: Math.min(1.35, parseFloat(((prev.zoom ?? 1.06) + 0.02).toFixed(2))),
+                      }))
+                    }
+                    className="h-7 w-7 rounded bg-slate-800 border border-white/15 text-xs font-bold text-white hover:bg-slate-700 active:scale-95 flex items-center justify-center shrink-0"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Filtros de Imagem */}
+              <div className="space-y-2 pt-1 border-t border-white/10">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-pink-300">
+                  Filtros de Beleza
+                </span>
+
+                <div>
+                  <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                    <span>Brilho</span>
+                    <span className="font-mono font-bold text-white">{filtroCamera.brilho.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.90"
+                    max="1.50"
+                    step="0.02"
+                    value={filtroCamera.brilho}
+                    onChange={(e) => setFiltroCamera((prev) => ({ ...prev, brilho: parseFloat(e.target.value) }))}
+                    className="w-full accent-pink-500 h-2 bg-slate-700 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                    <span>Corado / Saturação</span>
+                    <span className="font-mono font-bold text-white">{filtroCamera.saturacao.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.90"
+                    max="1.60"
+                    step="0.02"
+                    value={filtroCamera.saturacao}
+                    onChange={(e) => setFiltroCamera((prev) => ({ ...prev, saturacao: parseFloat(e.target.value) }))}
+                    className="w-full accent-pink-500 h-2 bg-slate-700 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                    <span>Contraste</span>
+                    <span className="font-mono font-bold text-white">{filtroCamera.contraste.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.90"
+                    max="1.25"
+                    step="0.01"
+                    value={filtroCamera.contraste}
+                    onChange={(e) => setFiltroCamera((prev) => ({ ...prev, contraste: parseFloat(e.target.value) }))}
+                    className="w-full accent-pink-500 h-2 bg-slate-700 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                    <span>Blush Rosé (Bochechas/Boca)</span>
+                    <span className="font-mono font-bold text-white">{Math.round(filtroCamera.opacidadeBlush * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={filtroCamera.opacidadeBlush}
+                    onChange={(e) => setFiltroCamera((prev) => ({ ...prev, opacidadeBlush: parseFloat(e.target.value) }))}
+                    className="w-full accent-pink-500 h-2 bg-slate-700 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+                    <span>Luz Ring Light Central</span>
+                    <span className="font-mono font-bold text-white">{Math.round(filtroCamera.opacidadeRingLight * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="0.8"
+                    step="0.05"
+                    value={filtroCamera.opacidadeRingLight}
+                    onChange={(e) => setFiltroCamera((prev) => ({ ...prev, opacidadeRingLight: parseFloat(e.target.value) }))}
+                    className="w-full accent-pink-500 h-2 bg-slate-700 rounded-lg cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSalvarFiltroCamera}
+                  className="flex-1 rounded-md bg-pink-600 hover:bg-pink-500 py-2 text-xs font-bold text-white shadow transition-colors active:scale-98"
+                >
+                  Salvar como padrão
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRestaurarFiltroPadrao}
+                  className="rounded-md border border-white/20 px-3 py-2 text-xs text-white/70 hover:bg-white/10 active:scale-98"
+                >
+                  Restaurar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {abaModoTeste === "batidas" && (
+            <div className="space-y-2.5">
+              <p className="text-[11px] leading-snug text-white/70">
+                Sem cooldown, sem limite de 4 por dia e sem diálogo de regularização.
+              </p>
+
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                Tipo da batida
+              </label>
+              <select
+                value={tipoTeste}
+                onChange={(e) => setTipoTeste(e.target.value)}
+                className="w-full rounded-md border border-white/20 bg-slate-900 px-2 py-1.5 text-xs text-white outline-none focus:border-fuchsia-400"
+              >
+                <option value="auto">Ciclo automático</option>
+                {CICLO_TIPOS_TESTE.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+
+              <label className="flex cursor-pointer items-center gap-2 text-xs pt-1">
+                <input
+                  type="checkbox"
+                  checked={forcarHumor}
+                  onChange={(e) => setForcarHumor(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-fuchsia-500"
+                />
+                <span>Sempre mostrar tela de humor</span>
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={gravarNoBanco}
+                  onChange={(e) => setGravarNoBanco(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-red-500"
+                />
+                <span className={gravarNoBanco ? "font-semibold text-red-300" : ""}>
+                  Gravar no banco de verdade
+                </span>
+              </label>
+
+              <p
+                className={`rounded-md px-2 py-1.5 text-[11px] leading-snug ${
+                  gravarNoBanco
+                    ? "bg-red-500/20 text-red-200"
+                    : "bg-emerald-500/15 text-emerald-200"
+                }`}
+              >
+                {gravarNoBanco
+                  ? "Atenção: as batidas estão indo para o registro real."
+                  : "Nada é gravado. O ponto real não é afetado."}
+              </p>
+            </div>
+          )}
 
           <button
             type="button"
@@ -2274,7 +2387,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               cicloTesteRef.current = 0
               setBarraAberta(true)
             }}
-            className="mt-2 w-full rounded-md border border-white/20 px-2 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10"
+            className="mt-3 w-full rounded-md border border-white/20 px-2 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10"
           >
             Sair do modo teste
           </button>
