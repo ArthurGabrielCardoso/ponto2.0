@@ -52,6 +52,7 @@ import {
   detectSmileOnly,
   detectFaceFast,
   getBackend,
+  getUltimaCapturaMs,
 } from "@/lib/face-recognition-client"
 
 // Animação temática: emoji por 3.5s → depois Lottie check original
@@ -892,6 +893,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             const t0 = performance.now()
             const smile = await detectSmileOnly(video, SMILE_THRESHOLD)
             telemetria.registrarPasseBarato(performance.now() - t0)
+            telemetria.registrarCaptura(getUltimaCapturaMs())
 
             if (!smile) {
               // O passe barato detecta em resolução menor que o completo, então ele
@@ -923,6 +925,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           const tCompleto = performance.now()
           const result = await recognizeFace(video, SMILE_THRESHOLD)
           telemetria.registrarPasseCompleto(performance.now() - tCompleto)
+          telemetria.registrarCaptura(getUltimaCapturaMs())
           ultimoPassePesadoRef.current = Date.now()
           ultimaVerificacaoIdentidadeRef.current = Date.now()
           if (result) {

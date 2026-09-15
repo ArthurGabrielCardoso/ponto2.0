@@ -35,6 +35,8 @@ interface Medida {
 
   passesBaratos: number[]
   passesCompletos: number[]
+  /** Só o tempo de tirar o frame da câmera, sem a rede neural. */
+  capturas: number[]
   msConsultaRegistros?: number
   msSaudacaoIa?: number
 
@@ -105,6 +107,7 @@ export function iniciarTentativa() {
       ultimoPontoEm === null ? null : Math.round(performance.now() - ultimoPontoEm),
     passesBaratos: [],
     passesCompletos: [],
+    capturas: [],
     falhasDesconhecido: 0,
     perdasIdentidade: 0,
   }
@@ -113,6 +116,17 @@ export function iniciarTentativa() {
 /** Quanto tempo a rede pesada ficou sem rodar antes desta tentativa. */
 export function registrarOciosidade(ms: number | null) {
   if (atual) atual.msOcioso = ms === null ? null : Math.round(ms)
+}
+
+/**
+ * Quanto custou só arrancar o frame da câmera, antes de qualquer rede neural.
+ *
+ * É a medida que separa "o modelo é pesado para este tablet" de "o tempo vai
+ * embora no caminho até o modelo". Sem ela, as duas hipóteses produzem
+ * exatamente o mesmo número e não dá para escolher entre elas.
+ */
+export function registrarCaptura(ms: number) {
+  if (atual && atual.capturas.length < 400) atual.capturas.push(ms)
 }
 
 export function registrarPasseBarato(ms: number) {
@@ -203,6 +217,7 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
     ms_ate_sorrir: ms(m.identificadoEm, m.sorriuEm),
     ms_ate_tela_sucesso: ms(m.sorriuEm, m.telaSucessoEm),
     ms_total: Math.round(fim - m.inicio),
+    ms_captura_p50: p50(m.capturas),
     ms_passe_barato_p50: p50(m.passesBaratos),
     ms_passe_completo_p50: p50(m.passesCompletos),
     // O primeiro passe separado da mediana é o que distingue "a GPU estava
