@@ -321,14 +321,14 @@ function Screensaver({
       .catch(() => {})
   }, [])
 
-  // Rotação de nomes a cada 5 segundos (mantém o prefixo "Excelente tarde," estático e anima apenas o nome)
+  // Rotação de nomes a cada 5 segundos (pausa quando há alguém reconhecido)
   useEffect(() => {
-    if (nomes.length <= 1) return
+    if (nomes.length <= 1 || (pessoaNaEspera && pessoaNaEspera.id !== "unknown")) return
     const id = setInterval(() => {
       setNomeIndex((prev) => (prev + 1) % nomes.length)
     }, 5000)
     return () => clearInterval(id)
-  }, [nomes])
+  }, [nomes, pessoaNaEspera])
 
   // Sincronizar funcionários atualmente em almoço
   useEffect(() => {
@@ -343,7 +343,12 @@ function Screensaver({
     }
   }, [])
 
-  const nomeAtual = nomes.length > 0 ? nomes[nomeIndex] : ""
+  const ehPessoaReconhecida = !!(pessoaNaEspera && pessoaNaEspera.id !== "unknown")
+  const nomeExibido = ehPessoaReconhecida
+    ? pessoaNaEspera.primeiroNome
+    : nomes.length > 0
+    ? nomes[nomeIndex]
+    : ""
 
   return (
     <div
@@ -368,18 +373,10 @@ function Screensaver({
         </p>
       </div>
 
-      {/* Centro exato da tela: Rosto do robô 100% centralizado */}
-      <div className="relative flex flex-col items-center justify-center text-white px-4 ss-fade">
-        {/* Balão de Fala Inteligente: ENCIMA do robô, partindo do centro do rosto em direção ao lado direito */}
-        <div className="absolute bottom-[calc(100%+14px)] left-1/2 -translate-x-1/2 sm:translate-x-0 sm:left-1/2 w-[calc(100vw-2rem)] max-w-[340px] sm:max-w-[380px] lg:max-w-[420px] z-20 pointer-events-auto">
-          <BalaoFalaRobo
-            pessoaNaEspera={pessoaNaEspera ?? null}
-            falaIa={falaIa}
-          />
-        </div>
-
-        {/* Rosto do robô com presença ampliada e vidro nobre no centro da tela */}
-        <div className="flex justify-center -mt-2 sm:-mt-4">
+      {/* Centro: Olhos do Robô Ampliados + Saudação com Nome e Coração Azul */}
+      <div className="text-center text-white px-4 ss-fade w-full max-w-xl flex flex-col items-center">
+        {/* Rosto do robô com presença ampliada e vidro nobre */}
+        <div className="flex justify-center -mt-2 sm:-mt-4 mb-4">
           <div
             className="rounded-[2.5rem] px-8 py-5 sm:px-11 sm:py-6"
             style={{
@@ -398,6 +395,25 @@ function Screensaver({
             />
           </div>
         </div>
+
+        {/* Saudação com rotação ou nome fixo + coração azul ao reconhecer */}
+        <h2 className="text-4xl sm:text-5xl md:text-6xl font-light tracking-tight flex items-center justify-center flex-wrap">
+          <span>{periodo},</span>
+          {nomeExibido ? (
+            <span key={nomeExibido} className="ss-name-smooth font-normal ml-2 sm:ml-3 flex items-center gap-2">
+              <span>{nomeExibido}!</span>
+              {ehPessoaReconhecida && (
+                <span className="inline-block animate-bounce text-3xl sm:text-4xl">💙</span>
+              )}
+            </span>
+          ) : (
+            <span className="font-normal ml-2">!</span>
+          )}
+        </h2>
+
+        <p className="text-base sm:text-lg text-white/75 font-light mt-4 sm:mt-5 tracking-wide">
+          Toque na tela para registrar seu ponto
+        </p>
       </div>
 
       {/* Canto inferior direito: área invisível do gesto do modo teste.
@@ -1114,10 +1130,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                     ultimoTimestampFalaEsperaRef.current = agora
                     const pNome = func.nome.split(" ")[0]
                     const horaAtual = new Date().getHours()
-                    let saudacao = "bom dia"
-                    if (horaAtual >= 12 && horaAtual < 18) saudacao = "boa tarde"
-                    else if (horaAtual >= 18) saudacao = "boa noite"
-                    reproduzirVozSaudacao(`Olá, ${pNome}! ${saudacao.charAt(0).toUpperCase() + saudacao.slice(1)}!`, { semEsperarRede: true }).catch(() => {})
+                    let saudacao = "Excelente dia"
+                    if (horaAtual >= 12 && horaAtual < 18) saudacao = "Excelente tarde"
+                    else if (horaAtual >= 18) saudacao = "Excelente noite"
+                    reproduzirVozSaudacao(`${saudacao}, ${pNome}!`, { semEsperarRede: true }).catch(() => {})
                   }
                 }
               } else if (res && (res.isUnknown || res.id === "unknown")) {
@@ -1726,6 +1742,15 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         style={{
           transform: "scaleX(-1) translateZ(0)",
           WebkitTransform: "scaleX(-1) translateZ(0)",
+        }}
+      />
+
+      {/* Camada Beauty Glow (Ring Light & Blush Suave) - Realça maçãs do rosto e lábios */}
+      <div
+        className="absolute inset-0 pointer-events-none z-10 mix-blend-soft-light opacity-50"
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 45%, rgba(251, 113, 133, 0.20) 0%, rgba(244, 63, 94, 0.08) 45%, rgba(254, 205, 211, 0.03) 75%, transparent 100%)",
         }}
       />
 

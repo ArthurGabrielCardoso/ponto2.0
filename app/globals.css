@@ -133,7 +133,7 @@ body,
   height: 100%;
 }
 
-/* Espelhamento horizontal da câmera (efeito espelho natural) */
+/* Espelhamento horizontal da câmera (efeito espelho natural) + Filtro Beauty Glow */
 .camera-espelho,
 video.camera-espelho {
   -webkit-transform: scaleX(-1) translateZ(0) !important;
@@ -143,4 +143,6 @@ video.camera-espelho {
   transform: scaleX(-1) translateZ(0) !important;
   -webkit-transform-origin: center center !important;
   transform-origin: center center !important;
+  filter: brightness(1.08) contrast(1.04) saturate(1.12);
+  -webkit-filter: brightness(1.08) contrast(1.04) saturate(1.12);
 }
