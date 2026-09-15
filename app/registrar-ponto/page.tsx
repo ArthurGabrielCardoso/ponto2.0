@@ -34,7 +34,7 @@ import {
 } from "@/lib/ia-saudacao"
 import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
 import { prepararSom, tocarConfirmacao, tocarSucesso } from "@/lib/som-ponto"
-import { useCssRevelacao, DURACAO_REVELACAO_MS } from "@/components/revelacao-do-centro"
+import { useCssRevelacao, DURACAO_ABERTURA_MS } from "@/components/revelacao-do-centro"
 import { reproduzirVozSaudacao, prepararVozSaudacao } from "@/lib/tts-audio"
 import * as telemetria from "@/lib/telemetria-reconhecimento"
 import {
@@ -1674,7 +1674,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             if (timerAberturaRef.current) window.clearTimeout(timerAberturaRef.current)
             timerAberturaRef.current = window.setTimeout(
               () => setPeliculaSaindo(0),
-              DURACAO_REVELACAO_MS + 120
+              DURACAO_ABERTURA_MS + 120
             )
           }}
           onSegredo={() => setModoTeste(true)}
