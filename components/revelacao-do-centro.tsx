@@ -30,12 +30,67 @@ import { useEffect } from "react"
 /**
  * RAIO QUE COBRE A TELA INTEIRA
  *
- * Em telas widescreen (16:9, tablets 1280x800 ou 1920x1080), 75% não alcança
- * os 4 cantos da tela retangular (a hipotenusa/distância do centro ao canto é maior).
- * 150% garante que o círculo se expanda completamente além de qualquer canto,
- * revelando 100% da tela sem vazar a camada anterior.
+ * A CONTA, porque ela é contra-intuitiva e já foi refeita errada duas vezes
+ * neste arquivo:
+ *
+ * Num `radial-gradient(circle at 50% 50%)` um raio em porcentagem NÃO é medido
+ * contra a largura nem contra a diagonal. O CSS resolve porcentagem de círculo
+ * contra sqrt((l² + a²) / 2). O canto mais distante do centro, por sua vez,
+ * está a sqrt(l² + a²) / 2.
+ *
+ *     razão = [sqrt(l²+a²)/2] ÷ [sqrt((l²+a²)/2)] = sqrt(2)/2 = 0,7071
+ *
+ * Os termos l e a se cancelam. **70,71% alcança o canto em QUALQUER
+ * proporção** — 1280x800, 1920x1080, retrato, quadrado. Não existe tela
+ * widescreen em que 75% não chegue ao canto; a razão é constante.
+ *
+ * POR QUE 150% ESTRAGAVA A ANIMAÇÃO
+ *
+ * Se 70,71% já cobre tudo, um raio final de 150% quer dizer que a tela está
+ * inteiramente revelada aos 47% do progresso. Os outros 53% da animação
+ * crescem fora da tela, sem mostrar nada. Numa animação de 900 ms sobravam
+ * ~430 ms de movimento visível — e era exatamente essa a queixa de que a
+ * transição estava rápida demais. Aumentar a duração teria tratado o sintoma:
+ * metade do tempo novo também iria para fora da tela.
+ *
+ * POR QUE 90% E NÃO 75%
+ *
+ * 90% dá 27% de margem sobre o necessário, contra 6% dos 75%. A margem existe
+ * porque a versão de 150% foi escrita para resolver um vazamento observado na
+ * tela, e eu não consigo reproduzir esse vazamento daqui — pode ter sido
+ * anti-aliasing no pixel exato da borda, pode ter sido viewport visual
+ * diferente do de layout no WebView. Com 90% o círculo ultrapassa o canto com
+ * folga larga e ainda assim ~79% da animação é movimento que se vê, contra
+ * 47% antes.
  */
-const RAIO_QUE_COBRE_A_TELA = "150%"
+const RAIO_QUE_COBRE_A_TELA = "90%"
+
+/**
+ * Duração da animação, com atalho para calibrar no próprio tablet.
+ *
+ * Duração de animação não se decide por raciocínio — se decide olhando. E quem
+ * olha é o Arthur, no tablet; eu só consigo escrever números. Cada tentativa
+ * custava um commit, um build, uma promoção e um teste, uns dez minutos para
+ * descobrir que ainda estava rápido.
+ *
+ * Com `?abertura=1400&revelacao=1800` na URL ele percorre a faixa inteira em um
+ * minuto e me diz o número certo, que aí vira o padrão daqui.
+ *
+ * Inerte sem o parâmetro. Os limites impedem que um dedo errado na barra de
+ * endereço deixe a tela presa numa animação de meia hora.
+ */
+function lerDuracao(chave: string, padrao: number): number {
+  try {
+    if (typeof window === "undefined") return padrao
+    const v = new URLSearchParams(window.location.search).get(chave)
+    if (!v) return padrao
+    const n = Number(v)
+    if (!Number.isFinite(n)) return padrao
+    return Math.max(150, Math.min(4000, Math.round(n)))
+  } catch {
+    return padrao
+  }
+}
 
 /**
  * A curva também mudou. `ease-out` é rápido no começo e lento no fim — para uma
@@ -48,10 +103,21 @@ const RAIO_QUE_COBRE_A_TELA = "150%"
  */
 const CURVA = "cubic-bezier(0.65, 0, 0.35, 1)"
 
-/** A película é mais curta: ela corre por cima do primeiro passe do reconhecimento. */
-export const DURACAO_ABERTURA_MS = 700
+/**
+ * Durações.
+ *
+ * Subiram junto com a correção do raio, e as duas mudanças se somam: com o
+ * raio em 90% em vez de 150%, ~79% da duração vira movimento visível em vez de
+ * 47%. Na prática a película saiu de ~330 ms de movimento que se vê para
+ * ~830 ms, e a tela de sucesso de ~430 ms para ~1070 ms.
+ *
+ * Nada disto atrasa a batida: as duas camadas são `pointer-events: none` e
+ * todo o estado do app muda de forma síncrona no toque. A animação corre por
+ * cima de um app que já está funcionando por baixo.
+ */
+export const DURACAO_ABERTURA_MS = lerDuracao("abertura", 1050)
 /** A tela de sucesso pode respirar: nesse ponto não há mais nada disputando GPU. */
-export const DURACAO_REVELACAO_MS = 900
+export const DURACAO_REVELACAO_MS = lerDuracao("revelacao", 1350)
 
 /**
  * A CURVA COM QUIQUE, E POR QUE ELA MUDA TUDO
@@ -77,7 +143,6 @@ const CURVA_QUIQUE = "cubic-bezier(0.22, 1.2, 0.36, 1)"
  * percebe o atraso — percebe profundidade.
  */
 const ATRASO_CONTEUDO_MS = 120
-const ATRASO_CONTEUDO_PELICULA_MS = 80
 
 const CSS = `
 @property --raio-revelacao {
@@ -121,25 +186,17 @@ const CSS = `
   will-change: transform, opacity;
 }
 
-/* A PELÍCULA SE AFASTA ENQUANTO ABRE
-   
-   O buraco crescendo, sozinho, é um recorte: a película fica parada e some
-   por dentro. Somando um afastamento — ela cresce um pouco e desaparece — o
-   painel deixa de ser um buraco e vira uma folha saindo da frente da câmera.
-   Duas coisas na mesma camada, em curvas e tempos diferentes: é o desencontro
-   de novo, pelo preço de uma animação a mais no compositor.
-   
-   A opacidade indo a zero tem um segundo efeito, mais discreto e talvez mais
-   importante: ela dissolve a borda dura da máscara nos últimos quadros. Borda
-   dura ampliada é justamente o que o olho lê como "serrilhado". */
-@keyframes afastarPelicula {
-  from { transform: scale(1); opacity: 1; }
-  60%  { opacity: 0.82; }
-  to   { transform: scale(1.14); opacity: 0; }
-}
-.afastar-pelicula {
-  animation: afastarPelicula ${DURACAO_ABERTURA_MS}ms ${CURVA_QUIQUE} ${ATRASO_CONTEUDO_PELICULA_MS}ms both;
-}
+/* AQUI EXISTIU UM "afastar-pelicula".
+
+   Ele somava ao buraco um afastamento: a película crescia 14% e sumia, para
+   parecer uma folha saindo da frente da câmera em vez de um recorte. A ideia
+   se sustentava no papel, e o Arthur foi direto ao ponto ao ver na tela: a
+   película deixava de parecer película. O que ele queria era a mesma abertura
+   de antes, mais bem feita — não um gesto diferente.
+
+   Fica registrado porque a lição vale para o resto do arquivo. Dá para
+   raciocinar no escuro sobre suavidade e sobre custo de GPU. Sobre o que uma
+   animação COMUNICA, não dá: isso só se decide olhando. */
 
 /* Sem @property a interpolação não acontece e o raio ficaria travado em 0%.
    Para 'revelar' isso esconderia o conteúdo, então a consulta abaixo desliga
@@ -154,7 +211,7 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) {
   .revelar-do-centro { animation: none; -webkit-mask-image: none; mask-image: none; }
   .abrir-do-centro { animation: none; opacity: 0; }
-  .assentar-conteudo, .afastar-pelicula { animation: none; }
+  .assentar-conteudo { animation: none; }
 }
 `
 

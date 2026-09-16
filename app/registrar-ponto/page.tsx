@@ -2005,7 +2005,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       {peliculaSaindo > 0 && (
         <div
           key={peliculaSaindo}
-          className="fixed inset-0 z-40 pointer-events-none abrir-do-centro afastar-pelicula"
+          className="fixed inset-0 z-40 pointer-events-none abrir-do-centro"
           style={{
             background:
               "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
