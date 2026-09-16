@@ -57,6 +57,7 @@ import {
   getBackend,
   getUltimaCapturaMs,
   definirBackendManual,
+  aquecerModelos,
 } from "@/lib/face-recognition-client"
 
 // Animação temática: emoji por 3.5s → depois Lottie check original
@@ -829,30 +830,23 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    * baixo. Medido no tablet: 24.366 ms nessa primeira, contra ~185 ms já
    * quente. É a conta inteira da primeira batida do dia.
    *
-   * Um quadro de verdade e não um canvas em branco de propósito: num canvas
-   * vazio o detector não acha rosto nenhum e devolve cedo, sem nunca tocar nas
-   * redes de landmark, reconhecimento e expressão — que são justamente as
-   * caras. O aquecimento sairia barato e inútil.
+   * A primeira versão disto esperava um quadro de verdade da câmera, no
+   * raciocínio de que um canvas vazio não acharia rosto e o aquecimento
+   * pararia no detector. O raciocínio estava certo; a conclusão, errada.
+   * Às 5h da manhã — quando o MacroDroid reabre o app — a sala está vazia,
+   * então o quadro de verdade também não tem rosto nenhum e cai no mesmo
+   * buraco. Esperar a câmera era complexidade a troco de nada.
    *
-   * Nada aqui atrasa nada: roda fora do caminho crítico, e se a câmera não
-   * ficar pronta a tempo simplesmente desiste e deixa o aquecimento periódico
-   * do loop assumir.
+   * A saída não é arranjar um rosto: é não depender de detecção. `aquecerModelos`
+   * roda as três redes caras direto, sem passar pelo detector, e por isso
+   * funciona com a sala vazia — que é justamente quando o aquecimento roda.
+   *
+   * Nada aqui atrasa nada: roda fora do caminho crítico e engole qualquer erro.
    */
   const aquecerRedePesada = async () => {
     try {
-      const limite = Date.now() + 10000
-      // `videoWidth > 0` é o sinal de que existe quadro decodificado. Sem essa
-      // espera, a captura devolveria um bitmap 0x0 e o aquecimento não
-      // aqueceria coisa nenhuma.
-      while (Date.now() < limite) {
-        const v = videoRef.current
-        if (v && v.videoWidth > 0 && v.readyState >= 2) break
-        await new Promise((r) => setTimeout(r, 120))
-      }
-      const video = videoRef.current
-      if (!video || video.videoWidth === 0) return
       const t0 = performance.now()
-      await recognizeFace(video, SMILE_THRESHOLD)
+      await aquecerModelos()
       // Conta como passe pesado: o relógio do aquecimento periódico começa
       // daqui, não do primeiro ciclo ocioso.
       ultimoPassePesadoRef.current = Date.now()
@@ -1198,7 +1192,15 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               dentroDoExpediente &&
               Date.now() - ultimoPassePesadoRef.current > INTERVALO_AQUECIMENTO_PESADO_MS
             ) {
-              await recognizeFace(video, SMILE_THRESHOLD)
+              // `aquecerModelos()` e não `recognizeFace()`.
+              //
+              // Este ramo roda de propósito quando NÃO há rosto na frente do
+              // tablet — e era exatamente isso que tornava o aquecimento
+              // inútil: sem rosto, `recognizeFace` para no detector e as três
+              // redes caras nunca rodam. O tablet passava o dia aquecendo um
+              // quarto do trabalho e cobrando o resto da primeira pessoa a
+              // chegar. Ver `aquecerTudo` em lib/face-worker.ts.
+              await aquecerModelos()
               ultimoPassePesadoRef.current = Date.now()
             }
             return
