@@ -800,7 +800,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    * sobra cerca de um terço do trabalho de aquecimento, sem que uma única
    * batida real fique fria.
    */
-  const HORA_INICIO_AQUECIMENTO = 6
+  const HORA_INICIO_AQUECIMENTO = 5
   const HORA_FIM_AQUECIMENTO = 22
   /**
    * Quantos passes completos seguidos precisam falhar para a identificação cair.
@@ -818,6 +818,49 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const COOLDOWN_MS = 60 * 1000
   // Com que frequência a tela de humor aparece na entrada (fora de cooldown).
   const CHANCE_CHECKIN_HUMOR = 0.55
+
+  /**
+   * Faz a rede pesada rodar uma vez, com um quadro de verdade da câmera,
+   * assim que o app abre.
+   *
+   * A primeira chamada de `recognizeFace` num WebView recém-aberto não paga só
+   * a inferência: paga a compilação dos shaders WebGL do detector, dos
+   * landmarks, do reconhecimento e das expressões, com a GPU ainda em clock
+   * baixo. Medido no tablet: 24.366 ms nessa primeira, contra ~185 ms já
+   * quente. É a conta inteira da primeira batida do dia.
+   *
+   * Um quadro de verdade e não um canvas em branco de propósito: num canvas
+   * vazio o detector não acha rosto nenhum e devolve cedo, sem nunca tocar nas
+   * redes de landmark, reconhecimento e expressão — que são justamente as
+   * caras. O aquecimento sairia barato e inútil.
+   *
+   * Nada aqui atrasa nada: roda fora do caminho crítico, e se a câmera não
+   * ficar pronta a tempo simplesmente desiste e deixa o aquecimento periódico
+   * do loop assumir.
+   */
+  const aquecerRedePesada = async () => {
+    try {
+      const limite = Date.now() + 10000
+      // `videoWidth > 0` é o sinal de que existe quadro decodificado. Sem essa
+      // espera, a captura devolveria um bitmap 0x0 e o aquecimento não
+      // aqueceria coisa nenhuma.
+      while (Date.now() < limite) {
+        const v = videoRef.current
+        if (v && v.videoWidth > 0 && v.readyState >= 2) break
+        await new Promise((r) => setTimeout(r, 120))
+      }
+      const video = videoRef.current
+      if (!video || video.videoWidth === 0) return
+      const t0 = performance.now()
+      await recognizeFace(video, SMILE_THRESHOLD)
+      // Conta como passe pesado: o relógio do aquecimento periódico começa
+      // daqui, não do primeiro ciclo ocioso.
+      ultimoPassePesadoRef.current = Date.now()
+      console.log(`🔥 Rede aquecida no carregamento em ${Math.round(performance.now() - t0)} ms`)
+    } catch {
+      /* aquecimento é bônus: falhar aqui não pode custar uma batida */
+    }
+  }
 
   // Registra o @property e as duas classes da revelação uma vez só.
   useCssRevelacao()
@@ -942,6 +985,23 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           )
           setModelsReady(true)
           setLoadingStatus(`Pronto! ${count} funcionário(s) carregado(s)`)
+          // Uma olhada pesada AGORA, antes de qualquer pessoa.
+          //
+          // POR QUE ISTO FALTAVA: o aquecimento de 5 em 5 segundos mora no
+          // ramo `!rosto` do loop — ou seja, só roda quando NÃO há ninguém na
+          // frente do tablet. Faz sentido para o dia inteiro e é exatamente o
+          // errado para a primeira batida do dia: o app amanhece fechado, a
+          // primeira pessoa abre o app e fica parada na frente da câmera
+          // esperando. Como o rosto dela está em quadro desde o primeiro
+          // quadro, o ramo `!rosto` nunca roda, e o primeiro passe pesado do
+          // dia acaba sendo o dela — com a GPU fria e os shaders por compilar.
+          // Foi essa a conta de 24 s no primeiro passe da Jéssica às 08:02, de
+          // um total de 49 s.
+          //
+          // `void` e sem `await`: a tela já está pronta e usável; isto corre
+          // por fora. Se a câmera demorar ou falhar, o loop normal assume e
+          // nada quebra.
+          void aquecerRedePesada()
           console.log(`🎥 Sistema de reconhecimento local pronto (${count} funcionários)!`)
           // Preload do Lottie check para transição instantânea
           fetch("https://lottie.host/8a95b3ad-f30a-4fb9-a55d-4153b3b92810/RPsps2O63O.lottie").catch(() => {})

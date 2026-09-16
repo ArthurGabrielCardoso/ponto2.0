@@ -1,0 +1,23 @@
+-- Uma coluna: ha quanto tempo a PAGINA estava aberta quando a batida aconteceu.
+--
+-- Motivo: na manha de 16/09 a primeira batida do dia (Jessica, 08:02) custou
+-- 49.039 ms, com 24.366 ms so no primeiro passe. A segunda, 54 minutos depois,
+-- custou 4.952 ms. A explicacao provavel era que o app tinha sido reaberto
+-- naquele instante -- o Fully Kiosk e encerrado pelo Android durante a
+-- madrugada e a primeira pessoa do dia encontra o tablet no wallpaper.
+--
+-- Mas isso era DEDUCAO, nao medida: a unica pista era ms_ocioso_antes vir
+-- nulo, o que so acontece quando nenhum passe pesado rodou desde o load. Dois
+-- passos de raciocinio para responder uma pergunta de um numero so.
+--
+--   ms_desde_carregamento   load da pagina -> batida
+--
+-- Alguns segundos aqui = app recem-aberto, primeiro passe frio.
+-- Algumas horas    = app de pe desde antes, GPU ja aquecida.
+--
+-- Nao guarda nada novo sobre ninguem: e tempo do proprio aparelho.
+--
+-- Roda uma vez, no SQL Editor do Supabase. IF NOT EXISTS: rodar de novo nao
+-- quebra nada.
+ALTER TABLE diagnostico_reconhecimento
+  ADD COLUMN IF NOT EXISTS ms_desde_carregamento bigint;

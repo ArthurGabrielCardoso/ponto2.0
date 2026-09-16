@@ -269,6 +269,18 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
       m.passesCompletos.length > 0 ? Math.round(m.passesCompletos[0]) : null,
     ms_ocioso_antes: m.msOcioso ?? null,
     ms_desde_ultimo_ponto: m.msDesdeUltimoPonto ?? null,
+    // Há quanto tempo esta PÁGINA está aberta. `performance.now()` conta a
+    // partir do carregamento do documento, então este número já é a resposta
+    // pronta — não precisa de estado nenhum para existir.
+    //
+    // Existe por causa da manhã do dia 16: a primeira batida custou 49 s e o
+    // primeiro passe sozinho, 24 s. A suspeita era que o app tinha acabado de
+    // ser reaberto, mas a única pista era `ms_ocioso_antes` vindo nulo — uma
+    // dedução em duas etapas. Com esta coluna, "o app tinha acabado de abrir"
+    // deixa de ser inferência e passa a ser um número na linha: alguns
+    // segundos aqui é app recém-aberto, algumas horas é app que atravessou o
+    // dia inteiro de pé.
+    ms_desde_carregamento: Math.round(fim),
     ms_consulta_registros: m.msConsultaRegistros ?? null,
     ms_saudacao_ia: m.msSaudacaoIa ?? null,
     passes_baratos: m.passesBaratos.length,
