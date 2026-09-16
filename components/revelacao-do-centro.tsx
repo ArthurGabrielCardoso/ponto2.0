@@ -63,7 +63,7 @@ import { useEffect } from "react"
  * folga larga e ainda assim ~79% da animação é movimento que se vê, contra
  * 47% antes.
  */
-const RAIO_QUE_COBRE_A_TELA = "90%"
+const RAIO_QUE_COBRE_A_TELA = lerNumero("raio", 90, 71, 200) + "%"
 
 /**
  * Duração da animação, com atalho para calibrar no próprio tablet.
@@ -79,29 +79,70 @@ const RAIO_QUE_COBRE_A_TELA = "90%"
  * Inerte sem o parâmetro. Os limites impedem que um dedo errado na barra de
  * endereço deixe a tela presa numa animação de meia hora.
  */
-function lerDuracao(chave: string, padrao: number): number {
+function lerNumero(chave: string, padrao: number, min: number, max: number): number {
   try {
     if (typeof window === "undefined") return padrao
     const v = new URLSearchParams(window.location.search).get(chave)
     if (!v) return padrao
     const n = Number(v)
     if (!Number.isFinite(n)) return padrao
-    return Math.max(150, Math.min(4000, Math.round(n)))
+    return Math.max(min, Math.min(max, Math.round(n)))
   } catch {
     return padrao
   }
 }
 
+const lerDuracao = (chave: string, padrao: number) => lerNumero(chave, padrao, 150, 4000)
+
 /**
- * A curva também mudou. `ease-out` é rápido no começo e lento no fim — para uma
- * revelação a partir do centro, isso estoura o círculo logo de cara e come
- * justamente o momento em que ele é pequeno.
+ * Curva, por nome.
  *
- * `cubic-bezier(0.65, 0, 0.35, 1)` sai devagar e chega devagar. É a mesma curva
- * do SplashScreen da VitallCam, então as duas telas se movem com o mesmo
- * sotaque.
+ *   suave   as duas pontas devagar. Foi o que estava aqui, e foi o problema:
+ *           num círculo o que se vê é a BORDA varrendo, e esta curva tem
+ *           velocidade zero no começo e no fim. A borda fica parada nas duas
+ *           pontas e metade da animação não mostra movimento nenhum — o
+ *           "não faz a quantidade de movimentos necessários".
+ *   saida    sai com velocidade e desacelera até parar. É a certa para
+ *           revelação: a borda anda de imediato, e vai freando conforme se
+ *           aproxima dos cantos, que é quando ela já percorreu quase tudo.
+ *   expo     a mesma ideia, exagerada. Quase toda a abertura nos primeiros
+ *           30%, com uma cauda longa de acomodação.
  */
-const CURVA = "cubic-bezier(0.65, 0, 0.35, 1)"
+const CURVAS: Record<string, string> = {
+  suave: "cubic-bezier(0.65, 0, 0.35, 1)",
+  saida: "cubic-bezier(0.25, 0.8, 0.35, 1)",
+  expo: "cubic-bezier(0.16, 1, 0.3, 1)",
+}
+
+function lerCurva(padrao: string): string {
+  try {
+    if (typeof window === "undefined") return CURVAS[padrao]
+    const v = new URLSearchParams(window.location.search).get("curva")
+    return (v && CURVAS[v]) || CURVAS[padrao]
+  } catch {
+    return CURVAS[padrao]
+  }
+}
+
+/**
+ * POR QUE A CURVA DEIXOU DE SER A SIMÉTRICA
+ *
+ * Aqui esteve `cubic-bezier(0.65, 0, 0.35, 1)` — devagar nas duas pontas, a
+ * mesma do SplashScreen da VitallCam. O raciocínio original era que `ease-out`
+ * estouraria o círculo logo de cara. Ele estava certo enquanto o raio final era
+ * 150%: aí quase tudo crescia fora da tela mesmo.
+ *
+ * Com o raio corrigido, a conta se inverte. O que o olho acompanha numa
+ * revelação circular não é o raio, é a BORDA varrendo — e a velocidade da borda
+ * é a derivada da curva. Uma curva simétrica tem derivada ZERO nas duas pontas:
+ * a borda fica parada no começo, dispara no meio e congela de novo no fim.
+ * Numa animação de 1 segundo isso são uns 400 ms sem movimento aparente. Foi
+ * exatamente a queixa: "não faz a quantidade de movimentos necessários".
+ *
+ * `saida` sai com velocidade e vai freando. A borda anda desde o primeiro
+ * quadro, e desacelera justamente quando já percorreu quase todo o caminho.
+ */
+const CURVA = lerCurva("saida")
 
 /**
  * Durações.
@@ -115,7 +156,7 @@ const CURVA = "cubic-bezier(0.65, 0, 0.35, 1)"
  * todo o estado do app muda de forma síncrona no toque. A animação corre por
  * cima de um app que já está funcionando por baixo.
  */
-export const DURACAO_ABERTURA_MS = lerDuracao("abertura", 1050)
+export const DURACAO_ABERTURA_MS = lerDuracao("abertura", 800)
 /** A tela de sucesso pode respirar: nesse ponto não há mais nada disputando GPU. */
 export const DURACAO_REVELACAO_MS = lerDuracao("revelacao", 1350)
 
@@ -177,8 +218,24 @@ const CSS = `
    anima no compositor, sem repintar e sem tocar na thread principal. Num
    tablet que ao mesmo tempo decodifica vídeo e roda reconhecimento, essa
    distinção é a diferença entre fluido e travado. */
+/* A PROFUNDIDADE NASCE MAIOR, NUNCA MENOR.
+   
+   A primeira versão vinha de scale(0.93) com translateY(14px), imitando um
+   conteúdo que sobe de trás. Num elemento de tela cheia isso é um erro de
+   base: 93% de cobertura deixa ~3,5% de sobra em cada borda, e o deslocamento
+   abre um vão no topo. Durante a animação inteira a tela não estava
+   preenchida — foi o que o Arthur viu na hora.
+   
+   Profundidade não pode custar cobertura. Começando ACIMA de 1 o elemento
+   sempre transborda a tela, e a sensação continua a mesma: algo que se acomoda
+   no lugar. O deslocamento sobrou 10 px, bem dentro dos ~24 px de margem que
+   o scale de 1.06 garante numa tela de 800 px de altura.
+   
+   A opacidade também subiu de 0.55 para 0.88: a 0.55 a tela de sucesso ficava
+   translúcida no meio da animação e deixava ver a câmera por baixo, o que
+   somava à impressão de tela não preenchida. */
 @keyframes assentarConteudo {
-  from { transform: scale(0.93) translateY(14px); opacity: 0.55; }
+  from { transform: scale(1.06) translateY(10px); opacity: 0.88; }
   to   { transform: none; opacity: 1; }
 }
 .assentar-conteudo {
