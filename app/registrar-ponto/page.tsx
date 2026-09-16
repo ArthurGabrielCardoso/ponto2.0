@@ -913,21 +913,48 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // então nunca é buscado na hora da batida.
       aquecerContextoDia()
 
-      // 1. Iniciar câmera em alta definição (resolução nativa máxima até 4K / Full HD)
+      /*
+       * 1. Câmera em Full HD.
+       *
+       * POR QUE 1920x1080 E NÃO 4K
+       *
+       * A versão anterior pedia 3840x2160. Fazendo a conta do que o tablet
+       * ganhava com isso:
+       *
+       *   o que a câmera entregava     3840x2160 = 8,3 megapixels por quadro
+       *   o que a tela mostra          ~1280x800 = 1,0 megapixel
+       *   o que o reconhecimento usa     256x192 = 0,05 megapixel
+       *
+       * Ou seja: o tablet decodificava e compunha 8,3 MP por quadro, 30 vezes
+       * por segundo, para exibir num painel de 1 MP e reduzir para 256x192
+       * antes de qualquer rede neural olhar. Nenhum desses dois destinos
+       * enxergava um único pixel a mais.
+       *
+       * O custo, esse era bem real: ~8x mais trabalho de composição de vídeo,
+       * permanente, na mesma GPU Mali-G57 que roda o reconhecimento — e era a
+       * maior razão de as animações engasgarem. Nada fica fluido com isso
+       * girando por baixo.
+       *
+       * 1080p ainda é o dobro da resolução do painel e 4x a do que qualquer
+       * coisa aqui consome. A imagem na tela é indistinguível; o alívio na GPU
+       * não é.
+       */
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 3840, min: 1280 },
-            height: { ideal: 2160, min: 720 },
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
             facingMode: "user",
-            frameRate: { ideal: 30, max: 60 },
+            // Teto em 30: 60fps dobraria a composição de vídeo em troca de uma
+            // fluidez que ninguém olha — a câmera aqui é espelho, não filme.
+            frameRate: { ideal: 30, max: 30 },
           },
           audio: false,
         }).catch(async () => {
           return await navigator.mediaDevices.getUserMedia({
             video: {
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
               facingMode: "user",
             },
             audio: false,
@@ -1978,7 +2005,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       {peliculaSaindo > 0 && (
         <div
           key={peliculaSaindo}
-          className="fixed inset-0 z-40 pointer-events-none abrir-do-centro"
+          className="fixed inset-0 z-40 pointer-events-none abrir-do-centro afastar-pelicula"
           style={{
             background:
               "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
@@ -2049,6 +2076,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           sentido. */}
       {showSuccess && recognizedPerson && (
         <div className="fixed inset-0 z-50 revelar-do-centro">
+        {/* A camada de profundidade. O círculo revela; ISTO assenta 120 ms
+            atrás dele, vindo de scale(0.93) e 14px abaixo. São duas
+            profundidades se acomodando com um pequeno desencontro — o que a
+            tela de desbloqueio do iPhone faz, e o que faltava aqui.
+
+            Só transform e opacity: o compositor resolve sem repintar. */}
+        <div className="h-full w-full assentar-conteudo">
         <TelaPontoSucesso
           funcionarioId={recognizedPerson.id}
           nome={recognizedPerson.nome}
@@ -2060,6 +2094,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           durationMs={30000}
           onVoltar={resetToInitialState}
         />
+        </div>
         </div>
       )}
 

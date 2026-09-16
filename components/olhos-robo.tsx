@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useVozAtiva, useNivelVoz } from "@/lib/tts-audio"
+import { Mola } from "@/lib/mola"
 
 export type HumorOlhos = "padrao" | "feliz" | "cansado" | "bravo"
 
@@ -127,7 +128,11 @@ export function OlhosRobo({
   }, [piscar, piscadinha])
 
   // === Modo ocioso: reposiciona o olhar sozinho ===
-  const [direcao, setDirecao] = useState({ x: 0, y: 0 })
+  //
+  // Vai para uma ref, não para estado: quem consome é o laço de animação
+  // abaixo, e um `setState` aqui re-renderizaria a árvore inteira de 2 em 2
+  // segundos sem necessidade.
+  const direcaoOciosaRef = useRef({ x: 0, y: 0 })
   useEffect(() => {
     if (!ocioso || olhar) return
     let cancelado = false
@@ -142,7 +147,8 @@ export function OlhosRobo({
         if (r < 0.3) return 0
         return (Math.random() < 0.5 ? -1 : 1) * (0.65 + Math.random() * 0.35)
       }
-      setDirecao({ x: sortear(), y: sortear() * 0.7 })
+      direcaoOciosaRef.current = { x: sortear(), y: sortear() * 0.7 }
+      acordarLaco()
       timer = window.setTimeout(mover, 1600 + Math.random() * 2600)
     }
 
@@ -151,13 +157,184 @@ export function OlhosRobo({
       cancelado = true
       clearTimeout(timer)
     }
-  }, [ocioso, olhar])
+    // `!!olhar` e não `olhar`: o objeto vem novo a cada render do pai, e com
+    // ele na lista este efeito se desmontaria e remontaria 4 vezes por segundo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ocioso, !!olhar])
 
-  const alvo = olhar ?? direcao
-  const dirX = Math.max(-1, Math.min(1, alvo.x))
-  const dirY = Math.max(-1, Math.min(1, alvo.y))
-  const deslocX = dirX * g.alcanceX
-  const deslocY = dirY * (dirY > 0 ? g.alcanceY * 1.15 : g.alcanceY)
+  /*
+   * ===================================================================
+   * O OLHAR, QUADRO A QUADRO
+   * ===================================================================
+   *
+   * Antes: cada leitura da câmera virava estado do React e o olho ia até lá
+   * com uma `transition` CSS de 240 ms.
+   *
+   * O problema não era a duração. Era a estrutura. A câmera entrega posição
+   * uma 3 a 5 vezes por segundo — o detector leva o tempo que leva e o laço é
+   * serializado. Então a cada ~250 ms chegava um alvo novo e a transição
+   * recomeçava do zero. Ela nunca terminava. O olho passava a vida indo para
+   * onde a pessoa ESTAVA, e o resultado era aquela sensação de que ele não
+   * acompanha nada.
+   *
+   * Agora são duas coisas separadas, em ritmos diferentes:
+   *
+   *   a câmera        →  só atualiza um ALVO (3-5x por segundo)
+   *   este laço       →  persegue esse alvo a 60 quadros por segundo
+   *
+   * O movimento fica contínuo mesmo com leitura lenta, porque a suavidade
+   * deixou de depender da taxa de amostragem.
+   *
+   * EXTRAPOLAÇÃO — o que tira o atraso que sobra
+   *
+   * Mesmo perfeito, o olho só sabe de uma posição ~250 ms velha. Quando alguém
+   * atravessa a frente do tablet, 250 ms é bastante. Então, ao receber um alvo
+   * novo, medimos a velocidade do rosto (quanto andou desde a leitura anterior,
+   * dividido pelo tempo) e miramos um pouco ADIANTE dele. É o mesmo truque de
+   * jogo em rede para esconder latência: não se mostra onde o outro estava,
+   * mostra-se onde ele deve estar agora.
+   *
+   * O avanço é limitado de propósito. Extrapolar demais faz o olho ultrapassar
+   * a pessoa e voltar quando ela para — pior que o atraso original.
+   *
+   * E tudo isto escreve DIRETO no DOM, via ref. Nenhum `setState` por quadro:
+   * a 60fps isso re-renderizaria a árvore 60 vezes por segundo e roubaria a
+   * thread principal justamente de quem precisa dela (a captura da câmera).
+   */
+  const grupoEsqRef = useRef<SVGGElement | null>(null)
+  const grupoDirRef = useRef<SVGGElement | null>(null)
+  const molaXRef = useRef<Mola | null>(null)
+  const molaYRef = useRef<Mola | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const ultimoQuadroRef = useRef(0)
+  const leituraAnteriorRef = useRef<{ x: number; y: number; t: number } | null>(null)
+  const alvoRef = useRef({ x: 0, y: 0 })
+  const seguindoRef = useRef(false)
+
+  /** Quanto à frente da pessoa o olho mira, em segundos de movimento. */
+  const AVANCO_S = 0.16
+  /** Teto do avanço, em unidades de direção (-1..1). */
+  const AVANCO_MAX = 0.42
+
+  if (molaXRef.current === null) {
+    molaXRef.current = new Mola(0, 120)
+    molaYRef.current = new Mola(0, 120)
+  }
+
+  const desenhar = () => {
+    const mx = molaXRef.current!
+    const my = molaYRef.current!
+    const dirX = Math.max(-1, Math.min(1, mx.valor))
+    const dirY = Math.max(-1, Math.min(1, my.valor))
+    const deslocX = dirX * g.alcanceX
+    const deslocY = dirY * (dirY > 0 ? g.alcanceY * 1.15 : g.alcanceY)
+    const y = g.margemY + deslocY
+    if (grupoEsqRef.current) {
+      grupoEsqRef.current.style.transform = `translate(${g.margemX + deslocX}px, ${y}px)`
+    }
+    if (grupoDirRef.current) {
+      const x = g.margemX + g.larguraOlho + g.espaco + deslocX
+      grupoDirRef.current.style.transform = `translate(${x}px, ${y}px)`
+    }
+  }
+
+  const laco = (agora: number) => {
+    const dt = ultimoQuadroRef.current ? (agora - ultimoQuadroRef.current) / 1000 : 1 / 60
+    ultimoQuadroRef.current = agora
+    const mx = molaXRef.current!
+    const my = molaYRef.current!
+    mx.avancar(dt)
+    my.avancar(dt)
+    desenhar()
+
+    // Parou de mexer: desliga o laço até alguém trocar o alvo. Num tablet que
+    // fica ligado o dia inteiro, um rAF girando à toa é bateria e thread
+    // principal jogados fora.
+    if (mx.parada && my.parada) {
+      rafRef.current = null
+      ultimoQuadroRef.current = 0
+      return
+    }
+    rafRef.current = requestAnimationFrame(laco)
+  }
+
+  const acordarLaco = () => {
+    const alvo = olharRef.current ? alvoRef.current : direcaoOciosaRef.current
+    molaXRef.current!.definirAlvo(alvo.x)
+    molaYRef.current!.definirAlvo(alvo.y)
+    if (rafRef.current === null) {
+      ultimoQuadroRef.current = 0
+      rafRef.current = requestAnimationFrame(laco)
+    }
+  }
+
+  // `olhar` chega como objeto novo a cada leitura; a ref evita recriar o laço.
+  const olharRef = useRef(olhar)
+  olharRef.current = olhar
+
+  // Rigidez diferente para cada situação. Seguir um rosto pede mola dura
+  // (chegar rápido). Vaguear sozinho pede mola mole, com um quique de leve —
+  // é o que faz o olhar ocioso parecer curioso em vez de programado.
+  useEffect(() => {
+    if (olhar) {
+      molaXRef.current!.definirRigidez(190, 0.08)
+      molaYRef.current!.definirRigidez(190, 0.08)
+    } else {
+      molaXRef.current!.definirRigidez(42, 0.22)
+      molaYRef.current!.definirRigidez(42, 0.22)
+    }
+  }, [!!olhar])
+
+  // Chegou leitura nova da câmera: calcula o avanço e reaponta a mola.
+  useEffect(() => {
+    if (!olhar) {
+      // Perdeu o rosto. Não volta ao centro de estalo: a mola do modo ocioso
+      // assume e leva o olhar de volta com calma.
+      if (seguindoRef.current) {
+        seguindoRef.current = false
+        leituraAnteriorRef.current = null
+        direcaoOciosaRef.current = { x: 0, y: 0 }
+      }
+      acordarLaco()
+      return
+    }
+    seguindoRef.current = true
+
+    const agora = performance.now()
+    const ant = leituraAnteriorRef.current
+    let avX = 0
+    let avY = 0
+    if (ant) {
+      const dt = (agora - ant.t) / 1000
+      // Abaixo de 30 ms a divisão explode a velocidade por ruído de medida;
+      // acima de 600 ms a leitura anterior é velha demais para dizer algo.
+      if (dt > 0.03 && dt < 0.6) {
+        avX = ((olhar.x - ant.x) / dt) * AVANCO_S
+        avY = ((olhar.y - ant.y) / dt) * AVANCO_S
+        avX = Math.max(-AVANCO_MAX, Math.min(AVANCO_MAX, avX))
+        avY = Math.max(-AVANCO_MAX, Math.min(AVANCO_MAX, avY))
+      }
+    }
+    leituraAnteriorRef.current = { x: olhar.x, y: olhar.y, t: agora }
+
+    alvoRef.current = {
+      x: Math.max(-1, Math.min(1, olhar.x + avX)),
+      y: Math.max(-1, Math.min(1, olhar.y + avY)),
+    }
+    acordarLaco()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [olhar?.x, olhar?.y, olhar === null])
+
+  // Posiciona antes do primeiro quadro pintado, para o olho não nascer no
+  // canto e escorregar até o lugar.
+  useEffect(() => {
+    desenhar()
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // === Reação à voz ===
   // Faixa curta de propósito: os olhos respiram junto com a fala, não pulam.
@@ -225,21 +402,19 @@ export function OlhosRobo({
     const abertura = fechado ? 0.08 : vivo ? 1 + nivelVoz * 0.06 : 1
 
     return (
-      // O deslocamento vai por CSS, não pelo atributo transform do SVG:
-      // atributo não recebe transição, e o olhar teleportaria de um lado ao
-      // outro em vez de deslizar.
+      // Sem `transition` aqui, de propósito: quem move este grupo é o laço de
+      // rAF acima, escrevendo `style.transform` a cada quadro. Uma transição
+      // por cima brigaria com ele — o navegador tentaria interpolar entre dois
+      // valores que já estão sendo interpolados, e o movimento sairia
+      // borrachudo.
+      //
+      // O deslocamento continua indo por CSS e não pelo atributo `transform`
+      // do SVG porque só a propriedade CSS entra no compositor.
       <g
+        ref={ladoEsquerdo ? grupoEsqRef : grupoDirRef}
         style={{
-          transform: `translate(${x + deslocX}px, ${g.margemY + deslocY}px)`,
-          // Seguir uma pessoa e vaguear sozinho pedem tempos diferentes. Com
-          // `olhar` a posição vem da câmera, que atualiza umas três vezes por
-          // segundo: uma transição de 520 ms ainda estaria a caminho do alvo
-          // antigo quando o novo chega, e o olhar ficava sempre atrasado em
-          // relação à pessoa — parecia que não seguia nada. 240 ms chega antes
-          // da próxima leitura e o movimento vira acompanhamento de verdade.
-          transition: olhar
-            ? "transform 240ms cubic-bezier(0.22, 1, 0.36, 1)"
-            : "transform 520ms cubic-bezier(0.22, 1, 0.36, 1)",
+          transform: `translate(${x}px, ${g.margemY}px)`,
+          willChange: "transform",
         }}
       >
         <mask id={idLocal}>
