@@ -28,42 +28,31 @@ import { useEffect } from "react"
  * GPU que nesse instante roda o reconhecimento. Mesmo desenho, conta diferente.
  */
 /**
- * RAIO QUE COBRE A TELA INTEIRA
+ * ATÉ ONDE O CÍRCULO PRECISA CRESCER
  *
- * A CONTA, porque ela é contra-intuitiva e já foi refeita errada duas vezes
- * neste arquivo:
+ * ERRO QUE JÁ FOI COMETIDO DUAS VEZES AQUI, EM DIREÇÕES OPOSTAS:
  *
- * Num `radial-gradient(circle at 50% 50%)` um raio em porcentagem NÃO é medido
- * contra a largura nem contra a diagonal. O CSS resolve porcentagem de círculo
- * contra sqrt((l² + a²) / 2). O canto mais distante do centro, por sua vez,
- * está a sqrt(l² + a²) / 2.
+ * A máscara é `radial-gradient(circle at 50% 50%, black X, transparent X)`.
+ * Repare que NENHUM tamanho de círculo é declarado. Sem tamanho, o CSS usa
+ * `farthest-corner`: a linha do gradiente vai do centro até o canto mais
+ * distante da caixa.
  *
- *     razão = [sqrt(l²+a²)/2] ÷ [sqrt((l²+a²)/2)] = sqrt(2)/2 = 0,7071
+ * Logo, esse X **não é um raio**. É posição de parada ao longo dessa linha —
+ * e 100% já é, por definição, o canto. Qualquer valor abaixo de 100% deixa os
+ * cantos de fora, e a falha aparece primeiro perto do topo e da base, onde a
+ * borda do círculo corta a tela em curva.
  *
- * Os termos l e a se cancelam. **70,71% alcança o canto em QUALQUER
- * proporção** — 1280x800, 1920x1080, retrato, quadrado. Não existe tela
- * widescreen em que 75% não chegue ao canto; a razão é constante.
+ * A regra do sqrt(2)/2 — "70,71% cobre qualquer proporção" — é verdadeira,
+ * mas para RAIO EXPLÍCITO de círculo, que não é o caso deste gradiente.
+ * Aplicá-la aqui foi o que produziu as versões de 75% e de 90%, as duas com
+ * borda sobrando na tela. A versão de 150% que veio antes delas estava certa
+ * pelo motivo certo.
  *
- * POR QUE 150% ESTRAGAVA A ANIMAÇÃO
- *
- * Se 70,71% já cobre tudo, um raio final de 150% quer dizer que a tela está
- * inteiramente revelada aos 47% do progresso. Os outros 53% da animação
- * crescem fora da tela, sem mostrar nada. Numa animação de 900 ms sobravam
- * ~430 ms de movimento visível — e era exatamente essa a queixa de que a
- * transição estava rápida demais. Aumentar a duração teria tratado o sintoma:
- * metade do tempo novo também iria para fora da tela.
- *
- * POR QUE 90% E NÃO 75%
- *
- * 90% dá 27% de margem sobre o necessário, contra 6% dos 75%. A margem existe
- * porque a versão de 150% foi escrita para resolver um vazamento observado na
- * tela, e eu não consigo reproduzir esse vazamento daqui — pode ter sido
- * anti-aliasing no pixel exato da borda, pode ter sido viewport visual
- * diferente do de layout no WebView. Com 90% o círculo ultrapassa o canto com
- * folga larga e ainda assim ~79% da animação é movimento que se vê, contra
- * 47% antes.
+ * O mínimo real é 100%. 112% dá margem para anti-aliasing no pixel da borda e
+ * para o viewport visual do WebView diferir do de layout, e ainda deixa 89% da
+ * animação (100/112) acontecendo dentro da tela.
  */
-const RAIO_QUE_COBRE_A_TELA = lerNumero("raio", 90, 71, 200) + "%"
+const RAIO_QUE_COBRE_A_TELA = lerNumero("raio", 112, 100, 250) + "%"
 
 /**
  * Duração da animação, com atalho para calibrar no próprio tablet.
@@ -142,7 +131,21 @@ function lerCurva(padrao: string): string {
  * `saida` sai com velocidade e vai freando. A borda anda desde o primeiro
  * quadro, e desacelera justamente quando já percorreu quase todo o caminho.
  */
-const CURVA = lerCurva("saida")
+/*
+ * DUAS CURVAS, NÃO UMA.
+ *
+ * Elas eram a mesma constante, e isso obrigava as duas transições a mudarem
+ * juntas — foi por isso que "deixar a película como era antes" chegou a
+ * parecer conflitante com "dar mais movimento ao ponto batido".
+ *
+ * A película volta a `suave`, a mesma de antes de tudo isto. O ponto batido
+ * fica em `saida`, que sai com velocidade e vai freando.
+ *
+ * `?curva=` continua sobrescrevendo as duas ao mesmo tempo, que é justamente o
+ * que serve para comparar.
+ */
+const CURVA_PELICULA = lerCurva("suave")
+const CURVA_REVELACAO = lerCurva("saida")
 
 /**
  * Durações.
@@ -156,7 +159,9 @@ const CURVA = lerCurva("saida")
  * todo o estado do app muda de forma síncrona no toque. A animação corre por
  * cima de um app que já está funcionando por baixo.
  */
-export const DURACAO_ABERTURA_MS = lerDuracao("abertura", 800)
+/* De volta aos 700 ms de antes de tudo isto, a pedido: a película é o único
+   elemento desta tela que o Arthur já tinha aprovado antes. */
+export const DURACAO_ABERTURA_MS = lerDuracao("abertura", 700)
 /** A tela de sucesso pode respirar: nesse ponto não há mais nada disputando GPU. */
 export const DURACAO_REVELACAO_MS = lerDuracao("revelacao", 1350)
 
@@ -196,12 +201,12 @@ const CSS = `
   to   { --raio-revelacao: ${RAIO_QUE_COBRE_A_TELA}; }
 }
 .revelar-do-centro {
-  animation: revelarDoCentro ${DURACAO_REVELACAO_MS}ms ${CURVA} forwards;
+  animation: revelarDoCentro ${DURACAO_REVELACAO_MS}ms ${CURVA_REVELACAO} forwards;
   -webkit-mask-image: radial-gradient(circle at 50% 50%, black var(--raio-revelacao), transparent var(--raio-revelacao));
           mask-image: radial-gradient(circle at 50% 50%, black var(--raio-revelacao), transparent var(--raio-revelacao));
 }
 .abrir-do-centro {
-  animation: revelarDoCentro ${DURACAO_ABERTURA_MS}ms ${CURVA} forwards;
+  animation: revelarDoCentro ${DURACAO_ABERTURA_MS}ms ${CURVA_PELICULA} forwards;
   /* Promove a camada ANTES de a animação começar. Sem isto o navegador só
      cria a camada quando o primeiro quadro já pediu, e essa criação no meio
      do caminho é o soluço que se vê logo na largada. */
