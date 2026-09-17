@@ -35,7 +35,13 @@ import {
 import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
 import { prepararSom, tocarConfirmacao, tocarSucesso } from "@/lib/som-ponto"
 import { useCssRevelacao, DURACAO_ABERTURA_MS } from "@/components/revelacao-do-centro"
-import { reproduzirVozSaudacao, prepararVozSaudacao } from "@/lib/tts-audio"
+import { reproduzirVozSaudacao, prepararVozSaudacao, vozEstaPronta } from "@/lib/tts-audio"
+import {
+  abastecerDespensa,
+  pegarSaudacaoPronta,
+  descartarSaudacoesDeOntem,
+  tamanhoDaDespensa,
+} from "@/lib/despensa-vozes"
 import * as telemetria from "@/lib/telemetria-reconhecimento"
 import {
   enfileirarPonto,
@@ -57,6 +63,7 @@ import {
   getBackend,
   getUltimaCapturaMs,
   definirBackendManual,
+  aquecerModelos,
 } from "@/lib/face-recognition-client"
 
 // Animação temática: emoji por 3.5s → depois Lottie check original
@@ -800,7 +807,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    * sobra cerca de um terço do trabalho de aquecimento, sem que uma única
    * batida real fique fria.
    */
-  const HORA_INICIO_AQUECIMENTO = 6
+  const HORA_INICIO_AQUECIMENTO = 5
   const HORA_FIM_AQUECIMENTO = 22
   /**
    * Quantos passes completos seguidos precisam falhar para a identificação cair.
@@ -818,6 +825,42 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const COOLDOWN_MS = 60 * 1000
   // Com que frequência a tela de humor aparece na entrada (fora de cooldown).
   const CHANCE_CHECKIN_HUMOR = 0.55
+
+  /**
+   * Faz a rede pesada rodar uma vez, com um quadro de verdade da câmera,
+   * assim que o app abre.
+   *
+   * A primeira chamada de `recognizeFace` num WebView recém-aberto não paga só
+   * a inferência: paga a compilação dos shaders WebGL do detector, dos
+   * landmarks, do reconhecimento e das expressões, com a GPU ainda em clock
+   * baixo. Medido no tablet: 24.366 ms nessa primeira, contra ~185 ms já
+   * quente. É a conta inteira da primeira batida do dia.
+   *
+   * A primeira versão disto esperava um quadro de verdade da câmera, no
+   * raciocínio de que um canvas vazio não acharia rosto e o aquecimento
+   * pararia no detector. O raciocínio estava certo; a conclusão, errada.
+   * Às 5h da manhã — quando o MacroDroid reabre o app — a sala está vazia,
+   * então o quadro de verdade também não tem rosto nenhum e cai no mesmo
+   * buraco. Esperar a câmera era complexidade a troco de nada.
+   *
+   * A saída não é arranjar um rosto: é não depender de detecção. `aquecerModelos`
+   * roda as três redes caras direto, sem passar pelo detector, e por isso
+   * funciona com a sala vazia — que é justamente quando o aquecimento roda.
+   *
+   * Nada aqui atrasa nada: roda fora do caminho crítico e engole qualquer erro.
+   */
+  const aquecerRedePesada = async () => {
+    try {
+      const t0 = performance.now()
+      await aquecerModelos()
+      // Conta como passe pesado: o relógio do aquecimento periódico começa
+      // daqui, não do primeiro ciclo ocioso.
+      ultimoPassePesadoRef.current = Date.now()
+      console.log(`🔥 Rede aquecida no carregamento em ${Math.round(performance.now() - t0)} ms`)
+    } catch {
+      /* aquecimento é bônus: falhar aqui não pode custar uma batida */
+    }
+  }
 
   // Registra o @property e as duas classes da revelação uma vez só.
   useCssRevelacao()
@@ -876,21 +919,48 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // então nunca é buscado na hora da batida.
       aquecerContextoDia()
 
-      // 1. Iniciar câmera em alta definição (resolução nativa máxima até 4K / Full HD)
+      /*
+       * 1. Câmera em Full HD.
+       *
+       * POR QUE 1920x1080 E NÃO 4K
+       *
+       * A versão anterior pedia 3840x2160. Fazendo a conta do que o tablet
+       * ganhava com isso:
+       *
+       *   o que a câmera entregava     3840x2160 = 8,3 megapixels por quadro
+       *   o que a tela mostra          ~1280x800 = 1,0 megapixel
+       *   o que o reconhecimento usa     256x192 = 0,05 megapixel
+       *
+       * Ou seja: o tablet decodificava e compunha 8,3 MP por quadro, 30 vezes
+       * por segundo, para exibir num painel de 1 MP e reduzir para 256x192
+       * antes de qualquer rede neural olhar. Nenhum desses dois destinos
+       * enxergava um único pixel a mais.
+       *
+       * O custo, esse era bem real: ~8x mais trabalho de composição de vídeo,
+       * permanente, na mesma GPU Mali-G57 que roda o reconhecimento — e era a
+       * maior razão de as animações engasgarem. Nada fica fluido com isso
+       * girando por baixo.
+       *
+       * 1080p ainda é o dobro da resolução do painel e 4x a do que qualquer
+       * coisa aqui consome. A imagem na tela é indistinguível; o alívio na GPU
+       * não é.
+       */
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 3840, min: 1280 },
-            height: { ideal: 2160, min: 720 },
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
             facingMode: "user",
-            frameRate: { ideal: 30, max: 60 },
+            // Teto em 30: 60fps dobraria a composição de vídeo em troca de uma
+            // fluidez que ninguém olha — a câmera aqui é espelho, não filme.
+            frameRate: { ideal: 30, max: 30 },
           },
           audio: false,
         }).catch(async () => {
           return await navigator.mediaDevices.getUserMedia({
             video: {
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
               facingMode: "user",
             },
             audio: false,
@@ -942,6 +1012,27 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           )
           setModelsReady(true)
           setLoadingStatus(`Pronto! ${count} funcionário(s) carregado(s)`)
+          // Uma olhada pesada AGORA, antes de qualquer pessoa.
+          //
+          // POR QUE ISTO FALTAVA: o aquecimento de 5 em 5 segundos mora no
+          // ramo `!rosto` do loop — ou seja, só roda quando NÃO há ninguém na
+          // frente do tablet. Faz sentido para o dia inteiro e é exatamente o
+          // errado para a primeira batida do dia: o app amanhece fechado, a
+          // primeira pessoa abre o app e fica parada na frente da câmera
+          // esperando. Como o rosto dela está em quadro desde o primeiro
+          // quadro, o ramo `!rosto` nunca roda, e o primeiro passe pesado do
+          // dia acaba sendo o dela — com a GPU fria e os shaders por compilar.
+          // Foi essa a conta de 24 s no primeiro passe da Jéssica às 08:02, de
+          // um total de 49 s.
+          //
+          // `void` e sem `await`: a tela já está pronta e usável; isto corre
+          // por fora. Se a câmera demorar ou falhar, o loop normal assume e
+          // nada quebra.
+          void aquecerRedePesada()
+          // A despensa de saudações enche em seguida, na mesma janela de sala
+          // vazia. Sem `await`: a tela já está pronta e usável, e isto leva
+          // dezenas de segundos de rede que ninguém está esperando.
+          void abastecerDespensa(getFuncionariosCarregados())
           console.log(`🎥 Sistema de reconhecimento local pronto (${count} funcionários)!`)
           // Preload do Lottie check para transição instantânea
           fetch("https://lottie.host/8a95b3ad-f30a-4fb9-a55d-4153b3b92810/RPsps2O63O.lottie").catch(() => {})
@@ -992,6 +1083,30 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // Revalidar o contexto do dia (clima muda, e à meia-noite o feriado também)
   useEffect(() => {
     const id = setInterval(aquecerContextoDia, 30 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  /*
+   * Repor a despensa de saudações ao longo do dia.
+   *
+   * De 40 em 40 minutos, e não uma vez de manhã, por dois motivos:
+   *
+   *   1. As batidas consomem o estoque. Quatro pessoas de manhã tiram quatro
+   *      frases de "Entrada"; sem reposição, a quinta pessoa cai no caminho
+   *      lento que a despensa existe para evitar.
+   *   2. A saudação comenta o clima. Uma frase gerada às 5 da manhã fala do
+   *      amanhecer, e usá-la na saída das 18h soa fora de lugar. Repor ao
+   *      longo do dia mantém as frases contemporâneas de quem as ouve.
+   *
+   * `descartarSaudacoesDeOntem` antes: à meia-noite o dia vira e as frases
+   * velhas passam a mencionar o clima e o feriado errados.
+   */
+  useEffect(() => {
+    const repor = () => {
+      descartarSaudacoesDeOntem()
+      void abastecerDespensa(getFuncionariosCarregados())
+    }
+    const id = setInterval(repor, 40 * 60 * 1000)
     return () => clearInterval(id)
   }, [])
 
@@ -1138,7 +1253,15 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               dentroDoExpediente &&
               Date.now() - ultimoPassePesadoRef.current > INTERVALO_AQUECIMENTO_PESADO_MS
             ) {
-              await recognizeFace(video, SMILE_THRESHOLD)
+              // `aquecerModelos()` e não `recognizeFace()`.
+              //
+              // Este ramo roda de propósito quando NÃO há rosto na frente do
+              // tablet — e era exatamente isso que tornava o aquecimento
+              // inútil: sem rosto, `recognizeFace` para no detector e as três
+              // redes caras nunca rodam. O tablet passava o dia aquecendo um
+              // quarto do trabalho e cobrando o resto da primeira pessoa a
+              // chegar. Ver `aquecerTudo` em lib/face-worker.ts.
+              await aquecerModelos()
               ultimoPassePesadoRef.current = Date.now()
             }
             return
@@ -1552,7 +1675,23 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           trabalhaSabado,
         })
 
-      const saudacaoIa: RespostaSaudacao = saudacaoGuardada
+      /*
+       * A DESPENSA VEM PRIMEIRO.
+       *
+       * Ela guarda frases escritas pela IA com a sala vazia, e — o que importa
+       * aqui — com o MP3 do Google JÁ BAIXADO. Pegar uma delas custa zero
+       * milissegundos e a voz sai no mesmo instante em que a tela aparece.
+       *
+       * Era isto que faltava. O caminho abaixo continua correto e continua
+       * valendo quando o estoque seca (app recém-aberto, muitas batidas
+       * seguidas do mesmo tipo), mas ele produz uma frase cujo áudio ainda
+       * precisa ser buscado — e é nessa janela que a voz sumia.
+       */
+      const daDespensa = !emCooldown ? pegarSaudacaoPronta(person.id, tipo) : null
+
+      const saudacaoIa: RespostaSaudacao = daDespensa
+        ? daDespensa
+        : saudacaoGuardada
         ? await Promise.race([
             saudacaoGuardada.promise.catch(() => fallbackComAudioPronto),
             new Promise<RespostaSaudacao>((resolve) =>
@@ -1560,6 +1699,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             ),
           ])
         : fallbackComAudioPronto
+
+      // O estoque daquela combinação baixou: repõe por trás, sem segurar nada.
+      if (daDespensa) {
+        void abastecerDespensa(getFuncionariosCarregados())
+      }
 
       telemetria.registrarSaudacaoIa(performance.now() - tSaudacao)
 
@@ -1603,6 +1747,19 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // diferente da prevista, rede lenta), a voz do navegador fala AGORA em
       // vez de esperar o MP3. Voz pior na hora serve; voz boa falando para
       // uma sala vazia não serve para nada.
+      /*
+       * A origem é decidida AQUI, de forma síncrona, e não dentro da função de
+       * voz. Motivo: `encerrarTentativa` roda três linhas abaixo, e a
+       * telemetria descarta qualquer medida que chegue depois de a tentativa
+       * fechar. Uma origem devolvida por promessa chegaria sempre tarde.
+       *
+       * O que dá para saber neste instante é justamente o que interessa: se a
+       * frase veio pronta da despensa, se o áudio dela já estava em memória,
+       * ou se vai ser preciso ir à rede com alguém esperando na frente da tela.
+       */
+      telemetria.registrarOrigemVoz(
+        daDespensa ? "despensa" : vozEstaPronta(mensagemVoz) ? "cache" : "rede"
+      )
       reproduzirVozSaudacao(mensagemVoz, { semEsperarRede: true })
 
       // Fecha a medição no mesmo instante em que a pessoa vê a tela pronta.
@@ -1987,6 +2144,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           sentido. */}
       {showSuccess && recognizedPerson && (
         <div className="fixed inset-0 z-50 revelar-do-centro">
+        {/* A camada de profundidade. O círculo revela; ISTO assenta 120 ms
+            atrás dele, vindo de scale(0.93) e 14px abaixo. São duas
+            profundidades se acomodando com um pequeno desencontro — o que a
+            tela de desbloqueio do iPhone faz, e o que faltava aqui.
+
+            Só transform e opacity: o compositor resolve sem repintar. */}
+        <div className="h-full w-full assentar-conteudo">
         <TelaPontoSucesso
           funcionarioId={recognizedPerson.id}
           nome={recognizedPerson.nome}
@@ -1998,6 +2162,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           durationMs={30000}
           onVoltar={resetToInitialState}
         />
+        </div>
         </div>
       )}
 

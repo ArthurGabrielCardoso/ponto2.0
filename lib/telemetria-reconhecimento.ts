@@ -42,6 +42,8 @@ interface Medida {
   msConsultaRegistros?: number
   msSaudacaoIa?: number
 
+  /** De onde saiu a voz desta batida: despensa, cache, rede ou nenhuma. */
+  origemVoz?: string
   /** Ms que a rede pesada passou parada antes desta tentativa. */
   msOcioso?: number | null
   /** Ms desde a última batida concluída neste tablet. */
@@ -113,6 +115,26 @@ export function iniciarTentativa() {
     falhasDesconhecido: 0,
     perdasIdentidade: 0,
   }
+}
+
+/**
+ * De onde a voz da saudação saiu nesta batida.
+ *
+ * Existe por causa de "às vezes não fala". Enquanto isso for anedota, a única
+ * forma de saber se uma correção funcionou é perguntar às pessoas se elas
+ * acharam que melhorou — que é como a gente descobriu, tarde, que o
+ * aquecimento nunca aqueceu. Com esta coluna, "a voz saiu?" e "de onde?"
+ * viram duas perguntas com resposta em toda linha.
+ *
+ *   despensa   frase e MP3 prontos de antes. É o caminho que deve dominar.
+ *   cache      frase diferente da guardada, mas o áudio já estava em memória.
+ *   rede       teve que buscar o MP3 na hora — atraso perceptível.
+ *   navegador  caiu na voz do sistema. No Fully Kiosk isso é quase sempre
+ *              silêncio, então qualquer aparição aqui é um problema.
+ *   nenhuma    não falou nada.
+ */
+export function registrarOrigemVoz(origem: string) {
+  if (atual) atual.origemVoz = origem
 }
 
 /** Quanto tempo a rede pesada ficou sem rodar antes desta tentativa. */
@@ -269,6 +291,19 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
       m.passesCompletos.length > 0 ? Math.round(m.passesCompletos[0]) : null,
     ms_ocioso_antes: m.msOcioso ?? null,
     ms_desde_ultimo_ponto: m.msDesdeUltimoPonto ?? null,
+    // Há quanto tempo esta PÁGINA está aberta. `performance.now()` conta a
+    // partir do carregamento do documento, então este número já é a resposta
+    // pronta — não precisa de estado nenhum para existir.
+    //
+    // Existe por causa da manhã do dia 16: a primeira batida custou 49 s e o
+    // primeiro passe sozinho, 24 s. A suspeita era que o app tinha acabado de
+    // ser reaberto, mas a única pista era `ms_ocioso_antes` vindo nulo — uma
+    // dedução em duas etapas. Com esta coluna, "o app tinha acabado de abrir"
+    // deixa de ser inferência e passa a ser um número na linha: alguns
+    // segundos aqui é app recém-aberto, algumas horas é app que atravessou o
+    // dia inteiro de pé.
+    ms_desde_carregamento: Math.round(fim),
+    origem_voz: m.origemVoz ?? null,
     ms_consulta_registros: m.msConsultaRegistros ?? null,
     ms_saudacao_ia: m.msSaudacaoIa ?? null,
     passes_baratos: m.passesBaratos.length,

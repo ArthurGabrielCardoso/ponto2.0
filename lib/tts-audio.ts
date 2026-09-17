@@ -5,6 +5,21 @@ import { useState, useEffect } from "react"
 // Cache em memória de áudio sintetizado por texto
 const cacheAudioBlobs = new Map<string, string>()
 
+/**
+ * Até quando vale esperar o MP3 do Google antes de desistir dele.
+ *
+ * Dois tetos porque as duas telas têm paciências diferentes:
+ *
+ *   curto  — usado na batida. A tela de ponto batido fica 30 s no ar, mas uma
+ *            saudação que começa 2 s depois de a pessoa chegar soa errada. Um
+ *            segundo e meio cobre com folga a resposta do Google numa rede
+ *            normal e ainda entra como parte natural da chegada.
+ *   longo  — usado fora do caminho crítico, ao abastecer a despensa com a sala
+ *            vazia. Ali não há ninguém esperando e vale insistir.
+ */
+const TETO_REDE_CURTO_MS = 1500
+const TETO_REDE_MS = 6000
+
 // Instância de Audio ativa para evitar sobreposição de falas
 let audioAtual: HTMLAudioElement | null = null
 
@@ -273,6 +288,19 @@ function tocarElementoAudio(audio: HTMLAudioElement): Promise<void> {
  * até a tela. Falha em silêncio de propósito: isto é adiantamento, e quem
  * depende dele já tem por onde cair.
  */
+/**
+ * O MP3 desta frase já está em memória?
+ *
+ * A despensa depende disto: ela só entrega uma frase depois de confirmar que a
+ * voz existe. Sem essa confirmação, voltaríamos a entregar frase sem áudio —
+ * que é exatamente o defeito que a despensa existe para corrigir.
+ */
+export function vozEstaPronta(texto?: string): boolean {
+  if (!texto) return false
+  const limpo = limparTextoParaVoz(texto)
+  return !!limpo && cacheAudioBlobs.has(limpo)
+}
+
 export async function prepararVozSaudacao(texto?: string): Promise<void> {
   if (!texto || typeof window === "undefined") return
   const textoLimpo = limparTextoParaVoz(texto)
@@ -343,23 +371,41 @@ export async function reproduzirVozSaudacao(
     }
   }
 
-  // 2. Sem cache e sem poder esperar: a voz do navegador sai no mesmo quadro,
-  // e o audio bom fica pronto para a proxima batida com esta mesma frase.
-  if (opcoes.semEsperarRede) {
-    falarComNavegador(textoLimpo)
-    void prepararVozSaudacao(textoLimpo)
-    return
-  }
+  /*
+   * 2. Sem cache.
+   *
+   * AQUI EXISTIU UM ATALHO PARA A VOZ DO NAVEGADOR, e ele era a causa de "às
+   * vezes não fala".
+   *
+   * O raciocínio era: "voz boa falando para uma sala vazia não serve para
+   * nada", então fale agora com o que tiver. O raciocínio vale para a
+   * película, que dura menos de um segundo. Não vale para a tela de ponto
+   * batido, que fica TRINTA SEGUNDOS no ar — lá, esperar meio segundo por uma
+   * voz boa é imperceptível, e foi essa troca que deixou de fazer sentido.
+   *
+   * Pior: no WebView do Fully Kiosk o `speechSynthesis` costuma não ter voz
+   * nenhuma instalada. `getVoices()` volta vazio, o pedido é engolido e todo
+   * caminho de erro é silencioso. O "fallback" não era uma voz pior — era
+   * nenhuma voz, sem aviso.
+   *
+   * Agora `semEsperarRede` apenas encurta a espera da rede em vez de desistir
+   * dela. A voz do navegador continua existindo para o caso de o Google estar
+   * fora, mas deixou de ser o primeiro escape.
+   */
+  const tetoMs = opcoes.semEsperarRede ? TETO_REDE_CURTO_MS : TETO_REDE_MS
 
-  // 3. Chamar o endpoint /api/tts
+  // 3. Chamar o endpoint /api/tts, com o teto acima
   try {
+    const controller = new AbortController()
+    const id = setTimeout(() => controller.abort(), tetoMs)
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ text: textoLimpo }),
-    })
+      signal: controller.signal,
+    }).finally(() => clearTimeout(id))
 
     const contentType = res.headers.get("content-type") || ""
 

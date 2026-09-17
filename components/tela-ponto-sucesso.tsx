@@ -184,7 +184,14 @@ export function TelaPontoSucesso({
     <div className={`absolute inset-0 z-40 h-screen w-full select-none overflow-hidden ${cenario.baseBg}`}>
       {/* 1. CAMADA DE LUZES / ESFERAS AMBIENTES FLUIDAS NO FUNDO */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className={`absolute -top-24 right-0 w-[550px] h-[550px] rounded-full ${cenario.orb1} blur-[120px] opacity-75 animate-pulse`} />
+        {/* O `animate-pulse` saiu daqui.
+            Ele animava a opacidade de um círculo de 550px com blur de 120px —
+            e durante a revelação essa esfera vive dentro de uma subárvore que
+            a máscara faz repintar a cada quadro. Um borrão desse tamanho sendo
+            repintado 60 vezes por segundo, num Mali-G57 que acabou de rodar o
+            reconhecimento, é caro; e o que se ganhava era um pulsar que
+            ninguém consegue apontar numa tela que fica 30 segundos no ar. */}
+        <div className={`absolute -top-24 right-0 w-[550px] h-[550px] rounded-full ${cenario.orb1} blur-[120px] opacity-75`} />
         <div className={`absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full ${cenario.orb2} blur-[110px] opacity-65`} />
         <div className={`absolute top-1/3 left-1/3 w-[380px] h-[380px] rounded-full ${cenario.orb3} blur-[100px] opacity-45`} />
       </div>

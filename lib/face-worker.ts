@@ -228,34 +228,85 @@ async function handleInit(forcarBackend?: "wasm" | "cpu") {
   ])
   modelsLoaded = true
   console.log("[face-worker] modelos carregados. Warmup...")
+  await aquecerTudo(fa)
+}
 
-  // Warmup — roda o pipeline completo uma vez pra compilar shaders/WASM ops
+/**
+ * POR QUE ESTE AQUECIMENTO NÃO PASSA PELA DETECÇÃO
+ *
+ * A versão anterior era assim:
+ *
+ *     detectSingleFace(canvasPreto).withFaceLandmarks(true)
+ *                                  .withFaceDescriptor()
+ *                                  .withFaceExpressions()
+ *
+ * Parece que aquece as quatro redes. Não aquece nenhuma das três últimas.
+ *
+ * O encadeamento da face-api é preguiçoso: quando `detectSingleFace` não acha
+ * rosto, ela devolve `undefined` e TODO o resto da corrente é pulado sem
+ * executar. Num canvas preto nunca há rosto. Então o aquecimento rodava só o
+ * TinyFaceDetector — a mais barata das quatro — e as caras (landmark, o
+ * reconhecimento de 6,4 MB e as expressões) continuavam com os shaders por
+ * compilar.
+ *
+ * E o erro não estava só aqui. O aquecimento periódico da tela de espera tinha
+ * exatamente o mesmo defeito, por um motivo quase cômico: ele roda de 5 em 5
+ * segundos DE PROPÓSITO quando não há ninguém na frente do tablet — ou seja,
+ * garantidamente sem rosto, garantidamente aquecendo só o detector. O sistema
+ * passava o dia inteiro aquecendo um quarto do trabalho e cobrando os outros
+ * três quartos da primeira pessoa que chegasse.
+ *
+ * A correção é não depender de detecção nenhuma. As três redes caras têm
+ * entrada própria e rodam sozinhas: `detectLandmarks`, `computeFaceDescriptor`
+ * e `predictExpressions` aceitam qualquer imagem. O resultado é lixo (é um
+ * canvas preto), e não importa: o que interessa é que os shaders compilam e os
+ * kernels ficam em cache com o shape certo.
+ *
+ * Cada rede em seu `try` separado: se uma falhar neste aparelho, as outras
+ * ainda aquecem, e o log diz qual foi.
+ */
+async function aquecerTudo(fa: any) {
+  const t0 = Date.now()
+  const branco = (w: number, h: number) => {
+    const c = new OffscreenCanvas(w, h)
+    const ctx = c.getContext("2d")!
+    ctx.fillStyle = "#000"
+    ctx.fillRect(0, 0, w, h)
+    return c
+  }
+
+  // 1. Detector, nos dois shapes em que ele é usado de verdade.
   try {
-    const branco = (w: number, h: number) => {
-      const c = new OffscreenCanvas(w, h)
-      const ctx = c.getContext("2d")!
-      ctx.fillStyle = "#000"
-      ctx.fillRect(0, 0, w, h)
-      return c
-    }
-
-    // Shape do passe barato (detector + expressões), o que roda a cada frame.
     const leve = branco(WORK_WIDTH, WORK_HEIGHT)
     await fa.detectSingleFace(leve as any, tinyOpts())
-    await fa.detectSingleFace(leve as any, tinyOpts()).withFaceExpressions()
-
-    // Shape do passe de identificação. Aquecer aqui é o que evita a primeira
-    // batida do dia pagar a compilação dos shaders.
     const pesado = branco(RECOG_WIDTH, RECOG_HEIGHT)
-    await fa
-      .detectSingleFace(pesado as any, tinyOpts(RECOG_INPUT_SIZE))
-      .withFaceLandmarks(true)
-      .withFaceDescriptor()
-      .withFaceExpressions()
-    console.log("[face-worker] warmup completo")
+    await fa.detectSingleFace(pesado as any, tinyOpts(RECOG_INPUT_SIZE))
   } catch (e) {
-    console.warn("[face-worker] warmup falhou (não crítico):", e)
+    console.warn("[face-worker] warmup detector falhou:", e)
   }
+
+  // 2. As três caras, direto, sem passar por detecção.
+  //
+  // Os tamanhos são os de entrada de cada rede (112, 150 e 64). A face-api
+  // redimensiona o que receber, mas entregando já no tamanho certo o kernel
+  // compilado é o mesmo que o passe real vai usar.
+  try {
+    await fa.nets.faceLandmark68TinyNet.detectLandmarks(branco(112, 112) as any)
+  } catch (e) {
+    console.warn("[face-worker] warmup landmarks falhou:", e)
+  }
+  try {
+    await fa.nets.faceRecognitionNet.computeFaceDescriptor(branco(150, 150) as any)
+  } catch (e) {
+    console.warn("[face-worker] warmup descritor falhou:", e)
+  }
+  try {
+    await fa.nets.faceExpressionNet.predictExpressions(branco(64, 64) as any)
+  } catch (e) {
+    console.warn("[face-worker] warmup expressoes falhou:", e)
+  }
+
+  console.log(`[face-worker] warmup completo em ${Date.now() - t0} ms`)
 }
 
 function handleLoadDescriptors(
@@ -476,6 +527,13 @@ self.onmessage = async (e: MessageEvent) => {
         break
       case "extractDescriptor":
         result = await handleExtractDescriptor(payload.bitmap)
+        break
+      case "warmup":
+        // Aquecimento periódico: a tela de espera chama isto enquanto não há
+        // ninguém na frente do tablet. Antes ela chamava "recognize" num quadro
+        // vazio, que parava no detector -- ver o comentário de aquecerTudo.
+        if (modelsLoaded && faceapi) await aquecerTudo(faceapi)
+        result = { ok: true }
         break
       default:
         throw new Error(`Mensagem desconhecida: ${type}`)
