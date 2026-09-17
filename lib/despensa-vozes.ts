@@ -49,12 +49,46 @@ import type { Funcionario } from "./types"
  * saída das 18h.
  */
 
+/**
+ * PERÍODO DO DIA — e por que a despensa precisa dele
+ *
+ * O buraco que isto fecha: o prompt da IA recebe a hora da GERAÇÃO
+ * (`Horário: 05:00`) e é instruído a escolher entre "Excelente dia" pela
+ * manhã, "Excelente tarde" à tarde e "Excelente noite" ao sair à noite.
+ *
+ * Sem período, uma frase de "Saída" gerada às 5h ficava parada no estoque até
+ * alguém sair às 18h — e dizia "Excelente dia" para quem está indo embora. A
+ * reposição de 40 em 40 minutos não resolvia, porque ela só repõe o que foi
+ * CONSUMIDO; frase parada continuava parada, envelhecendo.
+ *
+ * Amarrando cada frase ao período em que foi escrita, ela só é servida dentro
+ * dele. Fora, é descartada e regerada com o horário certo.
+ *
+ * De quebra isso limita o custo sozinho: em vez de regerar o tempo todo, o
+ * estoque se renova três vezes ao dia — uma por período.
+ *
+ * Os cortes seguem os do prompt: manhã até o meio-dia, tarde até as 18h,
+ * noite daí em diante.
+ */
+type Periodo = "manha" | "tarde" | "noite"
+
+function periodoDe(d: Date): Periodo {
+  const h = d.getHours()
+  if (h < 12) return "manha"
+  if (h < 18) return "tarde"
+  return "noite"
+}
+
 interface SaudacaoGuardada {
   visual: string
   voz: string
   /** Só entra na despensa depois que o MP3 está em memória. */
   audioPronto: boolean
   criadaEm: number
+  /** Período em que foi escrita. Fora dele a frase mente sobre a hora. */
+  periodo: Periodo
+  /** Dia em que foi escrita, para a virada da meia-noite. */
+  dia: string
 }
 
 /** chave = `${funcionarioId}|${tipoPonto}` */
@@ -96,6 +130,11 @@ function chave(funcionarioId: string, tipoPonto: string) {
   return `${funcionarioId}|${tipoPonto}`
 }
 
+/** A frase ainda diz a verdade sobre a hora? */
+function servivelAgora(s: SaudacaoGuardada, agora = new Date()): boolean {
+  return s.periodo === periodoDe(agora) && s.dia === agora.toDateString()
+}
+
 /**
  * Pega uma saudação pronta e a consome.
  *
@@ -114,7 +153,7 @@ export function pegarSaudacaoPronta(
   const fila = despensa.get(chave(funcionarioId, tipoPonto))
   if (!fila || fila.length === 0) return null
 
-  const i = fila.findIndex((s) => s.audioPronto && vozEstaPronta(s.voz))
+  const i = fila.findIndex((s) => s.audioPronto && servivelAgora(s) && vozEstaPronta(s.voz))
   if (i === -1) return null
 
   const [escolhida] = fila.splice(i, 1)
@@ -124,7 +163,7 @@ export function pegarSaudacaoPronta(
 /** Quantas frases com áudio pronto existem agora, para log e telemetria. */
 export function tamanhoDaDespensa(): number {
   let n = 0
-  for (const fila of despensa.values()) n += fila.filter((s) => s.audioPronto).length
+  for (const fila of despensa.values()) n += fila.filter((s) => s.audioPronto && servivelAgora(s)).length
   return n
 }
 
@@ -157,11 +196,14 @@ async function guardarUma(func: Funcionario, tipoPonto: string): Promise<boolean
     await prepararVozSaudacao(saudacao.voz)
     if (!vozEstaPronta(saudacao.voz)) return false
 
+    const agora = new Date()
     fila.push({
       visual: saudacao.visual,
       voz: saudacao.voz,
       audioPronto: true,
-      criadaEm: Date.now(),
+      criadaEm: agora.getTime(),
+      periodo: periodoDe(agora),
+      dia: agora.toDateString(),
     })
     despensa.set(k, fila)
     return true
@@ -188,7 +230,10 @@ export async function abastecerDespensa(funcionarios: Funcionario[]): Promise<vo
     for (const func of funcionarios) {
       for (const tipo of TIPOS_DE_PONTO) {
         const fila = despensa.get(chave(func.id, tipo)) ?? []
-        const faltam = POR_COMBINACAO - fila.filter((s) => s.audioPronto).length
+        // Conta só o que é servível NESTE período: frase da manhã não conta
+        // como estoque da noite, senão o contador diria "cheio" enquanto a
+        // despensa está cheia de frases que ninguém pode usar.
+        const faltam = POR_COMBINACAO - fila.filter((s) => s.audioPronto && servivelAgora(s)).length
         for (let i = 0; i < faltam; i++) {
           if (await guardarUma(func, tipo)) geradas++
           await new Promise((r) => setTimeout(r, INTERVALO_ENTRE_GERACOES_MS))
@@ -207,17 +252,27 @@ export async function abastecerDespensa(funcionarios: Funcionario[]): Promise<vo
 }
 
 /**
- * Descarta o que foi gerado em outro dia.
+ * Joga fora o que não serve mais.
  *
- * Uma frase de ontem fala do clima de ontem e pode desejar bom feriado num dia
- * comum. O `URL.createObjectURL` do MP3 correspondente fica no cache do módulo
- * de voz, que é pequeno e some no próximo reload — não vale um mecanismo de
- * limpeza próprio.
+ * Antes isto só descartava as frases de ONTEM, e era pouco. Uma frase escrita
+ * hoje de manhã já não serve hoje à noite: o prompt da IA recebeu "Horário:
+ * 05:00" e escolheu "Excelente dia" — dizer isso para quem está indo embora às
+ * 18h é pior do que não falar nada.
+ *
+ * Agora sai tudo que não é do período corrente. O que for podado volta a ser
+ * gerado no próximo reabastecimento, já com o horário certo. Os MP3
+ * correspondentes ficam no cache do módulo de voz, que é pequeno e some no
+ * próximo reload — não vale um mecanismo de limpeza próprio.
  */
-export function descartarSaudacoesDeOntem(): void {
-  const hoje = new Date().toDateString()
+export function podarSaudacoesVencidas(): void {
+  const agora = new Date()
+  let podadas = 0
   for (const [k, fila] of despensa) {
-    const doDia = fila.filter((s) => new Date(s.criadaEm).toDateString() === hoje)
-    if (doDia.length !== fila.length) despensa.set(k, doDia)
+    const validas = fila.filter((s) => servivelAgora(s, agora))
+    if (validas.length !== fila.length) {
+      podadas += fila.length - validas.length
+      despensa.set(k, validas)
+    }
   }
+  if (podadas > 0) console.log(`🗣️ Despensa: ${podadas} saudações vencidas descartadas`)
 }

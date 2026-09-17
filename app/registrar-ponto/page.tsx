@@ -39,7 +39,7 @@ import { reproduzirVozSaudacao, prepararVozSaudacao, vozEstaPronta } from "@/lib
 import {
   abastecerDespensa,
   pegarSaudacaoPronta,
-  descartarSaudacoesDeOntem,
+  podarSaudacoesVencidas,
   tamanhoDaDespensa,
 } from "@/lib/despensa-vozes"
 import * as telemetria from "@/lib/telemetria-reconhecimento"
@@ -1098,15 +1098,26 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    *      amanhecer, e usá-la na saída das 18h soa fora de lugar. Repor ao
    *      longo do dia mantém as frases contemporâneas de quem as ouve.
    *
-   * `descartarSaudacoesDeOntem` antes: à meia-noite o dia vira e as frases
-   * velhas passam a mencionar o clima e o feriado errados.
+   * `podarSaudacoesVencidas` antes de repor, e é ela que fecha o furo do
+   * período: o prompt da IA recebe a hora da GERAÇÃO, então uma frase de
+   * "Saída" escrita às 5h diz "Excelente dia" e não pode ser servida às 18h.
+   * A poda tira o que venceu; a reposição em seguida refaz com o horário
+   * certo. Como o corte é por período do dia, o estoque se renova três vezes
+   * ao dia em vez de o tempo todo.
    */
   useEffect(() => {
     const repor = () => {
-      descartarSaudacoesDeOntem()
+      podarSaudacoesVencidas()
       void abastecerDespensa(getFuncionariosCarregados())
     }
-    const id = setInterval(repor, 40 * 60 * 1000)
+    // 10 minutos, e não 40, por causa da virada de período.
+    //
+    // Ao meio-dia as frases da manhã vencem todas de uma vez. Com 40 minutos
+    // de intervalo, quem sai para o almoço às 12h05 podia encontrar a despensa
+    // vazia e cair no caminho lento. Verificar de 10 em 10 minutos encurta essa
+    // janela para no máximo 10 — e a verificação em si é barata: quando não
+    // falta nada, `abastecerDespensa` só conta e volta, sem tocar na rede.
+    const id = setInterval(repor, 10 * 60 * 1000)
     return () => clearInterval(id)
   }, [])
 
