@@ -35,7 +35,13 @@ import {
 import { aquecerContextoDia } from "@/lib/contexto-dia-cliente"
 import { prepararSom, tocarConfirmacao, tocarSucesso } from "@/lib/som-ponto"
 import { useCssRevelacao, DURACAO_ABERTURA_MS } from "@/components/revelacao-do-centro"
-import { reproduzirVozSaudacao, prepararVozSaudacao } from "@/lib/tts-audio"
+import { reproduzirVozSaudacao, prepararVozSaudacao, vozEstaPronta } from "@/lib/tts-audio"
+import {
+  abastecerDespensa,
+  pegarSaudacaoPronta,
+  descartarSaudacoesDeOntem,
+  tamanhoDaDespensa,
+} from "@/lib/despensa-vozes"
 import * as telemetria from "@/lib/telemetria-reconhecimento"
 import {
   enfileirarPonto,
@@ -1023,6 +1029,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           // por fora. Se a câmera demorar ou falhar, o loop normal assume e
           // nada quebra.
           void aquecerRedePesada()
+          // A despensa de saudações enche em seguida, na mesma janela de sala
+          // vazia. Sem `await`: a tela já está pronta e usável, e isto leva
+          // dezenas de segundos de rede que ninguém está esperando.
+          void abastecerDespensa(getFuncionariosCarregados())
           console.log(`🎥 Sistema de reconhecimento local pronto (${count} funcionários)!`)
           // Preload do Lottie check para transição instantânea
           fetch("https://lottie.host/8a95b3ad-f30a-4fb9-a55d-4153b3b92810/RPsps2O63O.lottie").catch(() => {})
@@ -1073,6 +1083,30 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // Revalidar o contexto do dia (clima muda, e à meia-noite o feriado também)
   useEffect(() => {
     const id = setInterval(aquecerContextoDia, 30 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  /*
+   * Repor a despensa de saudações ao longo do dia.
+   *
+   * De 40 em 40 minutos, e não uma vez de manhã, por dois motivos:
+   *
+   *   1. As batidas consomem o estoque. Quatro pessoas de manhã tiram quatro
+   *      frases de "Entrada"; sem reposição, a quinta pessoa cai no caminho
+   *      lento que a despensa existe para evitar.
+   *   2. A saudação comenta o clima. Uma frase gerada às 5 da manhã fala do
+   *      amanhecer, e usá-la na saída das 18h soa fora de lugar. Repor ao
+   *      longo do dia mantém as frases contemporâneas de quem as ouve.
+   *
+   * `descartarSaudacoesDeOntem` antes: à meia-noite o dia vira e as frases
+   * velhas passam a mencionar o clima e o feriado errados.
+   */
+  useEffect(() => {
+    const repor = () => {
+      descartarSaudacoesDeOntem()
+      void abastecerDespensa(getFuncionariosCarregados())
+    }
+    const id = setInterval(repor, 40 * 60 * 1000)
     return () => clearInterval(id)
   }, [])
 
@@ -1641,7 +1675,23 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           trabalhaSabado,
         })
 
-      const saudacaoIa: RespostaSaudacao = saudacaoGuardada
+      /*
+       * A DESPENSA VEM PRIMEIRO.
+       *
+       * Ela guarda frases escritas pela IA com a sala vazia, e — o que importa
+       * aqui — com o MP3 do Google JÁ BAIXADO. Pegar uma delas custa zero
+       * milissegundos e a voz sai no mesmo instante em que a tela aparece.
+       *
+       * Era isto que faltava. O caminho abaixo continua correto e continua
+       * valendo quando o estoque seca (app recém-aberto, muitas batidas
+       * seguidas do mesmo tipo), mas ele produz uma frase cujo áudio ainda
+       * precisa ser buscado — e é nessa janela que a voz sumia.
+       */
+      const daDespensa = !emCooldown ? pegarSaudacaoPronta(person.id, tipo) : null
+
+      const saudacaoIa: RespostaSaudacao = daDespensa
+        ? daDespensa
+        : saudacaoGuardada
         ? await Promise.race([
             saudacaoGuardada.promise.catch(() => fallbackComAudioPronto),
             new Promise<RespostaSaudacao>((resolve) =>
@@ -1649,6 +1699,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             ),
           ])
         : fallbackComAudioPronto
+
+      // O estoque daquela combinação baixou: repõe por trás, sem segurar nada.
+      if (daDespensa) {
+        void abastecerDespensa(getFuncionariosCarregados())
+      }
 
       telemetria.registrarSaudacaoIa(performance.now() - tSaudacao)
 
@@ -1692,6 +1747,19 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // diferente da prevista, rede lenta), a voz do navegador fala AGORA em
       // vez de esperar o MP3. Voz pior na hora serve; voz boa falando para
       // uma sala vazia não serve para nada.
+      /*
+       * A origem é decidida AQUI, de forma síncrona, e não dentro da função de
+       * voz. Motivo: `encerrarTentativa` roda três linhas abaixo, e a
+       * telemetria descarta qualquer medida que chegue depois de a tentativa
+       * fechar. Uma origem devolvida por promessa chegaria sempre tarde.
+       *
+       * O que dá para saber neste instante é justamente o que interessa: se a
+       * frase veio pronta da despensa, se o áudio dela já estava em memória,
+       * ou se vai ser preciso ir à rede com alguém esperando na frente da tela.
+       */
+      telemetria.registrarOrigemVoz(
+        daDespensa ? "despensa" : vozEstaPronta(mensagemVoz) ? "cache" : "rede"
+      )
       reproduzirVozSaudacao(mensagemVoz, { semEsperarRede: true })
 
       // Fecha a medição no mesmo instante em que a pessoa vê a tela pronta.
