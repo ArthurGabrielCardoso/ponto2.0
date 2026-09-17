@@ -388,6 +388,26 @@ export async function recognizeFace(
 }
 
 /**
+ * Mantém as quatro redes acordadas, sem depender de haver rosto na frente.
+ *
+ * Isto existe porque o aquecimento anterior não aquecia. Ele chamava
+ * `recognizeFace` com a câmera vazia, e a corrente da face-api pula tudo
+ * quando o detector não acha rosto — então as três redes caras nunca rodavam.
+ * O aquecimento periódico roda justamente quando não há ninguém, ou seja,
+ * errava sempre. Ver o comentário de `aquecerTudo` em `lib/face-worker.ts`.
+ *
+ * Não precisa da câmera: o worker aquece com um canvas próprio.
+ */
+export async function aquecerModelos(): Promise<void> {
+  if (!modelsLoaded) return
+  try {
+    await call("warmup", {})
+  } catch (e) {
+    console.warn("[face-client] aquecimento falhou (não crítico):", e)
+  }
+}
+
+/**
  * Checagem leve de sorriso (pós-identificação).
  */
 export async function detectSmileOnly(
