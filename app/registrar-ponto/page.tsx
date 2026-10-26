@@ -25,6 +25,16 @@ import type { CoordenadasLocalizacao } from "@/lib/geolocation"
 import { analisarSituacaoPonto, pontosFaltantesAntesDe, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { DialogoPontoInteligente, type PontoRegularizacao, type OpcaoSelecionada } from "@/components/dialogo-ponto-inteligente"
 import { PerguntaTipoPonto } from "@/components/pergunta-tipo-ponto"
+import { PontoManual, type EscolhaManual } from "@/components/ponto-manual"
+import { Hand } from "lucide-react"
+import {
+  enfileirarManual,
+  processarFilaManual,
+  limparFotosAntigas,
+  listarPessoasManual,
+  salvarListaManual,
+  type PessoaManual,
+} from "@/lib/ponto-manual"
 import { ehTipoOutro, type TipoFixo } from "@/lib/tipos-ponto"
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
 import { ModalCheckinHumor } from "@/components/modal-checkin-humor"
@@ -719,7 +729,12 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     diag: DiagnosticoPonto
     /** Quando a pergunta apareceu, para medir quanto a pessoa levou para responder. */
     desde: number
+    /** Batida manual (a pessoa escolheu o nome): a foto que ficou como prova. */
+    manual?: { foto: Blob | null }
   } | null>(null)
+  // Batida manual: tela de "quem vai bater o ponto?" + foto.
+  const [manualAberto, setManualAberto] = useState(false)
+  const [pessoasManual, setPessoasManual] = useState<PessoaManual[]>([])
   const [showSuccess, setShowSuccess] = useState(false)
   const showSuccessRef = useRef(false)
   const [mostrarCheckinHumor, setMostrarCheckinHumor] = useState(false)
@@ -1241,6 +1256,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         // 3. Carregar descritores dos funcionários
         if (mounted) setLoadingStatus("Carregando funcionários...")
         const count = await loadDescriptors()
+        // A lista de nomes fica guardada para a batida manual funcionar mesmo
+        // se, num próximo boot, a internet ou o sistema estiverem fora.
+        salvarListaManual(getFuncionariosCarregados())
 
         if (mounted) {
           // Mesma lista que alimentou os descritores — traz a grade de horários de
@@ -1342,6 +1360,25 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // Fila offline: sobe o que ficou para trás quando a internet volta, quando a
   // aba reaparece e periodicamente.
   useEffect(() => iniciarSincronizacaoAutomatica(setPontosPendentes), [])
+
+  // Evidência das batidas manuais (foto, verificação do rosto): sobe e confere
+  // em segundo plano. Roda ao voltar a internet, de tempos em tempos e logo
+  // depois do boot; a comparação do rosto só acontece com o tablet ocioso.
+  // Também apaga do bucket as fotos com mais de 90 dias, no máximo uma vez por dia.
+  useEffect(() => {
+    const rodar = () => void processarFilaManual({ podeVerificar: podeVerificarManual })
+    const primeira = window.setTimeout(rodar, 20_000)
+    const intervalo = window.setInterval(rodar, 45_000)
+    const limpeza = window.setTimeout(() => void limparFotosAntigas(), 90_000)
+    window.addEventListener("online", rodar)
+    return () => {
+      window.clearTimeout(primeira)
+      window.clearTimeout(limpeza)
+      window.clearInterval(intervalo)
+      window.removeEventListener("online", rodar)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Revalidar o contexto do dia (clima muda, e à meia-noite o feriado também)
   useEffect(() => {
@@ -1994,6 +2031,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     tipo,
     emCooldown,
     now,
+    origem,
   }: {
     person: RecognizedPerson
     funcObj: Funcionario
@@ -2001,6 +2039,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     tipo: string
     emCooldown: boolean
     now: Date
+    /** "manual" = a pessoa escolheu o nome em vez de ser reconhecida. */
+    origem?: "manual"
   }) => {
     const primeiroNome = person.nome.split(" ")[0]
 
@@ -2136,7 +2176,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // Fecha a medição no mesmo instante em que a pessoa vê a tela pronta.
       // Disparado e esquecido: não segura nada.
       telemetria.registrarTelaSucesso(tipo)
-      logar("info", "ponto_batido", tipo, { funcionario_id: person.id })
+      logar("info", "ponto_batido", tipo, { funcionario_id: person.id, origem: origem ?? "facial" })
       telemetria.encerrarTentativa("ponto_batido", modoTesteRef.current)
 
       // A tela já está na frente da pessoa — grava no Supabase em segundo plano.
@@ -2199,6 +2239,86 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     } catch {}
   }
 
+  /** A comparação do rosto da foto usa o worker: só roda com o tablet ocioso. */
+  const podeVerificarManual = () =>
+    diagRef.current.modelosProntos &&
+    screensaverRef.current &&
+    !isProcessingRef.current &&
+    !isRegisteringRef.current
+
+  const abrirManual = () => {
+    // O que o tablet tem agora: a lista em memória, ou a guardada na última
+    // vez que funcionou (é o caso que importa — sistema fora do ar).
+    const emMemoria = Array.from(funcionariosMapRef.current.values()).map((f) => ({ id: f.id, nome: f.nome }))
+    setPessoasManual(emMemoria.length > 0 ? emMemoria : listarPessoasManual())
+    // Segura o laço de reconhecimento: a câmera e o worker ficam livres para a foto.
+    isRegisteringRef.current = true
+    resetInactivityTimer()
+    logar("info", "manual_aberto", null, {
+      modelos_prontos: diagRef.current.modelosProntos,
+      funcionarios_em_memoria: funcionariosMapRef.current.size,
+      protecao_de_tela: screensaverRef.current,
+    })
+    setManualAberto(true)
+  }
+
+  const cancelarManual = () => {
+    logar("info", "manual_cancelado")
+    setManualAberto(false)
+    isRegisteringRef.current = false
+  }
+
+  /** Nome escolhido e foto tirada: segue para "o que você está registrando?". */
+  const handleProntoManual = async ({ pessoa, foto }: EscolhaManual) => {
+    setManualAberto(false)
+    const now = new Date()
+    const person: RecognizedPerson = {
+      id: pessoa.id,
+      nome: pessoa.nome,
+      similarity: 0,
+      isSmiling: false,
+      smileFrames: 0,
+      registroCompleto: false,
+    }
+    logar("info", "manual_pessoa_e_foto", null, { funcionario_id: pessoa.id, com_foto: !!foto })
+
+    try {
+      const funcObj: Funcionario =
+        funcionariosMapRef.current.get(pessoa.id) || { id: pessoa.id, nome: pessoa.nome, descritores: [] }
+
+      // Sem internet o banco não responde: espera pouco e segue com o que tem.
+      // Os registros só servem para o cooldown e para destacar o "Sugerido".
+      const registrosHoje = await Promise.race([
+        buscarRegistrosHoje(pessoa.id).catch(() => [] as RegistroPonto[]),
+        new Promise<RegistroPonto[]>((r) => setTimeout(() => r([]), 3000)),
+      ])
+
+      const ultimo = registrosHoje.length > 0 ? registrosHoje[registrosHoje.length - 1] : null
+      const msDesdeUltimo = ultimo
+        ? Math.abs(now.getTime() - new Date(ultimo.data_hora).getTime())
+        : Number.POSITIVE_INFINITY
+      if (msDesdeUltimo < COOLDOWN_MS) {
+        // Mesma regra do reconhecimento: segunda batida em menos de 60 s é a
+        // mesma batida. Nada novo é gravado, e nenhuma evidência é criada.
+        await concluirRegistro({
+          person,
+          funcObj,
+          registrosHoje,
+          tipo: ultimo?.tipo || "Entrada",
+          emCooldown: true,
+          now,
+          origem: "manual",
+        })
+        return
+      }
+
+      const diag = analisarSituacaoPonto(funcObj, registrosHoje, now)
+      setPerguntaTipo({ person, funcObj, registrosHoje, diag, desde: Date.now(), manual: { foto } })
+    } catch (error) {
+      mostrarErroDeRegistro(person, error, now)
+    }
+  }
+
   /**
    * A pessoa respondeu "o que você está registrando?".
    *
@@ -2235,6 +2355,36 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       registros_hoje: p.registrosHoje.length,
       // O motivo escrito não vai para o log: é texto livre da pessoa.
     })
+
+    if (p.manual) {
+      // Batida manual: sem diálogo de regularização (quem está sem o
+      // reconhecimento quer só bater o ponto) e com a evidência guardada.
+      try {
+        const now = new Date()
+        // A evidência entra ANTES de o ponto ser gravado: se algo falhar daqui
+        // em diante, o registro de que houve uma batida manual já existe.
+        await enfileirarManual({
+          funcionarioId: p.person.id,
+          nome: p.person.nome,
+          tipo,
+          dataHoraIso: now.toISOString(),
+          foto: p.manual.foto,
+        }).catch(() => "")
+        await concluirRegistro({
+          person: p.person,
+          funcObj: p.funcObj,
+          registrosHoje: p.registrosHoje,
+          tipo,
+          emCooldown: false,
+          now,
+          origem: "manual",
+        })
+        void processarFilaManual({ podeVerificar: podeVerificarManual })
+      } catch (error) {
+        mostrarErroDeRegistro(p.person, error, new Date())
+      }
+      return
+    }
 
     try {
       // O diálogo de regularização só entra quando o diagnóstico percebeu uma
@@ -2375,6 +2525,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     setRecognizedPerson(null)
     setDialogoInteligente(null)
     setPerguntaTipo(null)
+    setManualAberto(false)
     setMostrarCheckinHumor(false)
     setHumorSelecionado(null)
     isProcessingRef.current = false
@@ -2416,7 +2567,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
    * olhar de frente — reiniciar o worker não ajudaria em nada.
    */
   useEffect(() => {
-    if (screensaver || showSuccess || recognizedPerson || perguntaTipo || dialogoInteligente) {
+    if (screensaver || showSuccess || recognizedPerson || perguntaTipo || dialogoInteligente || manualAberto) {
       // Saiu da espera: o próximo ciclo conta do zero.
       esperaRef.current = { desde: Date.now(), passes: 0, rostos: 0, reiniciou: false }
       setAvisoLentidao(null)
@@ -2504,7 +2655,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       }
     }, 1000)
     return () => window.clearInterval(id)
-  }, [screensaver, showSuccess, recognizedPerson, perguntaTipo, dialogoInteligente, modelsReady])
+  }, [screensaver, showSuccess, recognizedPerson, perguntaTipo, dialogoInteligente, manualAberto, modelsReady])
 
   // Cleanup
   useEffect(() => {
@@ -2621,6 +2772,35 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             </span>
           </div>
         </div>
+      )}
+
+      {/* Batida manual: o plano B para quando o reconhecimento não funciona.
+          Discreto de propósito (só um ícone, apagado) — quem precisa, procura;
+          quem não precisa, nem vê. */}
+      {!modoTeste && !manualAberto && !showSuccess && !perguntaTipo && !dialogoInteligente &&
+        !mostrarCheckinHumor && !funcionarioAlmocoModal && (
+        <button
+          type="button"
+          onClick={(e) => {
+            // Na proteção de tela qualquer toque acorda o app; este não.
+            e.stopPropagation()
+            abrirManual()
+          }}
+          aria-label="Bater ponto manualmente"
+          title="Bater ponto manualmente"
+          className="fixed right-3 top-3 z-[45] flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/15 text-white/45 backdrop-blur-sm transition active:scale-90 active:text-white/90"
+        >
+          <Hand className="h-[18px] w-[18px]" />
+        </button>
+      )}
+
+      {manualAberto && (
+        <PontoManual
+          pessoas={pessoasManual}
+          videoRef={videoRef}
+          onPronto={handleProntoManual}
+          onCancelar={cancelarManual}
+        />
       )}
 
       {/* Aviso de lentidão: a pessoa tocou, a película saiu, e nada acontece. Sem
