@@ -22,8 +22,10 @@ import { DotLottieReact } from "@lottiefiles/dotlottie-react"
 import { registrarPonto, buscarRegistrosHoje, buscarFuncionarioPorId, registrarMultiplosPontos, buscarFuncionarios, aquecerConexaoSupabase } from "@/lib/supabase"
 import type { Funcionario, RegistroPonto } from "@/lib/types"
 import type { CoordenadasLocalizacao } from "@/lib/geolocation"
-import { analisarSituacaoPonto, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
-import { DialogoPontoInteligente, type PontoRegularizacao } from "@/components/dialogo-ponto-inteligente"
+import { analisarSituacaoPonto, pontosFaltantesAntesDe, type DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
+import { DialogoPontoInteligente, type PontoRegularizacao, type OpcaoSelecionada } from "@/components/dialogo-ponto-inteligente"
+import { PerguntaTipoPonto } from "@/components/pergunta-tipo-ponto"
+import { ehTipoOutro, type TipoFixo } from "@/lib/tipos-ponto"
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
 import { ModalCheckinHumor } from "@/components/modal-checkin-humor"
 import { OndaOrganicaDourada } from "@/components/onda-organica-dourada"
@@ -68,6 +70,7 @@ import {
   reiniciarWorker,
   iniciarVigiaDoWorker,
   coletarSaudeDoWorker,
+  workerEstaReiniciando,
 } from "@/lib/face-recognition-client"
 import { logar, iniciarLogTablet, registrarColetor, removerColetor } from "@/lib/log-tablet"
 
@@ -122,6 +125,34 @@ function descreverStream(stream: MediaStream | null) {
 
 /** Quanto tempo o loop pode ficar "processando" antes de ser dado como travado. */
 const LIMITE_LOOP_TRAVADO_MS = 90_000
+
+/**
+ * Espera depois do toque, em segundos, antes de cada degrau do aviso de
+ * lentidão. Em 8 s a pessoa já sentiu que algo está errado e precisa ouvir
+ * "estamos cuidando"; em 15 s o app não espera mais: reinicia o reconhecimento
+ * sozinho. Recarregar a página é o último recurso, só quando nenhum quadro foi
+ * processado em 45 s.
+ */
+const AVISO_LENTIDAO_S = 8
+const REINICIO_LENTIDAO_S = 15
+const RECARGA_LENTIDAO_S = 45
+const CHAVE_RECARGAS = "vitall_recargas_por_lentidao"
+
+/** No máximo 2 recargas em 15 minutos: se recarregar não resolve, recarregar de novo também não. */
+function podeRecarregarPorLentidao(): boolean {
+  try {
+    const agora = Date.now()
+    const lista: number[] = JSON.parse(localStorage.getItem(CHAVE_RECARGAS) || "[]").filter(
+      (t: number) => agora - t < 15 * 60_000
+    )
+    if (lista.length >= 2) return false
+    lista.push(agora)
+    localStorage.setItem(CHAVE_RECARGAS, JSON.stringify(lista))
+    return true
+  } catch {
+    return false
+  }
+}
 
 // Animação temática: emoji por 3.5s → depois Lottie check original
 function SuccessAnimation({ tipo }: { tipo: string }) {
@@ -626,6 +657,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     modelosProntos: false,
     inicio: Date.now(),
   })
+  // A espera por reconhecimento depois do toque: desde quando, quantos quadros
+  // o tablet processou e em quantos achou um rosto. Zera ao tocar e sempre que
+  // a pessoa sai do estado de "esperando ser reconhecida".
+  const esperaRef = useRef({ desde: 0, passes: 0, rostos: 0, reiniciou: false })
+  const [avisoLentidao, setAvisoLentidao] = useState<{ texto: string; detalhe: string } | null>(null)
   const rafRef = useRef<number | null>(null)
   const inactivityTimerRef = useRef<number | null>(null)
   const successTimeoutRef = useRef<number | null>(null)
@@ -670,6 +706,19 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const [dialogoInteligente, setDialogoInteligente] = useState<{
     diagnostico: DiagnosticoPonto
     person: RecognizedPerson
+    /** O que a pessoa acabou de escolher; o diálogo já abre nessa opção. */
+    opcaoInicial?: OpcaoSelecionada
+    /** Batidas anteriores que faltam hoje; o diálogo só pede e só grava essas. */
+    faltantes?: TipoFixo[]
+  } | null>(null)
+  // A pergunta "o que você está registrando?", que vem antes de qualquer saudação.
+  const [perguntaTipo, setPerguntaTipo] = useState<{
+    person: RecognizedPerson
+    funcObj: Funcionario
+    registrosHoje: RegistroPonto[]
+    diag: DiagnosticoPonto
+    /** Quando a pergunta apareceu, para medir quanto a pessoa levou para responder. */
+    desde: number
   } | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const showSuccessRef = useRef(false)
@@ -1638,6 +1687,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           // Reconhecimento completo: identificação + sorriso em 1 passe no Web Worker
           const tCompleto = performance.now()
           const result = await recognizeFace(video, SMILE_THRESHOLD)
+          esperaRef.current.passes += 1
+          if (result) esperaRef.current.rostos += 1
           telemetria.registrarPasseCompleto(performance.now() - tCompleto)
           telemetria.registrarCaptura(getUltimaCapturaMs())
           ultimoPassePesadoRef.current = Date.now()
@@ -1820,6 +1871,21 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
   // Registrar ponto — transição INSTANTÂNEA
   // Mostra tela de sucesso imediatamente com tipo pré-carregado, insert roda em background
+  /**
+   * Primeira metade da batida: descobre quem é, olha os registros do dia e
+   * PERGUNTA o que a pessoa está registrando.
+   *
+   * Antes, o tipo era deduzido aqui pela contagem de registros do dia e a tela
+   * de sucesso entrava direto. Uma batida esquecida ou uma saída fora do padrão
+   * deslocava a conta, e a pessoa entrava e ouvia "Excelente almoço". Agora a
+   * resposta vem de quem sabe — e a contagem só serve para destacar a opção
+   * "Sugerido", de modo que o caso comum continua sendo um toque.
+   *
+   * Duas exceções em que NÃO se pergunta:
+   *  - modo teste, que tem o seletor da própria barra;
+   *  - segunda batida em menos de 60 s: é a mesma batida, a pessoa só ficou na
+   *    frente da câmera. A tela repete o último tipo ("já foi registrado").
+   */
   const handleRegistro = async (person: RecognizedPerson) => {
     if (isRegisteringRef.current) return
     isRegisteringRef.current = true
@@ -1827,7 +1893,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     console.log(`🎯 ANALISANDO PONTO INTELIGENTE: ${person.nome}`)
 
     const now = new Date()
-    const primeiroNome = person.nome.split(" ")[0]
 
     try {
       // Funcionário: já está em memória desde o boot — a grade de horários é tudo
@@ -1850,40 +1915,96 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           : await buscarRegistrosHoje(person.id).catch(() => [] as RegistroPonto[])
       telemetria.registrarConsultaRegistros(performance.now() - tRegistros)
 
-      let tipo: string
-      let emCooldown = false
-
       if (modoTesteRef.current) {
-        // Modo teste: nenhuma das três travas do ponto real se aplica — nem o
-        // cooldown de 60s, nem o teto de 4 batidas no dia, nem o diálogo de
-        // regularização. O tipo vem do seletor da barra ou do ciclo
+        // Modo teste: nenhuma das travas do ponto real se aplica — nem o
+        // cooldown de 60s, nem o teto de 4 batidas no dia, nem a pergunta. O
+        // tipo vem do seletor da barra ou do ciclo
         // Entrada → Saída Almoço → Retorno → Saída, que repete sem fim.
-        tipo = consumirTipoTeste()
-      } else {
-        // Analisar situação inteligente com base na grade
-        const diag = analisarSituacaoPonto(funcObj, registrosHoje, now)
-
-        if (diag.tipo !== "DIRETO") {
-          // Exibir diálogo inteligente amigável
-          setDialogoInteligente({ diagnostico: diag, person })
-          return
-        }
-
-        // === Fluxo Direto ===
-        // Tudo que define a tela de sucesso é resolvido aqui, em memória: o tipo
-        // vem do diagnóstico e o cooldown de 60s sai do último registro do dia —
-        // as mesmas duas regras que o registrarPonto aplica. Assim a tela entra
-        // na hora e a gravação no Supabase corre em segundo plano, em vez de a
-        // pessoa ficar olhando a moldura esmeralda esperando a rede.
-        const ultimoRegistro =
-          registrosHoje.length > 0 ? registrosHoje[registrosHoje.length - 1] : null
-        const msDesdeUltimo = ultimoRegistro
-          ? Math.abs(now.getTime() - new Date(ultimoRegistro.data_hora).getTime())
-          : Number.POSITIVE_INFINITY
-        emCooldown = msDesdeUltimo < COOLDOWN_MS
-        tipo = emCooldown ? ultimoRegistro?.tipo || "Entrada" : diag.proximoTipoSugerido
+        await concluirRegistro({
+          person,
+          funcObj,
+          registrosHoje,
+          tipo: consumirTipoTeste(),
+          emCooldown: false,
+          now,
+        })
+        return
       }
 
+      // O cooldown de 60s sai do último registro do dia — a mesma regra que o
+      // registrarPonto aplica. Calculado em memória para a tela entrar na hora.
+      const ultimoRegistro =
+        registrosHoje.length > 0 ? registrosHoje[registrosHoje.length - 1] : null
+      const msDesdeUltimo = ultimoRegistro
+        ? Math.abs(now.getTime() - new Date(ultimoRegistro.data_hora).getTime())
+        : Number.POSITIVE_INFINITY
+      if (msDesdeUltimo < COOLDOWN_MS) {
+        await concluirRegistro({
+          person,
+          funcObj,
+          registrosHoje,
+          tipo: ultimoRegistro?.tipo || "Entrada",
+          emCooldown: true,
+          now,
+        })
+        return
+      }
+
+      // === A pergunta ===
+      // `isRegisteringRef` fica ligado: segura o laço de reconhecimento enquanto
+      // a pessoa responde. Quem libera é `resetToInitialState`, ou a conclusão.
+      const diag = analisarSituacaoPonto(funcObj, registrosHoje, now)
+      setPerguntaTipo({ person, funcObj, registrosHoje, diag, desde: Date.now() })
+      logar("info", "pergunta_tipo_exibida", null, {
+        sugerido: diag.proximoTipoSugerido,
+        diagnostico: diag.tipo,
+        registros_hoje: registrosHoje.length,
+      })
+    } catch (error) {
+      mostrarErroDeRegistro(person, error, now)
+    }
+  }
+
+  /** A tela de aviso quando o registro não pôde ser concluído. */
+  const mostrarErroDeRegistro = (person: RecognizedPerson, error: unknown, now: Date) => {
+    console.error("Erro ao registrar ponto:", error)
+    const completed: RecognizedPerson = {
+      ...person,
+      registroCompleto: true,
+      tipo: "Aviso",
+      hora: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      data: now.toLocaleDateString(),
+      mensagem: error instanceof Error ? error.message : "Não foi possível registrar o ponto.",
+    }
+    setRecognizedPerson(completed)
+    setShowSuccess(true)
+    successTimeoutRef.current = window.setTimeout(() => {
+      resetToInitialState()
+    }, 8000)
+  }
+
+  /**
+   * Segunda metade da batida: com o tipo já definido, monta a saudação, mostra
+   * a tela de sucesso e grava em segundo plano.
+   */
+  const concluirRegistro = async ({
+    person,
+    funcObj,
+    registrosHoje,
+    tipo,
+    emCooldown,
+    now,
+  }: {
+    person: RecognizedPerson
+    funcObj: Funcionario
+    registrosHoje: RegistroPonto[]
+    tipo: string
+    emCooldown: boolean
+    now: Date
+  }) => {
+    const primeiroNome = person.nome.split(" ")[0]
+
+    try {
       // Saudação da IA, COM TETO DE ESPERA.
       //
       // O comentário aqui dizia que a IA nunca segura a tela, porque o pedido
@@ -1966,7 +2087,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         : saudacaoIa.voz
 
       // Ativar check-in de humor ocasional (ex: ~35% das vezes na entrada sem cooldown)
-      const ehEntrada = tipo.toLowerCase().includes("entrada")
+      const ehEntrada = !ehTipoOutro(tipo) && tipo.toLowerCase().includes("entrada")
       if (modoTesteRef.current && forcarHumorRef.current) {
         setMostrarCheckinHumor(true)
       } else if (ehEntrada && !emCooldown) {
@@ -2038,7 +2159,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       }
 
       // Gerenciar lembretes automáticos de almoço por voz
-      const tl = tipo.toLowerCase()
+      // "Outro - ..." fica de fora: o motivo escrito pela pessoa pode conter
+      // "almoço" ou "retorno" sem ser nada disso.
+      const tl = ehTipoOutro(tipo) ? "" : tipo.toLowerCase()
       if (tl.includes("saída") && tl.includes("almoço")) {
         agendarLembretesAlmoco(funcObj, now)
       } else if (tl.includes("retorno") || (tl.includes("saída") && !tl.includes("almoço"))) {
@@ -2050,20 +2173,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         resetToInitialState()
       }, 15000)
     } catch (error) {
-      console.error("Erro ao registrar ponto:", error)
-      const completed: RecognizedPerson = {
-        ...person,
-        registroCompleto: true,
-        tipo: "Aviso",
-        hora: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        data: now.toLocaleDateString(),
-        mensagem: error instanceof Error ? error.message : "Não foi possível registrar o ponto.",
-      }
-      setRecognizedPerson(completed)
-      setShowSuccess(true)
-      successTimeoutRef.current = window.setTimeout(() => {
-        resetToInitialState()
-      }, 8000)
+      mostrarErroDeRegistro(person, error, now)
     }
   }
 
@@ -2087,6 +2197,92 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         reproduzirVozSaudacao(respostaHumor.voz)
       }
     } catch {}
+  }
+
+  /**
+   * A pessoa respondeu "o que você está registrando?".
+   *
+   * Caminhos:
+   *  - "Outro": registra direto, sem diálogo de regularização — o motivo já
+   *    explica a batida.
+   *  - tipo fixo e a jornada do dia tem uma lacuna que o diagnóstico percebeu
+   *    (entrada esquecida, retorno esquecido...): abre o diálogo de
+   *    regularização já na opção escolhida, para ela só confirmar os horários.
+   *  - tipo fixo sem lacuna: registra direto.
+   */
+  const OPCAO_DO_TIPO: Record<TipoFixo, OpcaoSelecionada> = {
+    Entrada: "entrada_agora",
+    "Saída Almoço": "saida_almoco",
+    "Retorno Almoço": "retorno_almoco",
+    Saída: "encerrando_expediente",
+  }
+
+  const handleEscolherTipo = async (
+    tipo: string,
+    info: { sugerido: boolean; outro: boolean }
+  ) => {
+    const p = perguntaTipo
+    if (!p) return
+    setPerguntaTipo(null)
+    const msPergunta = Date.now() - p.desde
+    telemetria.registrarPergunta(msPergunta)
+
+    logar("info", "tipo_escolhido", info.outro ? "Outro" : tipo, {
+      ms_para_responder: msPergunta,
+      sugerido: p.diag.proximoTipoSugerido,
+      igual_ao_sugerido: info.sugerido,
+      diagnostico: p.diag.tipo,
+      registros_hoje: p.registrosHoje.length,
+      // O motivo escrito não vai para o log: é texto livre da pessoa.
+    })
+
+    try {
+      // O diálogo de regularização só entra quando o diagnóstico percebeu uma
+      // lacuna na jornada (entrada ou almoço esquecidos num horário em que já
+      // deveriam existir) E a batida escolhida pressupõe algo que não está
+      // registrado. "Entrada" nunca pressupõe nada; "Outro" também não.
+      const lacunaNoDia = p.diag.tipo !== "DIRETO" && p.diag.tipo !== "DIA_COMPLETO"
+      const faltantes = info.outro ? [] : pontosFaltantesAntesDe(tipo as TipoFixo, p.registrosHoje)
+      if (lacunaNoDia && faltantes.length > 0) {
+        setDialogoInteligente({
+          diagnostico: p.diag,
+          person: p.person,
+          opcaoInicial: OPCAO_DO_TIPO[tipo as TipoFixo],
+          faltantes,
+        })
+        return
+      }
+
+      if (info.outro) {
+        // O texto do "Outro" é fixo (sem sorteio), então dá para baixar o áudio
+        // dele agora — na hora de falar, ele já está em memória.
+        const voz = gerarSaudacaoLocalDoDia({
+          nome: p.person.nome,
+          tipoPonto: tipo,
+          dataHora: new Date(),
+          trabalhaSabado: !!p.funcObj.horarios?.sabado?.ativo,
+        }).voz
+        await Promise.race([
+          prepararVozSaudacao(voz).catch(() => {}),
+          new Promise((r) => setTimeout(r, 1200)),
+        ])
+      } else if (!info.sugerido) {
+        // A saudação adiantada era do tipo sugerido. Escolheu outro: pede a
+        // do tipo certo agora (a despensa costuma cobrir, isto é o reserva).
+        prefetchSaudacao(p.funcObj, tipo)
+      }
+
+      await concluirRegistro({
+        person: p.person,
+        funcObj: p.funcObj,
+        registrosHoje: p.registrosHoje,
+        tipo,
+        emCooldown: false,
+        now: new Date(),
+      })
+    } catch (error) {
+      mostrarErroDeRegistro(p.person, error, new Date())
+    }
   }
 
   // Confirmação do diálogo inteligente (insere múltiplos pontos ou ponto específico)
@@ -2178,6 +2374,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     setShowSuccess(false)
     setRecognizedPerson(null)
     setDialogoInteligente(null)
+    setPerguntaTipo(null)
     setMostrarCheckinHumor(false)
     setHumorSelecionado(null)
     isProcessingRef.current = false
@@ -2199,6 +2396,115 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       setCameraActive(false)
     }
   }, [])
+
+  /*
+   * Aviso e recuperação de lentidão depois do toque.
+   *
+   * O estado "esperando ser reconhecida" é: película fora, ninguém identificado
+   * ainda, nenhuma pergunta nem tela de sucesso. Se ele dura, a pessoa fica
+   * olhando uma câmera muda. Então, contando do toque:
+   *
+   *    8 s  mensagem na tela dizendo o que está acontecendo
+   *   15 s  se o tablet quase não processou quadros, reinicia o reconhecimento
+   *         sozinho (o mesmo reinício do vigia) e diz isso
+   *   45 s  se NENHUM quadro foi processado, recarrega a página — no máximo 2
+   *         vezes em 15 minutos
+   *
+   * "Lento" aqui é medido, não suposto: poucos quadros processados desde o
+   * toque. Se o tablet processa normalmente e só não acha ou não reconhece o
+   * rosto, o problema é a pessoa (longe, contraluz) e a mensagem pede para
+   * olhar de frente — reiniciar o worker não ajudaria em nada.
+   */
+  useEffect(() => {
+    if (screensaver || showSuccess || recognizedPerson || perguntaTipo || dialogoInteligente) {
+      // Saiu da espera: o próximo ciclo conta do zero.
+      esperaRef.current = { desde: Date.now(), passes: 0, rostos: 0, reiniciou: false }
+      setAvisoLentidao(null)
+      return
+    }
+    if (!esperaRef.current.desde) esperaRef.current.desde = Date.now()
+
+    const id = window.setInterval(() => {
+      const e = esperaRef.current
+      const dt = (Date.now() - e.desde) / 1000
+
+      if (!modelsReady) {
+        if (dt < 2) return
+        setAvisoLentidao({
+          texto: "Iniciando o sistema de reconhecimento…",
+          detalhe:
+            dt < 20
+              ? "Isso leva alguns segundos. Fique por aqui."
+              : "Está demorando mais que o normal. Já estamos tentando de novo.",
+        })
+        return
+      }
+
+      const lento = e.passes < 3
+      const naoVeRosto = e.rostos === 0
+
+      if (dt >= RECARGA_LENTIDAO_S && e.passes === 0) {
+        if (podeRecarregarPorLentidao()) {
+          logar("fatal", "recarregando_por_lentidao", `${Math.round(dt)} s sem processar nenhum quadro`, {
+            passes: e.passes,
+            reiniciou: e.reiniciou,
+          })
+          setAvisoLentidao({
+            texto: "Atualizando o sistema…",
+            detalhe: "Em instantes você já consegue bater o ponto.",
+          })
+          window.clearInterval(id)
+          window.setTimeout(() => window.location.reload(), 1500)
+          return
+        }
+      }
+
+      if (dt >= REINICIO_LENTIDAO_S) {
+        if (lento) {
+          setAvisoLentidao({
+            texto: "Reiniciando o reconhecimento…",
+            detalhe: "Só um instante, estamos preparando tudo para você bater o ponto.",
+          })
+          if (!e.reiniciou) {
+            e.reiniciou = true
+            logar("erro", "lentidao_apos_toque", `${Math.round(dt)} s e só ${e.passes} quadro(s) processado(s)`, {
+              passes: e.passes,
+              rostos: e.rostos,
+              reiniciando_ja: workerEstaReiniciando(),
+            })
+            void reiniciarWorker(`lentidão após o toque: ${e.passes} quadro(s) em ${Math.round(dt)} s`, false)
+          }
+        } else {
+          setAvisoLentidao(
+            naoVeRosto
+              ? { texto: "Não estou vendo o seu rosto", detalhe: "Aproxime-se e olhe de frente para a câmera." }
+              : {
+                  texto: "Ainda não consegui te reconhecer",
+                  detalhe: "Olhe de frente para a câmera, com o rosto bem iluminado.",
+                }
+          )
+        }
+      } else if (dt >= AVISO_LENTIDAO_S) {
+        setAvisoLentidao(
+          lento
+            ? {
+                texto: "O sistema está um pouco lento",
+                detalhe: "Já estamos te reconhecendo. Fique de frente para a câmera.",
+              }
+            : naoVeRosto
+            ? { texto: "Não estou vendo o seu rosto", detalhe: "Aproxime-se e olhe de frente para a câmera." }
+            : {
+                texto: "Ainda não consegui te reconhecer",
+                detalhe: "Olhe de frente para a câmera, com o rosto bem iluminado.",
+              }
+        )
+        if (dt < AVISO_LENTIDAO_S + 1) {
+          logar("aviso", "aviso_de_espera_exibido", null, { passes: e.passes, rostos: e.rostos, lento })
+        }
+      }
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [screensaver, showSuccess, recognizedPerson, perguntaTipo, dialogoInteligente, modelsReady])
 
   // Cleanup
   useEffect(() => {
@@ -2298,7 +2604,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
       {/* Indicador em Glassmorphism Dourado — Posicione seu rosto na câmera (Sem bolinha)
           Só aparece quando a película já saiu 100% (peliculaSaindo === 0) */}
-      {!screensaver && peliculaSaindo === 0 && !showSuccess && !recognizedPerson && modelsReady && cameraActive && (
+      {!screensaver && peliculaSaindo === 0 && !showSuccess && !recognizedPerson && modelsReady && cameraActive && !avisoLentidao && (
         <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none animate-in fade-in duration-300">
           <div
             className="py-4 px-6 border-t backdrop-blur-xl text-white text-center"
@@ -2313,6 +2619,35 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             <span className="text-sm sm:text-base font-medium tracking-wide text-white drop-shadow-sm">
               Posicione seu rosto na câmera
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Aviso de lentidão: a pessoa tocou, a película saiu, e nada acontece. Sem
+          isto ela fica olhando uma câmera muda sem saber se travou. */}
+      {avisoLentidao && !screensaver && !showSuccess && !recognizedPerson && !perguntaTipo && !dialogoInteligente && (
+        <div
+          className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-300"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="py-5 px-6 border-t backdrop-blur-xl text-white text-center"
+            style={{
+              background: "linear-gradient(180deg, rgba(198, 158, 107, 0.9) 0%, rgba(150, 107, 60, 0.95) 100%)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              borderColor: "rgba(255, 255, 255, 0.35)",
+              boxShadow: "0 -8px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
+            }}
+          >
+            <div className="flex items-center justify-center gap-3">
+              <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />
+              <span className="text-lg sm:text-xl font-bold tracking-tight drop-shadow">{avisoLentidao.texto}</span>
+            </div>
+            <div className="mt-1 text-sm sm:text-base font-medium text-amber-50/95 drop-shadow-sm">
+              {avisoLentidao.detalhe}
+            </div>
           </div>
         </div>
       )}
@@ -2348,6 +2683,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // animação vem depois e não tem voto nenhum sobre isso.
             screensaverRef.current = false
             setScreensaver(false)
+            esperaRef.current = { desde: Date.now(), passes: 0, rostos: 0, reiniciou: false }
             logar("info", "toque")
             telemetria.registrarToque()
             // Único gesto garantido da batida: é aqui, e só aqui, que dá para
@@ -2429,11 +2765,30 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         />
       )}
 
+      {/* "O que você está registrando?" — antes de qualquer saudação. */}
+      {perguntaTipo && (
+        <PerguntaTipoPonto
+          nome={perguntaTipo.person.nome}
+          sugerido={perguntaTipo.diag.proximoTipoSugerido}
+          onEscolher={handleEscolherTipo}
+          onTempoEsgotado={() => {
+            logar("aviso", "pergunta_tipo_sem_resposta")
+            resetToInitialState()
+          }}
+          onCancelar={() => {
+            logar("info", "pergunta_tipo_cancelada")
+            resetToInitialState()
+          }}
+        />
+      )}
+
           {/* Diálogo Inteligente de Resolução de Horários */}
       {dialogoInteligente && (
         <DialogoPontoInteligente
           nome={dialogoInteligente.person.nome}
           diagnostico={dialogoInteligente.diagnostico}
+          opcaoInicial={dialogoInteligente.opcaoInicial}
+          faltantes={dialogoInteligente.faltantes}
           onConfirmar={handleConfirmarDialogoInteligente}
           onCancelar={() => {
             setDialogoInteligente(null)

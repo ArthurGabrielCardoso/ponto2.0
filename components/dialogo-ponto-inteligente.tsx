@@ -7,6 +7,7 @@ import { Clock, CheckCircle2, ArrowRight, ArrowLeft, Sparkles, Check } from "luc
 import type { DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
 import { horaParaMinutos, minutosParaHoraStr } from "@/lib/logica-ponto-inteligente"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
+import type { TipoFixo } from "@/lib/tipos-ponto"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 import "../app/ponto-registrado/ponto-batido.css"
 
@@ -21,9 +22,23 @@ interface DialogoPontoInteligenteProps {
   onConfirmar: (pontosParaRegistrar: PontoRegularizacao[], tipoExibicao: string, mensagemPersonalizada: string) => void
   onCancelar: () => void
   modoDemonstracao?: boolean
+  /**
+   * O que a pessoa acabou de escolher na pergunta "o que você está
+   * registrando?". Quando vem, o diálogo já abre nessa opção: ela só confirma
+   * (e ajusta os horários esquecidos), em vez de responder a mesma coisa duas
+   * vezes.
+   */
+  opcaoInicial?: OpcaoSelecionada
+  /**
+   * As batidas anteriores que ainda não existem hoje. Quando vem, o diálogo só
+   * pede o horário dessas e só insere essas — as que já estão registradas
+   * não são perguntadas nem gravadas de novo. Sem a prop, vale o comportamento
+   * antigo (pede e insere tudo).
+   */
+  faltantes?: TipoFixo[]
 }
 
-type OpcaoSelecionada = "entrada_agora" | "saida_almoco" | "retorno_almoco" | "encerrando_expediente"
+export type OpcaoSelecionada = "entrada_agora" | "saida_almoco" | "retorno_almoco" | "encerrando_expediente"
 
 export function DialogoPontoInteligente({
   nome,
@@ -31,21 +46,30 @@ export function DialogoPontoInteligente({
   onConfirmar,
   onCancelar,
   modoDemonstracao = false,
+  opcaoInicial,
+  faltantes,
 }: DialogoPontoInteligenteProps) {
   const primeiroNome = nome.split(" ")[0]
   const { tipo, horariosGrade, horariosSugeridos } = diagnostico
 
   // Opção selecionada entre os 4 botões lado a lado
   const [opcaoSelecionada, setOpcaoSelecionada] = useState<OpcaoSelecionada>(
-    tipo === "PERGUNTA_ENTRADA_OU_ALMOCO"
-      ? "saida_almoco"
-      : tipo === "PERGUNTA_RETORNO_OU_SAIDA"
-      ? "retorno_almoco"
-      : "encerrando_expediente"
+    opcaoInicial ??
+      (tipo === "PERGUNTA_ENTRADA_OU_ALMOCO"
+        ? "saida_almoco"
+        : tipo === "PERGUNTA_RETORNO_OU_SAIDA"
+        ? "retorno_almoco"
+        : "encerrando_expediente")
   )
 
   // Etapas do fluxo
-  const [etapa, setEtapa] = useState<"selecao" | "ajuste" | "processando">("selecao")
+  // Quem já respondeu "o que você está registrando?" não escolhe de novo: vai
+  // direto ao ajuste dos horários que faltam.
+  const [etapa, setEtapa] = useState<"selecao" | "ajuste" | "processando">(
+    opcaoInicial && faltantes && faltantes.length > 0 ? "ajuste" : "selecao"
+  )
+  // Cada campo só aparece se aquela batida ainda não existe.
+  const pedir = (t: TipoFixo) => !faltantes || faltantes.includes(t)
   const [tempoRestante, setTempoRestante] = useState(45)
 
   // Horários retroativos
@@ -63,7 +87,12 @@ export function DialogoPontoInteligente({
     } else if (tipo === "PERGUNTA_RETORNO_OU_SAIDA") {
       textoVoz = `Olá, ${primeiroNome}! Você esqueceu de bater o retorno do almoço? Que horas você retornou?`
     }
+    // Quem já respondeu a pergunta não precisa ouvir as opções de novo.
+    if (opcaoInicial) {
+      textoVoz = `${primeiroNome}, confirme os horários que faltam para deixar o seu dia certinho.`
+    }
     reproduzirVozSaudacao(textoVoz)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, primeiroNome])
 
   useEffect(() => {
@@ -109,6 +138,12 @@ export function DialogoPontoInteligente({
     }
   }
 
+  /** Descarta as batidas que já estão registradas hoje; a última (a de agora) fica sempre. */
+  const soOQueFalta = <T extends { tipo: string }>(pontos: T[]): T[] =>
+    !faltantes
+      ? pontos
+      : pontos.filter((p, i) => i === pontos.length - 1 || faltantes.includes(p.tipo as TipoFixo))
+
   const handleConfirmarAjustes = () => {
     setEtapa("processando")
     setTimeout(() => {
@@ -117,10 +152,10 @@ export function DialogoPontoInteligente({
       if (opcaoSelecionada === "saida_almoco") {
         const isoChegada = criarIsoHoje(horaChegada)
         onConfirmar(
-          [
+          soOQueFalta([
             { tipo: "Entrada", dataHoraIso: isoChegada },
             { tipo: "Saída Almoço", dataHoraIso: agora },
-          ],
+          ]),
           "Saída Almoço",
           `Excelente almoço, ${primeiroNome}!`
         )
@@ -128,11 +163,11 @@ export function DialogoPontoInteligente({
         const isoChegada = criarIsoHoje(horaChegada)
         const isoSaidaAlmoco = criarIsoHoje(horaSaidaAlmoco)
         onConfirmar(
-          [
+          soOQueFalta([
             { tipo: "Entrada", dataHoraIso: isoChegada },
             { tipo: "Saída Almoço", dataHoraIso: isoSaidaAlmoco },
             { tipo: "Retorno Almoço", dataHoraIso: agora },
-          ],
+          ]),
           "Retorno Almoço",
           `Excelente retorno ao trabalho, ${primeiroNome}!`
         )
@@ -141,12 +176,12 @@ export function DialogoPontoInteligente({
         const isoSaidaAlmoco = criarIsoHoje(horaSaidaAlmoco)
         const isoRetornoAlmoco = criarIsoHoje(horaRetornoAlmoco)
         onConfirmar(
-          [
+          soOQueFalta([
             { tipo: "Entrada", dataHoraIso: isoChegada },
             { tipo: "Saída Almoço", dataHoraIso: isoSaidaAlmoco },
             { tipo: "Retorno Almoço", dataHoraIso: isoRetornoAlmoco },
             { tipo: "Saída", dataHoraIso: agora },
-          ],
+          ]),
           "Saída",
           `Excelente noite, ${primeiroNome}!`
         )
@@ -365,6 +400,7 @@ export function DialogoPontoInteligente({
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-white/[0.06] p-4 sm:p-5 rounded-2xl border border-white/15 backdrop-blur-2xl">
                 {/* Entrada (Comum a todas as opções de ajuste) */}
+                {pedir("Entrada") && (
                 <div className="bg-black/30 p-3.5 rounded-xl border border-white/10 shadow-sm flex items-center justify-between gap-3">
                   <div>
                     <span className="text-xs uppercase font-bold text-amber-300 tracking-wider flex items-center gap-1.5">
@@ -393,9 +429,10 @@ export function DialogoPontoInteligente({
                     </button>
                   </div>
                 </div>
+                )}
 
                 {/* Saída Almoço (Para retorno do almoço ou fim do dia) */}
-                {(opcaoSelecionada === "retorno_almoco" || opcaoSelecionada === "encerrando_expediente") && (
+                {(opcaoSelecionada === "retorno_almoco" || opcaoSelecionada === "encerrando_expediente") && pedir("Saída Almoço") && (
                   <div className="bg-black/30 p-3.5 rounded-xl border border-white/10 shadow-sm flex items-center justify-between gap-3">
                     <div>
                       <span className="text-xs uppercase font-bold text-orange-300 tracking-wider flex items-center gap-1.5">
@@ -427,7 +464,7 @@ export function DialogoPontoInteligente({
                 )}
 
                 {/* Retorno Almoço (Para fim de expediente) */}
-                {opcaoSelecionada === "encerrando_expediente" && (
+                {opcaoSelecionada === "encerrando_expediente" && pedir("Retorno Almoço") && (
                   <div className="bg-black/30 p-3.5 rounded-xl border border-white/10 shadow-sm flex items-center justify-between gap-3 sm:col-span-2">
                     <div>
                       <span className="text-xs uppercase font-bold text-teal-300 tracking-wider flex items-center gap-1.5">

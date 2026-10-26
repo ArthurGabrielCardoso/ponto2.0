@@ -492,6 +492,11 @@ async function sondar() {
   }
 }
 
+/** Há um reinício do worker em andamento agora (a tela usa para avisar a pessoa). */
+export function workerEstaReiniciando(): boolean {
+  return !!reiniciando
+}
+
 /** Liga a sonda de saúde. Idempotente. A página chama uma vez, depois do boot. */
 export function iniciarVigiaDoWorker() {
   if (vigiaId !== null || typeof window === "undefined") return

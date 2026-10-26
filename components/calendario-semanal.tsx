@@ -1604,6 +1604,12 @@ export function CalendarioSemanal({
                               <option value="Saída Almoço">Saída Almoço</option>
                               <option value="Retorno Almoço">Retorno Almoço</option>
                               <option value="Saída">Saída</option>
+                              {/* Tipos fora dos quatro (ex.: "Outro - saindo: Banco") ficam
+                                  visíveis e preservados; sem esta opção o select mostraria
+                                  "Entrada" e a edição sobrescreveria o tipo sem ninguém ver. */}
+                              {registro.tipo && !["Entrada", "Saída Almoço", "Retorno Almoço", "Saída"].includes(registro.tipo) && (
+                                <option value={registro.tipo}>{registro.tipo}</option>
+                              )}
                             </select>
                           </div>
                         </div>

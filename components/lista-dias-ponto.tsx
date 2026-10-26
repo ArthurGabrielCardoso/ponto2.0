@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
+import { ehTipoOutro } from "@/lib/tipos-ponto"
 
 export interface BatidaDoDia {
   id: string
@@ -29,6 +30,7 @@ interface ListaDiasPontoProps {
 }
 
 function corDoTipo(tipo: string): string {
+  if (ehTipoOutro(tipo)) return "bg-white/60"
   const t = (tipo || "").toLowerCase()
   if (t.includes("retorno")) return "bg-teal-500"
   if (t.includes("almoço") || t.includes("almoco")) return "bg-amber-500"

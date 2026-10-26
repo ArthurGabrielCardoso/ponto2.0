@@ -74,9 +74,15 @@ const POR_COMBINACAO = 3
  * Tipos de ponto que valem estoque.
  *
  * As strings têm que bater exatamente com as que `analisarSituacaoPonto`
- * devolve, senão a despensa enche de frases que ninguém procura.
+ * devolve e com as que a tela de escolha grava, senão a despensa enche de
+ * frases que ninguém procura.
+ *
+ * Aqui estava "Volta Almoço", e o tipo real é "Retorno Almoço". Dois efeitos:
+ * o retorno nunca achava frase pronta (a chave não batia, então caía sempre no
+ * caminho lento), e as frases guardadas sob "Volta Almoço" eram geradas com um
+ * tipo que a saudação não reconhece — e que caía em "Entrada".
  */
-export const TIPOS_DE_PONTO = ["Entrada", "Saída Almoço", "Volta Almoço", "Saída"] as const
+export const TIPOS_DE_PONTO = ["Entrada", "Saída Almoço", "Retorno Almoço", "Saída"] as const
 
 /**
  * Espera entre uma geração e outra.

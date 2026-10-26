@@ -1,4 +1,5 @@
 import type { Funcionario, RegistroPonto, HorariosSemana, HorarioDia } from "./types"
+import { ehTipoOutro, type TipoFixo } from "./tipos-ponto"
 
 export type TipoDiagnostico =
   | "DIRETO"
@@ -24,6 +25,47 @@ export interface DiagnosticoPonto {
     horaSaida?: string
   }
   registrosHoje: RegistroPonto[]
+}
+
+/**
+ * Qual dos quatro tipos fixos um texto de `registros_ponto.tipo` representa.
+ *
+ * A tabela tem lixo histórico — "entrada", "saida_almoco", "Limite atingido" —
+ * então a leitura é tolerante a caixa, acento e underscore, e devolve `null`
+ * para o que não é nenhum dos quatro (incluindo "Outro - ..."). Diferente do
+ * `normalizarTipoPonto` da saudação, que cai em "Entrada" para o desconhecido:
+ * aqui isso faria uma linha de lixo contar como entrada já registrada.
+ */
+export function classificarTipoFixo(tipo?: string | null): TipoFixo | null {
+  if (!tipo || ehTipoOutro(tipo)) return null
+  const t = tipo
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/_/g, " ")
+  if (t.includes("entrada")) return "Entrada"
+  if (t.includes("saida") && t.includes("almoco")) return "Saída Almoço"
+  if (t.includes("retorno") || t.includes("volta")) return "Retorno Almoço"
+  if (t.includes("saida")) return "Saída"
+  return null
+}
+
+/**
+ * As batidas que deveriam existir ANTES de `tipo` e ainda não existem hoje.
+ *
+ * Saída sem Retorno, Retorno sem Saída Almoço, tudo sem Entrada. É o que o
+ * diálogo de regularização oferece para completar — e, só com o que falta,
+ * nunca insere de novo o que já está registrado.
+ */
+export function pontosFaltantesAntesDe(tipo: TipoFixo, registros: RegistroPonto[]): TipoFixo[] {
+  const antes: Record<TipoFixo, TipoFixo[]> = {
+    Entrada: [],
+    "Saída Almoço": ["Entrada"],
+    "Retorno Almoço": ["Entrada", "Saída Almoço"],
+    Saída: ["Entrada", "Saída Almoço", "Retorno Almoço"],
+  }
+  const tem = new Set(registros.map((r) => classificarTipoFixo(r.tipo)))
+  return antes[tipo].filter((t) => !tem.has(t))
 }
 
 const horarioPadrao: HorarioDia = {

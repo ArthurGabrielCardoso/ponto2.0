@@ -2,6 +2,7 @@ import type { Funcionario, RegistroPonto } from "./types"
 import { obterGradeDoDia, horaParaMinutos } from "./logica-ponto-inteligente"
 import { reproduzirVozSaudacao } from "./tts-audio"
 import { buscarFuncionarios, buscarTodosRegistrosHoje } from "./supabase"
+import { ehTipoOutro } from "./tipos-ponto"
 
 export interface InfoAlmocoAtivo {
   funcionarioId: string
@@ -190,9 +191,9 @@ export async function sincronizarSessoesAlmocoDoDia(): Promise<InfoAlmocoAtivo[]
     for (const func of funcionarios) {
       const regs = registrosPorFunc.get(func.id) || []
       const ultSaidaAlmoco = regs
-        .filter((r) => (r.tipo || "").toLowerCase().includes("saída") && (r.tipo || "").toLowerCase().includes("almoço"))
+        .filter((r) => !ehTipoOutro(r.tipo) && (r.tipo || "").toLowerCase().includes("saída") && (r.tipo || "").toLowerCase().includes("almoço"))
         .pop()
-      const ultRetornoAlmoco = regs.filter((r) => (r.tipo || "").toLowerCase().includes("retorno")).pop()
+      const ultRetornoAlmoco = regs.filter((r) => !ehTipoOutro(r.tipo) && (r.tipo || "").toLowerCase().includes("retorno")).pop()
 
       if (
         ultSaidaAlmoco &&
