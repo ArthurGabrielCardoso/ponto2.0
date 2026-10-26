@@ -274,7 +274,14 @@ let ultimoAvisoVazamento = 0
 const MAX_REINICIOS_EM_10MIN = 5
 const JANELA_REINICIOS_MS = 10 * 60_000
 const INTERVALO_MINIMO_REINICIO_MS = 15_000
-const TEMPO_EM_CPU_ANTES_DE_TENTAR_WEBGL_MS = 20 * 60_000
+/** Espera antes de cada tentativa de voltar ao WebGL; a última se repete. */
+const ESPERAS_PARA_TENTAR_WEBGL_MS = [3 * 60_000, 10 * 60_000, 30 * 60_000, 60 * 60_000]
+let tentativasDeVoltarAoWebgl = 0
+/** A página diz se não há ninguém usando: trocar de motor derruba o reconhecimento por alguns segundos. */
+let estaOcioso: () => boolean = () => false
+export function definirDetectorDeOciosidade(f: () => boolean) {
+  estaOcioso = f
+}
 const PRAZO_SONDA_MS = 15_000
 
 function estatistica(tipo: string): Estatistica {
@@ -432,6 +439,44 @@ export function reiniciarWorker(motivo: string, gpu = false): Promise<void> {
   return reiniciando
 }
 
+/**
+ * Troca CPU por WebGL com segurança: se o WebGL falhar de novo, volta para CPU
+ * na hora (e a próxima tentativa espera mais), sem deixar o tablet sem motor.
+ */
+function voltarAoWebgl(): Promise<void> {
+  if (reiniciando) return reiniciando
+  const t0 = performance.now()
+  logar("aviso", "tentando_voltar_ao_webgl", `tentativa ${tentativasDeVoltarAoWebgl}; tablet ocioso`)
+  reiniciando = (async () => {
+    destruirWorker("voltando ao WebGL")
+    backendForcado = undefined
+    try {
+      await initModels()
+    } catch (e) {
+      destruirWorker("WebGL falhou de novo")
+      backendForcado = "cpu"
+      cpuPeloVigiaDesde = Date.now()
+      logar("aviso", "webgl_falhou_de_novo", (e as any)?.message || e, { tentativa: tentativasDeVoltarAoWebgl })
+      await initModels()
+    }
+    if (payloadDescritores) descriptorCount = await call<number>("loadDescriptors", payloadDescritores)
+    falhasSeguidas = 0
+    sondaInicial = null
+    if (backendForcado !== "cpu") cpuPeloVigiaDesde = 0
+    logar("aviso", "worker_reiniciado", "voltou ao WebGL", { ms: Math.round(performance.now() - t0), backend: tfBackend })
+  })()
+    .catch((e) => logar("fatal", "worker_reinicio_falhou", (e as any)?.message || e, { ms: Math.round(performance.now() - t0) }))
+    .finally(() => {
+      reiniciando = null
+    })
+  return reiniciando
+}
+
+/** Está rodando em CPU (a página usa para não reiniciar à toa e sugerir a batida manual). */
+export function estaEmCpu(): boolean {
+  return tfBackend === "cpu"
+}
+
 /** Uma sonda de saúde. Chamada pelo vigia; não deve ser usada no caminho crítico. */
 async function sondar() {
   if (reiniciando) return
@@ -441,18 +486,16 @@ async function sondar() {
     if (!modelsLoading && jaCarregouUmaVez) void reiniciarWorker("vigia: worker sem modelos", false)
     return
   }
-  // Em CPU por causa do vigia há um bom tempo: a GPU pode ter se recuperado.
-  // Se falhar de novo, o vigia volta para CPU sozinho (3 reinícios na janela).
-  if (
-    backendForcado === "cpu" &&
-    cpuPeloVigiaDesde &&
-    Date.now() - cpuPeloVigiaDesde > TEMPO_EM_CPU_ANTES_DE_TENTAR_WEBGL_MS
-  ) {
-    cpuPeloVigiaDesde = 0
-    backendForcado = undefined
-    logar("aviso", "tentando_voltar_ao_webgl", "20 min em CPU; testando a GPU de novo")
-    void reiniciarWorker("tentando voltar ao WebGL", false)
-    return
+  // Em CPU por causa da GPU: tenta voltar ao WebGL com espera crescente
+  // (3, 10, 30, 60 min), e só com o tablet ocioso — a troca derruba o
+  // reconhecimento por alguns segundos.
+  if (backendForcado === "cpu" && cpuPeloVigiaDesde) {
+    const espera = ESPERAS_PARA_TENTAR_WEBGL_MS[Math.min(tentativasDeVoltarAoWebgl, ESPERAS_PARA_TENTAR_WEBGL_MS.length - 1)]
+    if (Date.now() - cpuPeloVigiaDesde > espera && estaOcioso()) {
+      tentativasDeVoltarAoWebgl += 1
+      void voltarAoWebgl()
+      return
+    }
   }
   // A sonda NÃO pula quando há chamada em andamento: o worker é de uma thread
   // só, então ela entra na fila atrás da chamada. Se a chamada travou, a sonda
@@ -490,6 +533,19 @@ async function sondar() {
     logar("erro", "sonda_sem_resposta", msg, { pendentes: pending.size, backend: tfBackend })
     void reiniciarWorker(`sonda de saúde: ${msg}`, ehErroExplicitoDeGpu(erro))
   }
+}
+
+/**
+ * A carga inicial falhou por causa da GPU (shader que não compila, contexto
+ * WebGL, falta de memória)? Repetir o mesmo WebGL só gasta minutos: vai direto
+ * para CPU e deixa a volta ao WebGL para o vigia, com espera crescente.
+ */
+export function forcarCpuSeFalhaDeGpu(erro: unknown): boolean {
+  if (!ehFalhaDeGpu(erro) || backendForcado === "cpu") return false
+  backendForcado = "cpu"
+  cpuPeloVigiaDesde = Date.now()
+  logar("fatal", "boot_em_cpu_por_falha_de_gpu", String((erro as any)?.message || erro), null)
+  return true
 }
 
 /** Há um reinício do worker em andamento agora (a tela usa para avisar a pessoa). */

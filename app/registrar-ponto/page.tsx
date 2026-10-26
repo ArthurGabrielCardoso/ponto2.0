@@ -77,6 +77,9 @@ import {
   getBackend,
   getUltimaCapturaMs,
   definirBackendManual,
+  forcarCpuSeFalhaDeGpu,
+  definirDetectorDeOciosidade,
+  estaEmCpu,
   aquecerModelos,
   descartarWorker,
   reiniciarWorker,
@@ -668,6 +671,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // A espera por reconhecimento depois do toque: desde quando, quantos quadros
   // o tablet processou e em quantos achou um rosto. Zera ao tocar e sempre que
   // a pessoa sai do estado de "esperando ser reconhecida".
+  /** Quando os modelos ficaram prontos: a espera por lentidão não conta o tempo de boot. */
+  const prontoEmRef = useRef(0)
   const esperaRef = useRef({ desde: 0, passes: 0, rostos: 0, reiniciou: false })
   const [avisoLentidao, setAvisoLentidao] = useState<{ texto: string; detalhe: string } | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -1272,6 +1277,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           )
           setModelsReady(true)
           diagRef.current.modelosProntos = true
+          prontoEmRef.current = Date.now()
+          definirDetectorDeOciosidade(() => screensaverRef.current)
           iniciarVigiaDoWorker()
           logar("info", "boot_pronto", null, {
             ms: Math.round(performance.now() - tBoot),
@@ -1337,7 +1344,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         })
         if (mounted) setLoadingStatus("Erro ao carregar modelos — tentando de novo...")
         descartarWorker(`falha na carga inicial (tentativa ${tentativaCarga})`)
-        if (tentativaCarga >= 3) definirBackendManual("cpu")
+        // Falha de GPU: WebGL de novo só gasta minutos. Vai direto para CPU.
+        if (!forcarCpuSeFalhaDeGpu(error) && tentativaCarga >= 2) definirBackendManual("cpu")
         await new Promise((r) => setTimeout(r, Math.min(60_000, 5_000 * tentativaCarga)))
       }
       }
@@ -2659,7 +2667,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
     const id = window.setInterval(() => {
       const e = esperaRef.current
-      const dt = (Date.now() - e.desde) / 1000
+      const dt = (Date.now() - Math.max(e.desde, prontoEmRef.current)) / 1000
 
       if (!modelsReady) {
         if (dt < 2) return
@@ -2676,7 +2684,12 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       const lento = e.passes < 3
       const naoVeRosto = e.rostos === 0
 
-      if (dt >= RECARGA_LENTIDAO_S && e.passes === 0) {
+      // Em CPU cada reconhecimento leva de 7 a 14 s: é o ritmo normal desse
+      // modo, e reiniciar ou recarregar só o atrasaria. Avisa e oferece a
+      // batida manual (ícone da mão), que não depende do reconhecimento.
+      const emCpu = estaEmCpu()
+
+      if (!emCpu && dt >= RECARGA_LENTIDAO_S && e.passes === 0) {
         if (podeRecarregarPorLentidao()) {
           logar("fatal", "recarregando_por_lentidao", `${Math.round(dt)} s sem processar nenhum quadro`, {
             passes: e.passes,
@@ -2692,7 +2705,19 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         }
       }
 
-      if (dt >= REINICIO_LENTIDAO_S) {
+      if (emCpu && dt >= AVISO_LENTIDAO_S && lento) {
+        setAvisoLentidao({
+          texto: "O reconhecimento está lento hoje",
+          detalhe: "Continue de frente para a câmera. Se demorar, toque na mãozinha no canto para bater o ponto.",
+        })
+        if (!e.reiniciou) {
+          e.reiniciou = true
+          logar("aviso", "lentidao_em_cpu", `${Math.round(dt)} s e só ${e.passes} quadro(s); sem reinício (já em CPU)`, {
+            passes: e.passes,
+            rostos: e.rostos,
+          })
+        }
+      } else if (dt >= REINICIO_LENTIDAO_S) {
         if (lento) {
           setAvisoLentidao({
             texto: "Reiniciando o reconhecimento…",
