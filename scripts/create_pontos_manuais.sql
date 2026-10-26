@@ -17,13 +17,6 @@
 --   nao_verificado  nao foi possivel comparar em 7 dias (ex.: funcionario sem
 --                   rosto cadastrado). Revisar.
 --
--- pin_situacao (segunda camada, independente da foto):
---   validado         digitou o PIN certo da pessoa escolhida
---   pessoa_sem_pin   a pessoa ainda nao tem PIN cadastrado (batida liberada,
---                    mas marcada para revisao)
---   indisponivel     o navegador nao conseguiu calcular o hash (contexto sem
---                    HTTPS); batida liberada e marcada
--- Um PIN errado NAO gera batida: a tela barra antes.
 --
 -- Nao guarda descritor facial. A foto fica no bucket privado
 -- `fotos-ponto-manual`, que o tablet so consegue ESCREVER: ler, so pelo painel
@@ -41,14 +34,10 @@ CREATE TABLE IF NOT EXISTS pontos_manuais (
     data_hora TIMESTAMPTZ NOT NULL,         -- o mesmo instante gravado em registros_ponto
     foto_path TEXT,                         -- caminho no bucket; nulo apos a retencao
     situacao TEXT NOT NULL DEFAULT 'pendente',
-    pin_situacao TEXT,
     detalhe JSONB,                          -- distancias e, se divergente, com quem se parece
     verificado_em TIMESTAMPTZ,
     dispositivo TEXT
 );
-
--- Quem rodou uma versao anterior deste script ganha a coluna aqui.
-ALTER TABLE pontos_manuais ADD COLUMN IF NOT EXISTS pin_situacao TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_pontos_manuais_data ON pontos_manuais(data_hora DESC);
 CREATE INDEX IF NOT EXISTS idx_pontos_manuais_situacao ON pontos_manuais(situacao, data_hora DESC);
@@ -90,51 +79,20 @@ CREATE POLICY "fotos_manuais_delete_vencidas" ON storage.objects
     FOR DELETE TO anon, authenticated
     USING (bucket_id = 'fotos-ponto-manual' AND created_at < NOW() - INTERVAL '90 days');
 
--- ---------------------------------------------------------------------------
--- PIN de cada funcionario, para a batida manual.
---
--- Guarda so o HASH (PBKDF2-SHA256, salt proprio por pessoa), nunca o PIN. O
--- PIN e definido pelo responsavel em /dashboard/pins e conferido NO TABLET,
--- que precisa funcionar sem internet: por isso o hash e legivel pela chave
--- publica do app. LIMITE HONESTO: PIN de 4 a 6 digitos tem poucas combinacoes,
--- entao quem tiver a chave publica E conhecimento tecnico consegue descobri-lo
--- offline. O que o PIN impede de verdade e o colega parado na frente do
--- tablet (o tablet bloqueia depois de 3 erros). 6 digitos e bem melhor que 4.
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS pins_funcionarios (
-    funcionario_id TEXT PRIMARY KEY,
-    salt TEXT NOT NULL,            -- hex
-    hash TEXT NOT NULL,            -- hex (PBKDF2-SHA256, 32 bytes)
-    iteracoes INTEGER NOT NULL,
-    tamanho INTEGER NOT NULL,      -- quantos digitos, para a tela saber quando conferir
-    atualizado_em TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE pins_funcionarios ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "pins_select" ON pins_funcionarios;
-CREATE POLICY "pins_select" ON pins_funcionarios
-    FOR SELECT TO anon, authenticated USING (true);
-
-DROP POLICY IF EXISTS "pins_insert" ON pins_funcionarios;
-CREATE POLICY "pins_insert" ON pins_funcionarios
-    FOR INSERT TO anon, authenticated WITH CHECK (true);
-
-DROP POLICY IF EXISTS "pins_update" ON pins_funcionarios;
-CREATE POLICY "pins_update" ON pins_funcionarios
-    FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "pins_delete" ON pins_funcionarios;
-CREATE POLICY "pins_delete" ON pins_funcionarios
-    FOR DELETE TO anon, authenticated USING (true);
-
--- O que precisa de olho humano. Divergente e sem_rosto sempre; "sem foto" e
--- "nao verificado" so quando o PIN tambem nao validou a pessoa.
-CREATE OR REPLACE VIEW pontos_manuais_revisar AS
-SELECT data_hora, nome_funcionario, tipo, situacao, pin_situacao, detalhe, foto_path
+-- O que precisa de olho humano: tudo que nao foi confirmado pelo rosto.
+-- (DROP antes de CREATE: se uma versao anterior deste script ja criou a visao
+-- com outras colunas, CREATE OR REPLACE falharia.)
+DROP VIEW IF EXISTS pontos_manuais_revisar;
+CREATE VIEW pontos_manuais_revisar AS
+SELECT data_hora, nome_funcionario, tipo, situacao, detalhe, foto_path
 FROM pontos_manuais
-WHERE situacao IN ('divergente', 'sem_rosto')
-   OR (situacao IN ('sem_foto', 'nao_verificado', 'pendente') AND COALESCE(pin_situacao, '') <> 'validado')
+WHERE situacao <> 'confirmado'
 ORDER BY data_hora DESC;
 
 -- Para revisar:  SELECT * FROM pontos_manuais_revisar;
+-- (ou pelo painel: /dashboard/batidas-manuais)
+
+-- Se voce chegou a rodar uma versao anterior com PIN, estes itens nao sao mais
+-- usados e podem ser apagados:
+--   DROP TABLE IF EXISTS pins_funcionarios;
+--   ALTER TABLE pontos_manuais DROP COLUMN IF EXISTS pin_situacao;

@@ -1,16 +1,9 @@
 "use client"
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { ArrowLeft, Camera, Delete, Lock, UserRound, X } from "lucide-react"
-import type { PessoaManual, PinSituacao } from "@/lib/ponto-manual"
-import {
-  PIN_MAX,
-  bloqueioRestanteMs,
-  conferirPin,
-  hashDisponivel,
-  pessoaTemPin,
-  tamanhoDoPin,
-} from "@/lib/pin-manual"
+import { ArrowLeft, Camera, UserRound } from "lucide-react"
+import { CascaVitall } from "@/components/casca-vitall"
+import type { PessoaManual } from "@/lib/ponto-manual"
 
 /**
  * Batida manual, primeira metade: "quem vai bater o ponto?" e a foto.
@@ -32,7 +25,6 @@ import {
 export interface EscolhaManual {
   pessoa: PessoaManual
   foto: Blob | null
-  pinSituacao: PinSituacao
 }
 
 interface Props {
@@ -85,11 +77,7 @@ async function capturarFoto(video: HTMLVideoElement | null): Promise<Blob | null
 }
 
 export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) {
-  const [etapa, setEtapa] = useState<"pessoa" | "pin" | "foto">("pessoa")
-  const [pin, setPin] = useState("")
-  const [erroPin, setErroPin] = useState<string | null>(null)
-  const [conferindo, setConferindo] = useState(false)
-  const [pinSituacao, setPinSituacao] = useState<PinSituacao>("validado")
+  const [etapa, setEtapa] = useState<"pessoa" | "foto">("pessoa")
   const [pessoa, setPessoa] = useState<PessoaManual | null>(null)
   const [contagem, setContagem] = useState<number | null>(null)
   const [falhouFoto, setFalhouFoto] = useState(false)
@@ -122,79 +110,19 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
     }
   }, [etapa, videoRef])
 
-  const textoBloqueio = (ms: number) => {
-    const min = Math.ceil(ms / 60000)
-    return `Muitas tentativas erradas. Tente de novo em ${min} ${min === 1 ? "minuto" : "minutos"}.`
-  }
-
   const escolherPessoa = (p: PessoaManual) => {
     tocou()
     setPessoa(p)
     setFalhouFoto(false)
-    setPin("")
-    setErroPin(null)
-    if (!hashDisponivel()) {
-      // Sem HTTPS o navegador não calcula o hash: libera, mas fica marcado.
-      setPinSituacao("indisponivel")
-      setEtapa("foto")
-    } else if (pessoaTemPin(p.id)) {
-      // Já travada (ou travada antes de recarregar a página): avisa de cara,
-      // em vez de deixar a pessoa digitar para o nada.
-      const travada = bloqueioRestanteMs(p.id)
-      if (travada > 0) setErroPin(textoBloqueio(travada))
-      setEtapa("pin")
-    } else {
-      // Sem PIN cadastrado ainda: libera (senão ninguém bate durante a
-      // implantação), mas a batida fica marcada para revisão.
-      setPinSituacao("pessoa_sem_pin")
-      setEtapa("foto")
-    }
-  }
-
-  /** Confere o PIN quando completa o tamanho cadastrado (ou ao tocar em OK). */
-  const confirmarPin = async (digitado: string) => {
-    if (!pessoa || conferindo || digitado.length === 0) return
-    setConferindo(true)
-    try {
-      const r = await conferirPin(pessoa.id, digitado)
-      if (r.ok) {
-        setPinSituacao("validado")
-        setPin("")
-        setErroPin(null)
-        setEtapa("foto")
-        return
-      }
-      setPin("")
-      setErroPin(
-        r.bloqueadoMs > 0
-          ? textoBloqueio(r.bloqueadoMs)
-          : `PIN incorreto. ${r.restantes === 1 ? "Resta 1 tentativa" : `Restam ${r.restantes} tentativas`}.`
-      )
-    } finally {
-      setConferindo(false)
-    }
-  }
-
-  const digitar = (d: string) => {
-    tocou()
-    if (conferindo || !pessoa) return
-    const travada = bloqueioRestanteMs(pessoa.id)
-    if (travada > 0) {
-      setErroPin(textoBloqueio(travada))
-      return
-    }
-    setErroPin(null)
-    const novo = (pin + d).slice(0, PIN_MAX)
-    setPin(novo)
-    if (novo.length === tamanhoDoPin(pessoa.id)) void confirmarPin(novo)
+    setEtapa("foto")
   }
 
   const concluir = useCallback(
     (foto: Blob | null) => {
       if (!pessoa) return
-      onPronto({ pessoa, foto, pinSituacao })
+      onPronto({ pessoa, foto })
     },
-    [pessoa, onPronto, pinSituacao]
+    [pessoa, onPronto]
   )
 
   const tirarFoto = async () => {
@@ -219,42 +147,29 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
   const primeiroNome = pessoa?.nome.split(" ")[0] ?? ""
 
   return (
-    <div
-      className="fixed inset-0 z-[56] flex items-center justify-center overflow-y-auto p-4 sm:p-8"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Bater ponto manualmente"
+    <CascaVitall
+      ariaLabel="Bater ponto manualmente"
+      restante={ocioso}
+      rotuloSair="Fechar"
+      onSair={onCancelar}
       onPointerDown={tocou}
-      style={{
-        background:
-          "linear-gradient(135deg, rgba(10, 70, 72, 0.94) 0%, rgba(13, 100, 104, 0.95) 50%, rgba(8, 60, 66, 0.97) 100%)",
-        backdropFilter: "blur(18px)",
-        WebkitBackdropFilter: "blur(18px)",
-      }}
     >
-      <button
-        type="button"
-        onClick={onCancelar}
-        aria-label="Fechar"
-        className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition active:scale-95"
-      >
-        <X className="h-5 w-5" />
-      </button>
-
       {etapa === "pessoa" ? (
-        <div className="w-full max-w-3xl text-white">
-          <div className="mb-5 text-center">
-            <h1 className="text-3xl font-bold tracking-tight drop-shadow sm:text-4xl">Quem vai bater o ponto?</h1>
-            <p className="mt-1.5 text-base text-[#ecdcc3] sm:text-lg">
+        <div className="w-full text-white">
+          <div className="mb-6 space-y-1.5 text-center md:text-left">
+            <h1 className="text-3xl font-bold tracking-tight drop-shadow-sm sm:text-4xl lg:text-5xl">
+              Quem vai bater o <span style={{ color: "#c69e6b" }}>ponto</span>?
+            </h1>
+            <p className="text-sm font-medium text-white/80 sm:text-base">
               Toque no seu nome. Uma foto sua será guardada como confirmação.
             </p>
           </div>
           {pessoas.length === 0 ? (
-            <p className="rounded-2xl border border-white/25 bg-white/10 p-6 text-center text-lg">
+            <p className="rounded-2xl border border-white/20 bg-white/[0.08] p-6 text-center text-lg backdrop-blur-2xl">
               A lista de funcionários ainda não foi carregada neste tablet. Conecte à internet uma vez e tente de novo.
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
               {[...pessoas]
                 .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
                 .map((p) => (
@@ -262,102 +177,25 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
                     key={p.id}
                     type="button"
                     onClick={() => escolherPessoa(p)}
-                    className="flex min-h-[84px] items-center gap-4 rounded-3xl border border-white/25 bg-white/10 px-5 text-left transition active:scale-[0.98]"
-                    style={{ backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
+                    className="group flex h-44 cursor-pointer flex-col justify-between rounded-2xl border border-white/20 bg-white/[0.08] p-4 text-left shadow-lg backdrop-blur-2xl transition-all hover:scale-[1.03] hover:border-[#c69e6b]/60 hover:bg-white/[0.14] active:scale-95 sm:h-52 sm:p-5"
                   >
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#c69e6b]/25 text-[#ecdcc3]">
                       <UserRound className="h-6 w-6" />
                     </span>
-                    <span className="text-xl font-bold leading-tight sm:text-2xl">{p.nome}</span>
+                    <span className="text-lg font-bold leading-tight tracking-tight transition-colors group-hover:text-[#ecdcc3] sm:text-xl">
+                      {p.nome}
+                    </span>
                   </button>
                 ))}
             </div>
           )}
         </div>
-      ) : etapa === "pin" ? (
-        <div className="w-full max-w-sm text-center text-white">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/15">
-            <Lock className="h-7 w-7" />
-          </span>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight drop-shadow">Olá, {primeiroNome}!</h1>
-          <p className="mt-1 text-lg text-[#ecdcc3]">Digite o seu PIN</p>
-
-          <div className="mt-5 flex justify-center gap-3" aria-label="PIN digitado">
-            {Array.from({ length: tamanhoDoPin(pessoa?.id ?? "") || 4 }).map((_, i) => (
-              <span
-                key={i}
-                className={`h-4 w-4 rounded-full border-2 border-white/70 transition ${i < pin.length ? "bg-white" : "bg-transparent"}`}
-              />
-            ))}
-          </div>
-          <p role="alert" className={`mt-3 min-h-[44px] text-base ${erroPin ? "text-[#f0d9b5]" : "text-transparent"}`}>
-            {erroPin ?? "."}
-          </p>
-
-          <div className="mx-auto mt-2 grid max-w-[280px] grid-cols-3 gap-3">
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => digitar(d)}
-                className="min-h-[68px] rounded-2xl border border-white/25 bg-white/10 text-3xl font-bold transition active:scale-95 active:bg-white/25"
-              >
-                {d}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                tocou()
-                setPin((p) => p.slice(0, -1))
-                setErroPin(null)
-              }}
-              aria-label="Apagar"
-              className="flex min-h-[68px] items-center justify-center rounded-2xl border border-white/25 bg-white/5 transition active:scale-95"
-            >
-              <Delete className="h-7 w-7" />
-            </button>
-            <button
-              type="button"
-              onClick={() => digitar("0")}
-              className="min-h-[68px] rounded-2xl border border-white/25 bg-white/10 text-3xl font-bold transition active:scale-95 active:bg-white/25"
-            >
-              0
-            </button>
-            <button
-              type="button"
-              onClick={() => void confirmarPin(pin)}
-              disabled={pin.length < 4 || conferindo}
-              className="min-h-[68px] rounded-2xl text-xl font-bold text-[#2e1a0c] transition active:scale-95 disabled:opacity-40"
-              style={{ background: "linear-gradient(135deg, #d6b184 0%, #c69e6b 50%, #a67c4e 100%)" }}
-            >
-              OK
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              tocou()
-              setEtapa("pessoa")
-            }}
-            className="mt-5 flex items-center justify-center gap-2 text-base text-white/70 underline underline-offset-4 mx-auto"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Não sou {primeiroNome}
-          </button>
-        </div>
       ) : (
-        <div className="w-full max-w-xl text-center text-white">
-          <h1 className="text-3xl font-bold tracking-tight drop-shadow sm:text-4xl">Olá, {primeiroNome}!</h1>
+        <div className="mx-auto w-full max-w-xl text-center text-white">
+          <h1 className="text-3xl font-bold tracking-tight drop-shadow sm:text-4xl">Olá, <span style={{ color: "#c69e6b" }}>{primeiroNome}</span>!</h1>
           <p className="mt-1.5 text-lg text-[#ecdcc3]">Olhe para a câmera e toque em “Tirar foto”.</p>
-          {pinSituacao === "pessoa_sem_pin" && (
-            <p className="mx-auto mt-2 max-w-md rounded-xl border border-[#c69e6b]/50 bg-[#c69e6b]/15 px-3 py-1.5 text-sm text-[#f3e6d0]">
-              Você ainda não tem PIN. Peça ao responsável para cadastrar um.
-            </p>
-          )}
 
-          <div className="relative mx-auto mt-5 aspect-[4/3] w-full overflow-hidden rounded-3xl border border-white/30 bg-black/40">
+          <div className="relative mx-auto mt-4 aspect-[4/3] w-full max-w-sm overflow-hidden rounded-3xl border border-white/30 bg-black/40">
             <video
               ref={previaRef}
               autoPlay
@@ -379,7 +217,7 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
             </p>
           )}
 
-          <div className="mt-5 flex gap-3">
+          <div className="mt-4 flex gap-3">
             <button
               type="button"
               onClick={() => {
@@ -414,6 +252,6 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
           </button>
         </div>
       )}
-    </div>
+    </CascaVitall>
   )
 }

@@ -27,6 +27,7 @@ import { DialogoPontoInteligente, type PontoRegularizacao, type OpcaoSelecionada
 import { PerguntaTipoPonto } from "@/components/pergunta-tipo-ponto"
 import { PontoManual, type EscolhaManual } from "@/components/ponto-manual"
 import { Hand } from "lucide-react"
+import { ESTILO_PELICULA } from "@/lib/pelicula"
 import {
   enfileirarManual,
   processarFilaManual,
@@ -34,9 +35,7 @@ import {
   listarPessoasManual,
   salvarListaManual,
   type PessoaManual,
-  type PinSituacao,
 } from "@/lib/ponto-manual"
-import { sincronizarPins } from "@/lib/pin-manual"
 import { ehTipoOutro, type TipoFixo } from "@/lib/tipos-ponto"
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
 import { ModalCheckinHumor } from "@/components/modal-checkin-humor"
@@ -460,11 +459,7 @@ function Screensaver({
   return (
     <div
       className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer select-none overflow-hidden backdrop-blur-xl"
-      style={{
-        background: "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-      }}
+      style={ESTILO_PELICULA}
       onClick={onTap}
     >
       <style>{`
@@ -732,7 +727,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     /** Quando a pergunta apareceu, para medir quanto a pessoa levou para responder. */
     desde: number
     /** Batida manual (a pessoa escolheu o nome): a foto que ficou como prova. */
-    manual?: { foto: Blob | null; pinSituacao: PinSituacao }
+    manual?: { foto: Blob | null }
   } | null>(null)
   // Batida manual: tela de "quem vai bater o ponto?" + foto.
   const [manualAberto, setManualAberto] = useState(false)
@@ -1261,7 +1256,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         // A lista de nomes fica guardada para a batida manual funcionar mesmo
         // se, num próximo boot, a internet ou o sistema estiverem fora.
         salvarListaManual(getFuncionariosCarregados())
-        void sincronizarPins()
 
         if (mounted) {
           // Mesma lista que alimentou os descritores — traz a grade de horários de
@@ -1373,17 +1367,9 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     const primeira = window.setTimeout(rodar, 20_000)
     const intervalo = window.setInterval(rodar, 45_000)
     const limpeza = window.setTimeout(() => void limparFotosAntigas(), 90_000)
-    // Hashes de PIN: ao voltar a internet e de meia em meia hora, para um PIN
-    // trocado no dashboard chegar ao tablet sem precisar recarregar nada.
-    const pins = window.setInterval(() => void sincronizarPins(), 30 * 60_000)
-    const aoVoltar = () => {
-      void sincronizarPins()
-      rodar()
-    }
-    window.addEventListener("online", aoVoltar)
+    window.addEventListener("online", rodar)
     return () => {
-      window.clearInterval(pins)
-      window.removeEventListener("online", aoVoltar)
+      window.removeEventListener("online", rodar)
       window.clearTimeout(primeira)
       window.clearTimeout(limpeza)
       window.clearInterval(intervalo)
@@ -2262,9 +2248,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     // vez que funcionou (é o caso que importa — sistema fora do ar).
     const emMemoria = Array.from(funcionariosMapRef.current.values()).map((f) => ({ id: f.id, nome: f.nome }))
     setPessoasManual(emMemoria.length > 0 ? emMemoria : listarPessoasManual())
-    // PIN trocado no dashboard vale na hora, se houver internet; sem ela,
-    // vale o último que o tablet baixou.
-    void sincronizarPins()
     // Segura o laço de reconhecimento: a câmera e o worker ficam livres para a foto.
     isRegisteringRef.current = true
     resetInactivityTimer()
@@ -2283,7 +2266,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   }
 
   /** Nome escolhido e foto tirada: segue para "o que você está registrando?". */
-  const handleProntoManual = async ({ pessoa, foto, pinSituacao }: EscolhaManual) => {
+  const handleProntoManual = async ({ pessoa, foto }: EscolhaManual) => {
     setManualAberto(false)
     const now = new Date()
     const person: RecognizedPerson = {
@@ -2297,7 +2280,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     logar("info", "manual_pessoa_e_foto", null, {
       funcionario_id: pessoa.id,
       com_foto: !!foto,
-      pin: pinSituacao,
     })
 
     try {
@@ -2331,7 +2313,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       }
 
       const diag = analisarSituacaoPonto(funcObj, registrosHoje, now)
-      setPerguntaTipo({ person, funcObj, registrosHoje, diag, desde: Date.now(), manual: { foto, pinSituacao } })
+      setPerguntaTipo({ person, funcObj, registrosHoje, diag, desde: Date.now(), manual: { foto } })
     } catch (error) {
       mostrarErroDeRegistro(person, error, now)
     }
@@ -2387,7 +2369,6 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           tipo,
           dataHoraIso: now.toISOString(),
           foto: p.manual.foto,
-          pinSituacao: p.manual.pinSituacao,
         }).catch(() => "")
         await concluirRegistro({
           person: p.person,
@@ -2860,10 +2841,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         <div
           key={peliculaSaindo}
           className="fixed inset-0 z-40 pointer-events-none abrir-do-centro"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(29, 185, 179, 0.72) 0%, rgba(22, 145, 141, 0.75) 50%, rgba(13, 132, 136, 0.8) 100%)",
-          }}
+          style={{ background: ESTILO_PELICULA.background }}
         />
       )}
 
