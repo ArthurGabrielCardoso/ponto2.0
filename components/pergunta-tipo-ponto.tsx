@@ -103,7 +103,7 @@ export function PerguntaTipoPonto({ nome, sugerido, onEscolher, onTempoEsgotado,
           <h1 className="text-3xl font-bold tracking-tight drop-shadow sm:text-4xl">
             {etapa === "tipo" ? `Olá, ${primeiroNome}!` : "Conte o que está acontecendo"}
           </h1>
-          <p className="mt-1.5 text-lg text-amber-100/90 sm:text-xl">
+          <p className="mt-1.5 text-lg text-[#ecdcc3] sm:text-xl">
             {etapa === "tipo" ? "O que você está registrando agora?" : "Assim o seu ponto fica certinho."}
           </p>
         </div>
@@ -120,13 +120,13 @@ export function PerguntaTipoPonto({ nome, sugerido, onEscolher, onTempoEsgotado,
                     onClick={() => onEscolher(o.tipo, { sugerido: ehSugerido, outro: false })}
                     className={`relative flex min-h-[112px] flex-col items-center justify-center gap-1 rounded-3xl border px-3 py-4 text-white transition active:scale-[0.97] sm:min-h-[132px] ${
                       ehSugerido
-                        ? "border-amber-300/80 bg-amber-300/20 shadow-[0_0_0_3px_rgba(252,211,77,0.35)]"
+                        ? "border-[#c69e6b] bg-[#c69e6b]/25 shadow-[0_0_0_3px_rgba(198,158,107,0.45)]"
                         : "border-white/25 bg-white/10"
                     }`}
                     style={{ backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
                   >
                     {ehSugerido && (
-                      <span className="absolute -top-2.5 rounded-full bg-amber-300 px-3 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-950">
+                      <span className="absolute -top-2.5 rounded-full bg-[#c69e6b] px-3 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#2e1a0c]">
                         Sugerido
                       </span>
                     )}
@@ -170,7 +170,7 @@ export function PerguntaTipoPonto({ nome, sugerido, onEscolher, onTempoEsgotado,
                   onClick={() => setDirecao(d)}
                   className={`min-h-[64px] rounded-2xl border text-xl font-bold transition active:scale-[0.97] ${
                     direcao === d
-                      ? "border-amber-300/80 bg-amber-300/25 shadow-[0_0_0_3px_rgba(252,211,77,0.3)]"
+                      ? "border-[#c69e6b] bg-[#c69e6b]/25 shadow-[0_0_0_3px_rgba(198,158,107,0.45)]"
                       : "border-white/25 bg-white/5"
                   }`}
                 >
@@ -179,7 +179,7 @@ export function PerguntaTipoPonto({ nome, sugerido, onEscolher, onTempoEsgotado,
               ))}
             </div>
 
-            <label htmlFor="motivo-outro" className="mt-5 block text-sm font-semibold uppercase tracking-wider text-amber-100/90">
+            <label htmlFor="motivo-outro" className="mt-5 block text-sm font-semibold uppercase tracking-wider text-[#ecdcc3]">
               Qual é o motivo?
             </label>
             <input
@@ -195,7 +195,7 @@ export function PerguntaTipoPonto({ nome, sugerido, onEscolher, onTempoEsgotado,
                 if (e.key === "Enter") confirmarOutro()
               }}
               placeholder="Escreva aqui, ou toque numa opção abaixo"
-              className="mt-2 w-full rounded-2xl border border-white/30 bg-black/25 px-4 py-4 text-xl text-white placeholder-white/45 outline-none focus:border-amber-300/80"
+              className="mt-2 w-full rounded-2xl border border-white/30 bg-black/25 px-4 py-4 text-xl text-white placeholder-white/45 outline-none focus:border-[#c69e6b]"
             />
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -205,7 +205,7 @@ export function PerguntaTipoPonto({ nome, sugerido, onEscolher, onTempoEsgotado,
                   type="button"
                   onClick={() => setMotivo(m)}
                   className={`rounded-full border px-4 py-2 text-base transition active:scale-95 ${
-                    motivoLimpo === m ? "border-amber-300/80 bg-amber-300/25" : "border-white/25 bg-white/5"
+                    motivoLimpo === m ? "border-[#c69e6b] bg-[#c69e6b]/25" : "border-white/25 bg-white/5"
                   }`}
                 >
                   {m}
@@ -229,8 +229,8 @@ export function PerguntaTipoPonto({ nome, sugerido, onEscolher, onTempoEsgotado,
                 type="button"
                 disabled={!podeConfirmarOutro}
                 onClick={confirmarOutro}
-                className="flex min-h-[60px] flex-1 items-center justify-center gap-2 rounded-2xl text-xl font-bold text-amber-950 transition active:scale-[0.98] disabled:opacity-40"
-                style={{ background: "linear-gradient(135deg, #fde68a 0%, #f59e0b 100%)" }}
+                className="flex min-h-[60px] flex-1 items-center justify-center gap-2 rounded-2xl text-xl font-bold text-[#2e1a0c] transition active:scale-[0.98] disabled:opacity-40"
+                style={{ background: "linear-gradient(135deg, #d6b184 0%, #c69e6b 50%, #a67c4e 100%)" }}
               >
                 <Check className="h-6 w-6" />
                 Registrar ponto
@@ -242,7 +242,7 @@ export function PerguntaTipoPonto({ nome, sugerido, onEscolher, onTempoEsgotado,
         <div className="mt-5 flex items-center gap-3 text-white/80">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/20">
             <div
-              className="h-full rounded-full bg-amber-300 transition-[width] duration-1000 ease-linear"
+              className="h-full rounded-full bg-[#c69e6b] transition-[width] duration-1000 ease-linear"
               style={{ width: `${(restante / total) * 100}%` }}
             />
           </div>

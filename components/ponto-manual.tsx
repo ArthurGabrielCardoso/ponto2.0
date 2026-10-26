@@ -245,7 +245,7 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
         <div className="w-full max-w-3xl text-white">
           <div className="mb-5 text-center">
             <h1 className="text-3xl font-bold tracking-tight drop-shadow sm:text-4xl">Quem vai bater o ponto?</h1>
-            <p className="mt-1.5 text-base text-amber-100/90 sm:text-lg">
+            <p className="mt-1.5 text-base text-[#ecdcc3] sm:text-lg">
               Toque no seu nome. Uma foto sua será guardada como confirmação.
             </p>
           </div>
@@ -280,7 +280,7 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
             <Lock className="h-7 w-7" />
           </span>
           <h1 className="mt-3 text-3xl font-bold tracking-tight drop-shadow">Olá, {primeiroNome}!</h1>
-          <p className="mt-1 text-lg text-amber-100/90">Digite o seu PIN</p>
+          <p className="mt-1 text-lg text-[#ecdcc3]">Digite o seu PIN</p>
 
           <div className="mt-5 flex justify-center gap-3" aria-label="PIN digitado">
             {Array.from({ length: tamanhoDoPin(pessoa?.id ?? "") || 4 }).map((_, i) => (
@@ -290,7 +290,7 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
               />
             ))}
           </div>
-          <p role="alert" className={`mt-3 min-h-[44px] text-base ${erroPin ? "text-amber-200" : "text-transparent"}`}>
+          <p role="alert" className={`mt-3 min-h-[44px] text-base ${erroPin ? "text-[#f0d9b5]" : "text-transparent"}`}>
             {erroPin ?? "."}
           </p>
 
@@ -328,8 +328,8 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
               type="button"
               onClick={() => void confirmarPin(pin)}
               disabled={pin.length < 4 || conferindo}
-              className="min-h-[68px] rounded-2xl text-xl font-bold text-amber-950 transition active:scale-95 disabled:opacity-40"
-              style={{ background: "linear-gradient(135deg, #fde68a 0%, #f59e0b 100%)" }}
+              className="min-h-[68px] rounded-2xl text-xl font-bold text-[#2e1a0c] transition active:scale-95 disabled:opacity-40"
+              style={{ background: "linear-gradient(135deg, #d6b184 0%, #c69e6b 50%, #a67c4e 100%)" }}
             >
               OK
             </button>
@@ -350,9 +350,9 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
       ) : (
         <div className="w-full max-w-xl text-center text-white">
           <h1 className="text-3xl font-bold tracking-tight drop-shadow sm:text-4xl">Olá, {primeiroNome}!</h1>
-          <p className="mt-1.5 text-lg text-amber-100/90">Olhe para a câmera e toque em “Tirar foto”.</p>
+          <p className="mt-1.5 text-lg text-[#ecdcc3]">Olhe para a câmera e toque em “Tirar foto”.</p>
           {pinSituacao === "pessoa_sem_pin" && (
-            <p className="mx-auto mt-2 max-w-md rounded-xl border border-amber-300/40 bg-amber-300/10 px-3 py-1.5 text-sm text-amber-100">
+            <p className="mx-auto mt-2 max-w-md rounded-xl border border-[#c69e6b]/50 bg-[#c69e6b]/15 px-3 py-1.5 text-sm text-[#f3e6d0]">
               Você ainda não tem PIN. Peça ao responsável para cadastrar um.
             </p>
           )}
@@ -374,7 +374,7 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
           </div>
 
           {falhouFoto && (
-            <p role="alert" className="mt-3 rounded-2xl border border-amber-300/50 bg-amber-300/15 px-4 py-2 text-base text-amber-100">
+            <p role="alert" className="mt-3 rounded-2xl border border-[#c69e6b]/60 bg-[#c69e6b]/15 px-4 py-2 text-base text-[#f3e6d0]">
               A câmera não deu uma imagem. Tente de novo, ou continue sem foto (o ponto fica marcado para revisão).
             </p>
           )}
@@ -396,8 +396,8 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
               type="button"
               onClick={tirarFoto}
               disabled={contagem !== null}
-              className="flex min-h-[60px] flex-1 items-center justify-center gap-2 rounded-2xl text-xl font-bold text-amber-950 transition active:scale-[0.98] disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg, #fde68a 0%, #f59e0b 100%)" }}
+              className="flex min-h-[60px] flex-1 items-center justify-center gap-2 rounded-2xl text-xl font-bold text-[#2e1a0c] transition active:scale-[0.98] disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg, #d6b184 0%, #c69e6b 50%, #a67c4e 100%)" }}
             >
               <Camera className="h-6 w-6" />
               {contagem !== null ? "Fique parado…" : "Tirar foto"}

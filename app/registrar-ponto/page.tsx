@@ -2844,7 +2844,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
               <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />
               <span className="text-lg sm:text-xl font-bold tracking-tight drop-shadow">{avisoLentidao.texto}</span>
             </div>
-            <div className="mt-1 text-sm sm:text-base font-medium text-amber-50/95 drop-shadow-sm">
+            <div className="mt-1 text-sm sm:text-base font-medium text-[#fbf3e6] drop-shadow-sm">
               {avisoLentidao.detalhe}
             </div>
           </div>
