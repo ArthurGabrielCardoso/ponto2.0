@@ -2173,7 +2173,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // Fecha a medição no mesmo instante em que a pessoa vê a tela pronta.
       // Disparado e esquecido: não segura nada.
       telemetria.registrarTelaSucesso(tipo)
-      logar("info", "ponto_batido", tipo, { funcionario_id: person.id, origem: origem ?? "facial" })
+      logar("info", "ponto_batido", tipo, {
+        funcionario_id: person.id,
+        origem: origem ?? "facial",
+        em_cooldown: emCooldown,
+      })
       telemetria.encerrarTentativa("ponto_batido", modoTesteRef.current)
 
       // A tela já está na frente da pessoa — grava no Supabase em segundo plano.
@@ -2387,13 +2391,14 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     }
 
     try {
-      // O diálogo de regularização só entra quando o diagnóstico percebeu uma
-      // lacuna na jornada (entrada ou almoço esquecidos num horário em que já
-      // deveriam existir) E a batida escolhida pressupõe algo que não está
-      // registrado. "Entrada" nunca pressupõe nada; "Outro" também não.
-      const lacunaNoDia = p.diag.tipo !== "DIRETO" && p.diag.tipo !== "DIA_COMPLETO"
-      const faltantes = info.outro ? [] : pontosFaltantesAntesDe(tipo as TipoFixo, p.registrosHoje)
-      if (lacunaNoDia && faltantes.length > 0) {
+      // O diálogo de regularização entra sempre que a escolha pressupõe uma
+      // batida que não está registrada (ver `pontosFaltantesAntesDe`): voltar
+      // do almoço sem ter saído, sair depois do almoço sem ter voltado, bater
+      // qualquer coisa sem a entrada. O cálculo de horas pareia por posição, então
+      // deixar passar um buraco desloca todos os pares seguintes. "Entrada" nunca
+      // pressupõe nada; "Outro" também não.
+      const faltantes = info.outro ? [] : pontosFaltantesAntesDe(tipo as TipoFixo, p.diag, new Date())
+      if (faltantes.length > 0) {
         setDialogoInteligente({
           diagnostico: p.diag,
           person: p.person,
@@ -2449,6 +2454,18 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
     try {
       await registrarMultiplosPontos(person.id, person.nome, pontos, obterLocalizacaoEmCache())
+
+      // Os horários das batidas ESQUECIDAS foram informados pela pessoa (ou vieram
+      // da grade), não medidos pelo relógio. Fica registrado quais foram, para
+      // quem for conferir o dia depois saber o que é real e o que é declarado.
+      logar("info", "regularizacao_confirmada", tipoExibicao, {
+        funcionario_id: person.id,
+        batidas: pontos.map((x, i) => ({
+          tipo: x.tipo,
+          hora: new Date(x.dataHoraIso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          declarada: i < pontos.length - 1,
+        })),
+      })
 
       const funcionario = await buscarFuncionarioPorId(person.id).catch(() => null)
       const funcObj: Funcionario = funcionario || { id: person.id, nome: person.nome, descritores: [] }

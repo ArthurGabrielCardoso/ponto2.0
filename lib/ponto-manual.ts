@@ -95,13 +95,24 @@ export function salvarListaManual(funcionarios: { id: string; nome: string }[]) 
 }
 
 export function listarPessoasManual(): PessoaManual[] {
-  try {
-    const bruto = localStorage.getItem(CHAVE_LISTA)
-    const lista = bruto ? JSON.parse(bruto) : []
-    return Array.isArray(lista) ? (lista as PessoaManual[]) : []
-  } catch {
-    return []
+  const ler = (chave: string): PessoaManual[] => {
+    try {
+      const bruto = localStorage.getItem(chave)
+      const lista = bruto ? JSON.parse(bruto) : []
+      return Array.isArray(lista)
+        ? (lista as { id?: string; nome?: string }[])
+            .filter((f) => f?.id && f?.nome)
+            .map((f) => ({ id: String(f.id), nome: String(f.nome) }))
+        : []
+    } catch {
+      return []
+    }
   }
+  // O cache de funcionários que o app já mantém desde antes (o mesmo de
+  // `buscarFuncionarios`) cobre o tablet que ainda não gravou a lista própria —
+  // por exemplo, o primeiro uso depois de atualizar o app, com o sistema fora do ar.
+  const propria = ler(CHAVE_LISTA)
+  return propria.length > 0 ? propria : ler("vitall_cached_funcionarios")
 }
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Clock, CheckCircle2, ArrowRight, ArrowLeft, Sparkles, Check } from "lucide-react"
 import type { DiagnosticoPonto } from "@/lib/logica-ponto-inteligente"
-import { horaParaMinutos, minutosParaHoraStr } from "@/lib/logica-ponto-inteligente"
+import { horaParaMinutos, minutosParaHoraStr, padroesRetroativos, validarRetroativos } from "@/lib/logica-ponto-inteligente"
 import { reproduzirVozSaudacao } from "@/lib/tts-audio"
 import type { TipoFixo } from "@/lib/tipos-ponto"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
@@ -72,10 +72,21 @@ export function DialogoPontoInteligente({
   const pedir = (t: TipoFixo) => !faltantes || faltantes.includes(t)
   const [tempoRestante, setTempoRestante] = useState(45)
 
-  // Horários retroativos
-  const [horaChegada, setHoraChegada] = useState(horariosSugeridos?.horaChegada || horariosGrade.entrada || "08:00")
-  const [horaSaidaAlmoco, setHoraSaidaAlmoco] = useState(horariosSugeridos?.horaSaidaAlmoco || horariosGrade.saidaAlmoco || "12:00")
-  const [horaRetornoAlmoco, setHoraRetornoAlmoco] = useState(horariosSugeridos?.horaRetornoAlmoco || horariosGrade.retornoAlmoco || "13:00")
+  // Horários retroativos. Partem da grade, mas sempre dentro do possível: depois
+  // do que já foi registrado, antes do que já foi registrado depois, e antes de
+  // agora (ver `padroesRetroativos`).
+  const [padroes] = useState(() =>
+    padroesRetroativos(faltantes ?? ["Entrada", "Saída Almoço", "Retorno Almoço"], diagnostico, new Date())
+  )
+  const [horaChegada, setHoraChegada] = useState(
+    padroes["Entrada"] || horariosSugeridos?.horaChegada || horariosGrade.entrada || "08:00"
+  )
+  const [horaSaidaAlmoco, setHoraSaidaAlmoco] = useState(
+    padroes["Saída Almoço"] || horariosSugeridos?.horaSaidaAlmoco || horariosGrade.saidaAlmoco || "12:00"
+  )
+  const [horaRetornoAlmoco, setHoraRetornoAlmoco] = useState(
+    padroes["Retorno Almoço"] || horariosSugeridos?.horaRetornoAlmoco || horariosGrade.retornoAlmoco || "13:00"
+  )
 
   const horaAtualStr = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
 
@@ -144,7 +155,20 @@ export function DialogoPontoInteligente({
       ? pontos
       : pontos.filter((p, i) => i === pontos.length - 1 || faltantes.includes(p.tipo as TipoFixo))
 
+  // Os campos que a opção escolhida mostra e que ainda faltam, com o que está digitado.
+  const camposAtivos: { tipo: TipoFixo; hora: string }[] = [
+    ...(pedir("Entrada") ? [{ tipo: "Entrada" as TipoFixo, hora: horaChegada }] : []),
+    ...((opcaoSelecionada === "retorno_almoco" || opcaoSelecionada === "encerrando_expediente") && pedir("Saída Almoço")
+      ? [{ tipo: "Saída Almoço" as TipoFixo, hora: horaSaidaAlmoco }]
+      : []),
+    ...(opcaoSelecionada === "encerrando_expediente" && pedir("Retorno Almoço")
+      ? [{ tipo: "Retorno Almoço" as TipoFixo, hora: horaRetornoAlmoco }]
+      : []),
+  ]
+  const erroHorarios = etapa === "ajuste" ? validarRetroativos(camposAtivos, diagnostico.registrosHoje, new Date()) : null
+
   const handleConfirmarAjustes = () => {
+    if (erroHorarios) return
     setEtapa("processando")
     setTimeout(() => {
       const agora = new Date().toISOString()
@@ -496,6 +520,12 @@ export function DialogoPontoInteligente({
                 )}
               </div>
 
+              {erroHorarios && (
+                <p role="alert" className="rounded-xl border border-red-300/50 bg-red-500/15 px-4 py-2 text-sm font-medium text-red-100">
+                  {erroHorarios}
+                </p>
+              )}
+
               {/* Ações da Etapa 2 */}
               <div className="flex items-center justify-between pt-2">
                 <button
@@ -507,7 +537,8 @@ export function DialogoPontoInteligente({
                 </button>
                 <Button
                   onClick={handleConfirmarAjustes}
-                  className="px-8 py-3 h-12 rounded-xl text-white font-bold shadow-lg hover:shadow-xl transition-all"
+                  disabled={!!erroHorarios}
+                  className="px-8 py-3 h-12 rounded-xl text-white font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-40"
                   style={{ background: "linear-gradient(135deg, #c69e6b 0%, #a67c4e 100%)" }}
                 >
                   Confirmar e Registrar Ponto
