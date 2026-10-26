@@ -36,6 +36,7 @@ import {
   salvarListaManual,
   type PessoaManual,
 } from "@/lib/ponto-manual"
+import { registrarDeclaradas, sincronizarDeclaradas, type Declarada } from "@/lib/ponto-declarado"
 import { ehTipoOutro, type TipoFixo } from "@/lib/tipos-ponto"
 import { TelaPontoSucesso } from "@/components/tela-ponto-sucesso"
 import { ModalCheckinHumor } from "@/components/modal-checkin-humor"
@@ -1206,6 +1207,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
        * não é.
        */
       const tCamera = performance.now()
+      // Enquanto a abertura inicial não terminou, o monitor não pode "reabrir":
+      // no primeiro uso depois de uma atualização a câmera chegou a levar mais de
+      // 30 s, e o monitor mandou um segundo pedido por cima do primeiro.
+      reabrindoCamera = true
       try {
         const stream = await abrirStreamDaCamera()
         if (!mounted) return
@@ -1223,6 +1228,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
         console.error("Erro ao acessar câmera:", error)
         // O monitor da câmera tenta de novo a cada 15 s.
         logar("fatal", "camera_falhou", (error as Error)?.message, { nome: (error as Error)?.name })
+      } finally {
+        reabrindoCamera = false
       }
 
       // 2. Carregar modelos face-api.js (cached pelo browser após 1o load)
@@ -1363,7 +1370,10 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   // depois do boot; a comparação do rosto só acontece com o tablet ocioso.
   // Também apaga do bucket as fotos com mais de 90 dias, no máximo uma vez por dia.
   useEffect(() => {
-    const rodar = () => void processarFilaManual({ podeVerificar: podeVerificarManual })
+    const rodar = () => {
+      void processarFilaManual({ podeVerificar: podeVerificarManual })
+      void sincronizarDeclaradas()
+    }
     const primeira = window.setTimeout(rodar, 20_000)
     const intervalo = window.setInterval(rodar, 45_000)
     const limpeza = window.setTimeout(() => void limparFotosAntigas(), 90_000)
@@ -2444,7 +2454,8 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const handleConfirmarDialogoInteligente = async (
     pontos: PontoRegularizacao[],
     tipoExibicao: string,
-    mensagemPersonalizada: string
+    mensagemPersonalizada: string,
+    opcoes?: { semAlmoco: boolean }
   ) => {
     if (!dialogoInteligente) return
     const person = dialogoInteligente.person
@@ -2453,21 +2464,75 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     const now = new Date()
 
     try {
-      await registrarMultiplosPontos(person.id, person.nome, pontos, obterLocalizacaoEmCache())
+      // O caminho durável primeiro. Antes, esta regularização gravava direto no
+      // Supabase e, sem internet, falhava calada e voltava para a tela de espera:
+      // a pessoa saía achando que bateu e NADA tinha sido guardado. Agora cada
+      // batida entra na fila persistente (a mesma do ponto normal, com o horário
+      // carimbado) e só depois se tenta gravar. Se não der, sobe sozinha.
+      const localizacao = obterLocalizacaoEmCache()
+      const idsNaFila = pontos.map((x) =>
+        enfileirarPonto({
+          funcionarioId: person.id,
+          nomeFuncionario: person.nome,
+          tipo: x.tipo,
+          dataHoraIso: x.dataHoraIso,
+          localizacao,
+        })
+      )
+      setPontosPendentes(contarPendentes())
+
+      try {
+        await Promise.race([
+          registrarMultiplosPontos(person.id, person.nome, pontos, localizacao),
+          new Promise<never>((_, rejeitar) => setTimeout(() => rejeitar(new Error("Tempo esgotado ao salvar")), 6000)),
+        ])
+        idsNaFila.forEach(removerDaFila)
+      } catch (erro) {
+        // Fica na fila: a sincronização automática cuida do resto.
+        console.warn("Regularização foi para a fila offline, será gravada assim que der:", erro)
+      } finally {
+        setPontosPendentes(contarPendentes())
+      }
 
       // Os horários das batidas ESQUECIDAS foram informados pela pessoa (ou vieram
-      // da grade), não medidos pelo relógio. Fica registrado quais foram, para
-      // quem for conferir o dia depois saber o que é real e o que é declarado.
+      // da grade), não medidos pelo relógio. Fica guardado quais foram, no banco
+      // e no log, para quem conferir o dia depois saber o que é real e o que é
+      // declarado.
+      const batidaReal = pontos[pontos.length - 1]
+      const declaradas: Declarada[] = pontos
+        .filter((x) => x.declarada)
+        .map((x) => ({
+          funcionarioId: person.id,
+          nome: person.nome,
+          tipo: x.tipo,
+          dataHoraIso: x.dataHoraIso,
+          origem: x.declarada!.origem,
+          batidaRealIso: batidaReal.dataHoraIso,
+        }))
+      if (opcoes?.semAlmoco) {
+        declaradas.push({
+          funcionarioId: person.id,
+          nome: person.nome,
+          tipo: "Sem almoço",
+          dataHoraIso: batidaReal.dataHoraIso,
+          origem: "sem_almoco",
+          batidaRealIso: batidaReal.dataHoraIso,
+        })
+      }
+      registrarDeclaradas(declaradas)
+
       logar("info", "regularizacao_confirmada", tipoExibicao, {
         funcionario_id: person.id,
-        batidas: pontos.map((x, i) => ({
+        sem_almoco: !!opcoes?.semAlmoco,
+        batidas: pontos.map((x) => ({
           tipo: x.tipo,
           hora: new Date(x.dataHoraIso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-          declarada: i < pontos.length - 1,
+          declarada: x.declarada?.origem ?? null,
         })),
       })
 
-      const funcionario = await buscarFuncionarioPorId(person.id).catch(() => null)
+      const funcionario =
+        funcionariosMapRef.current.get(person.id) || (await buscarFuncionarioPorId(person.id).catch(() => null))
       const funcObj: Funcionario = funcionario || { id: person.id, nome: person.nome, descritores: [] }
       const trabalhaSabado = !!funcObj.horarios?.sabado?.ativo
 

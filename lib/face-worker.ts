@@ -320,9 +320,14 @@ async function handleSaude() {
 
 async function handleInit(forcarBackend?: "wasm" | "cpu") {
   if (modelsLoaded) return
+  // O primeiro carregamento depois de uma atualização chegou a levar 74 s, e um
+  // número só não diz onde. Cada etapa é cronometrada e vai para a caixa-preta.
+  const t0 = performance.now()
   const fa = await loadFaceApi()
+  const tImportar = performance.now()
 
   await setupBestBackend(fa, forcarBackend)
+  const tBackend = performance.now()
   vigiarContextoWebgl(fa)
   try {
     logar("info", "worker_backend", fa.tf.getBackend(), {
@@ -345,9 +350,19 @@ async function handleInit(forcarBackend?: "wasm" | "cpu") {
     fa.nets.faceRecognitionNet.loadFromUri(modelsBase),
     fa.nets.faceExpressionNet.loadFromUri(modelsBase),
   ])
+  const tPesos = performance.now()
   modelsLoaded = true
   console.log("[face-worker] modelos carregados. Warmup...")
   await aquecerTudo(fa)
+  const tFim = performance.now()
+  logar("info", "worker_init_etapas", null, {
+    importar_face_api_ms: Math.round(tImportar - t0),
+    escolher_backend_ms: Math.round(tBackend - tImportar),
+    baixar_pesos_ms: Math.round(tPesos - tBackend),
+    aquecer_gpu_ms: Math.round(tFim - tPesos),
+    total_ms: Math.round(tFim - t0),
+    backend: fa.tf.getBackend(),
+  })
 }
 
 /**

@@ -18,6 +18,20 @@ import { supabase } from "@/lib/supabase"
  * o bucket é privado e o tablet só consegue escrever nele.
  */
 
+interface Declarada {
+  data_hora: string
+  nome_funcionario: string
+  tipo: string
+  origem: string
+  batida_real_em: string | null
+}
+
+const ROTULO_ORIGEM: Record<string, string> = {
+  grade: "Horário sugerido (da grade), aceito pela pessoa",
+  ajustado: "Horário ajustado pela pessoa",
+  sem_almoco: "A pessoa declarou que não fez pausa para o almoço",
+}
+
 interface ParaRevisar {
   data_hora: string
   nome_funcionario: string
@@ -37,6 +51,7 @@ const ROTULO_SITUACAO: Record<string, { texto: string; grave: boolean }> = {
 export default function BatidasManuaisPage() {
   const router = useRouter()
   const [lista, setLista] = useState<ParaRevisar[]>([])
+  const [declaradas, setDeclaradas] = useState<Declarada[]>([])
   const [carregando, setCarregando] = useState(true)
   const [semTabela, setSemTabela] = useState(false)
 
@@ -45,6 +60,14 @@ export default function BatidasManuaisPage() {
     const { data, error } = await supabase.from("pontos_manuais_revisar").select("*").limit(100)
     if (error) setSemTabela(true)
     else setLista((data || []) as unknown as ParaRevisar[])
+    // Batidas cujo horário veio da grade ou da pessoa, não do relógio. A tabela
+    // só existe depois do SQL; sem ela, a seção some em silêncio.
+    const d = await supabase
+      .from("pontos_declarados")
+      .select("data_hora, nome_funcionario, tipo, origem, batida_real_em")
+      .order("data_hora", { ascending: false })
+      .limit(60)
+    if (!d.error) setDeclaradas((d.data || []) as unknown as Declarada[])
     setCarregando(false)
   }, [])
 
@@ -103,6 +126,34 @@ export default function BatidasManuaisPage() {
               )
             })}
           </ul>
+        )}
+
+        {declaradas.length > 0 && (
+          <section>
+            <h2 className="mb-2 text-lg font-bold">Batidas declaradas</h2>
+            <p className="mb-2 text-xs text-slate-600">
+              Horários que <strong>não vieram do relógio</strong>: a pessoa apareceu sem ter batido um ponto anterior e informou (ou aceitou a
+              grade). Estas batidas estão em <code>registros_ponto</code> iguais às outras; aqui dá para saber quais foram declaradas.
+            </p>
+            <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white shadow-sm">
+              {declaradas.map((r, i) => (
+                <li key={i} className="p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold">{r.nome_funcionario}</span>
+                    <span className="text-xs text-slate-500">
+                      {r.tipo} às {new Date(r.data_hora).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-600">
+                    {ROTULO_ORIGEM[r.origem] ?? r.origem}
+                    {r.batida_real_em
+                      ? ` · batida real às ${new Date(r.batida_real_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+                      : ""}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </main>
     </div>
