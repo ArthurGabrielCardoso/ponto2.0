@@ -1,8 +1,16 @@
 "use client"
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { ArrowLeft, Camera, UserRound, X } from "lucide-react"
-import type { PessoaManual } from "@/lib/ponto-manual"
+import { ArrowLeft, Camera, Delete, Lock, UserRound, X } from "lucide-react"
+import type { PessoaManual, PinSituacao } from "@/lib/ponto-manual"
+import {
+  PIN_MAX,
+  bloqueioRestanteMs,
+  conferirPin,
+  hashDisponivel,
+  pessoaTemPin,
+  tamanhoDoPin,
+} from "@/lib/pin-manual"
 
 /**
  * Batida manual, primeira metade: "quem vai bater o ponto?" e a foto.
@@ -24,6 +32,7 @@ import type { PessoaManual } from "@/lib/ponto-manual"
 export interface EscolhaManual {
   pessoa: PessoaManual
   foto: Blob | null
+  pinSituacao: PinSituacao
 }
 
 interface Props {
@@ -76,7 +85,11 @@ async function capturarFoto(video: HTMLVideoElement | null): Promise<Blob | null
 }
 
 export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) {
-  const [etapa, setEtapa] = useState<"pessoa" | "foto">("pessoa")
+  const [etapa, setEtapa] = useState<"pessoa" | "pin" | "foto">("pessoa")
+  const [pin, setPin] = useState("")
+  const [erroPin, setErroPin] = useState<string | null>(null)
+  const [conferindo, setConferindo] = useState(false)
+  const [pinSituacao, setPinSituacao] = useState<PinSituacao>("validado")
   const [pessoa, setPessoa] = useState<PessoaManual | null>(null)
   const [contagem, setContagem] = useState<number | null>(null)
   const [falhouFoto, setFalhouFoto] = useState(false)
@@ -109,19 +122,79 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
     }
   }, [etapa, videoRef])
 
+  const textoBloqueio = (ms: number) => {
+    const min = Math.ceil(ms / 60000)
+    return `Muitas tentativas erradas. Tente de novo em ${min} ${min === 1 ? "minuto" : "minutos"}.`
+  }
+
   const escolherPessoa = (p: PessoaManual) => {
     tocou()
     setPessoa(p)
     setFalhouFoto(false)
-    setEtapa("foto")
+    setPin("")
+    setErroPin(null)
+    if (!hashDisponivel()) {
+      // Sem HTTPS o navegador não calcula o hash: libera, mas fica marcado.
+      setPinSituacao("indisponivel")
+      setEtapa("foto")
+    } else if (pessoaTemPin(p.id)) {
+      // Já travada (ou travada antes de recarregar a página): avisa de cara,
+      // em vez de deixar a pessoa digitar para o nada.
+      const travada = bloqueioRestanteMs(p.id)
+      if (travada > 0) setErroPin(textoBloqueio(travada))
+      setEtapa("pin")
+    } else {
+      // Sem PIN cadastrado ainda: libera (senão ninguém bate durante a
+      // implantação), mas a batida fica marcada para revisão.
+      setPinSituacao("pessoa_sem_pin")
+      setEtapa("foto")
+    }
+  }
+
+  /** Confere o PIN quando completa o tamanho cadastrado (ou ao tocar em OK). */
+  const confirmarPin = async (digitado: string) => {
+    if (!pessoa || conferindo || digitado.length === 0) return
+    setConferindo(true)
+    try {
+      const r = await conferirPin(pessoa.id, digitado)
+      if (r.ok) {
+        setPinSituacao("validado")
+        setPin("")
+        setErroPin(null)
+        setEtapa("foto")
+        return
+      }
+      setPin("")
+      setErroPin(
+        r.bloqueadoMs > 0
+          ? textoBloqueio(r.bloqueadoMs)
+          : `PIN incorreto. ${r.restantes === 1 ? "Resta 1 tentativa" : `Restam ${r.restantes} tentativas`}.`
+      )
+    } finally {
+      setConferindo(false)
+    }
+  }
+
+  const digitar = (d: string) => {
+    tocou()
+    if (conferindo || !pessoa) return
+    const travada = bloqueioRestanteMs(pessoa.id)
+    if (travada > 0) {
+      setErroPin(textoBloqueio(travada))
+      return
+    }
+    setErroPin(null)
+    const novo = (pin + d).slice(0, PIN_MAX)
+    setPin(novo)
+    if (novo.length === tamanhoDoPin(pessoa.id)) void confirmarPin(novo)
   }
 
   const concluir = useCallback(
     (foto: Blob | null) => {
       if (!pessoa) return
-      onPronto({ pessoa, foto })
+      onPronto({ pessoa, foto, pinSituacao })
     },
-    [pessoa, onPronto]
+    [pessoa, onPronto, pinSituacao]
   )
 
   const tirarFoto = async () => {
@@ -201,10 +274,88 @@ export function PontoManual({ pessoas, videoRef, onPronto, onCancelar }: Props) 
             </div>
           )}
         </div>
+      ) : etapa === "pin" ? (
+        <div className="w-full max-w-sm text-center text-white">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/15">
+            <Lock className="h-7 w-7" />
+          </span>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight drop-shadow">Olá, {primeiroNome}!</h1>
+          <p className="mt-1 text-lg text-amber-100/90">Digite o seu PIN</p>
+
+          <div className="mt-5 flex justify-center gap-3" aria-label="PIN digitado">
+            {Array.from({ length: tamanhoDoPin(pessoa?.id ?? "") || 4 }).map((_, i) => (
+              <span
+                key={i}
+                className={`h-4 w-4 rounded-full border-2 border-white/70 transition ${i < pin.length ? "bg-white" : "bg-transparent"}`}
+              />
+            ))}
+          </div>
+          <p role="alert" className={`mt-3 min-h-[44px] text-base ${erroPin ? "text-amber-200" : "text-transparent"}`}>
+            {erroPin ?? "."}
+          </p>
+
+          <div className="mx-auto mt-2 grid max-w-[280px] grid-cols-3 gap-3">
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => digitar(d)}
+                className="min-h-[68px] rounded-2xl border border-white/25 bg-white/10 text-3xl font-bold transition active:scale-95 active:bg-white/25"
+              >
+                {d}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                tocou()
+                setPin((p) => p.slice(0, -1))
+                setErroPin(null)
+              }}
+              aria-label="Apagar"
+              className="flex min-h-[68px] items-center justify-center rounded-2xl border border-white/25 bg-white/5 transition active:scale-95"
+            >
+              <Delete className="h-7 w-7" />
+            </button>
+            <button
+              type="button"
+              onClick={() => digitar("0")}
+              className="min-h-[68px] rounded-2xl border border-white/25 bg-white/10 text-3xl font-bold transition active:scale-95 active:bg-white/25"
+            >
+              0
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmarPin(pin)}
+              disabled={pin.length < 4 || conferindo}
+              className="min-h-[68px] rounded-2xl text-xl font-bold text-amber-950 transition active:scale-95 disabled:opacity-40"
+              style={{ background: "linear-gradient(135deg, #fde68a 0%, #f59e0b 100%)" }}
+            >
+              OK
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              tocou()
+              setEtapa("pessoa")
+            }}
+            className="mt-5 flex items-center justify-center gap-2 text-base text-white/70 underline underline-offset-4 mx-auto"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Não sou {primeiroNome}
+          </button>
+        </div>
       ) : (
         <div className="w-full max-w-xl text-center text-white">
           <h1 className="text-3xl font-bold tracking-tight drop-shadow sm:text-4xl">Olá, {primeiroNome}!</h1>
           <p className="mt-1.5 text-lg text-amber-100/90">Olhe para a câmera e toque em “Tirar foto”.</p>
+          {pinSituacao === "pessoa_sem_pin" && (
+            <p className="mx-auto mt-2 max-w-md rounded-xl border border-amber-300/40 bg-amber-300/10 px-3 py-1.5 text-sm text-amber-100">
+              Você ainda não tem PIN. Peça ao responsável para cadastrar um.
+            </p>
+          )}
 
           <div className="relative mx-auto mt-5 aspect-[4/3] w-full overflow-hidden rounded-3xl border border-white/30 bg-black/40">
             <video

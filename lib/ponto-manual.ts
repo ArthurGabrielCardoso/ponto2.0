@@ -51,6 +51,12 @@ export type SituacaoManual =
   | "sem_foto"
   | "nao_verificado"
 
+/**
+ * O que o PIN disse sobre a pessoa. Um PIN errado não chega aqui: a tela barra
+ * antes e nenhuma batida é gerada.
+ */
+export type PinSituacao = "validado" | "pessoa_sem_pin" | "indisponivel"
+
 interface ItemManual {
   /** Também é o id da linha em `pontos_manuais`: reenviar não duplica. */
   id: string
@@ -61,6 +67,7 @@ interface ItemManual {
   dataHoraIso: string
   temFoto: boolean
   fotoPath?: string
+  pinSituacao: PinSituacao
   situacao: SituacaoManual
   detalhe?: Record<string, unknown>
   /** Última situação que o banco confirmou ter recebido. */
@@ -169,6 +176,7 @@ export interface DadosManual {
   /** O mesmo `toISOString()` que vai para registros_ponto. */
   dataHoraIso: string
   foto: Blob | null
+  pinSituacao: PinSituacao
 }
 
 /**
@@ -190,6 +198,7 @@ export async function enfileirarManual(dados: DadosManual): Promise<string> {
     nome: dados.nome,
     tipo: dados.tipo,
     dataHoraIso: dados.dataHoraIso,
+    pinSituacao: dados.pinSituacao,
     temFoto,
     // Sem foto, já nasce na situação final: não há o que comparar.
     situacao: temFoto ? "pendente" : "sem_foto",
@@ -332,6 +341,7 @@ async function gravarLinha(item: ItemManual): Promise<boolean> {
       data_hora: item.dataHoraIso,
       foto_path: item.fotoPath ?? null,
       situacao: item.situacao,
+      pin_situacao: item.pinSituacao ?? null,
       detalhe: item.detalhe ?? null,
       verificado_em: final ? new Date().toISOString() : null,
       dispositivo: (navigator.userAgent || "").slice(0, 200),

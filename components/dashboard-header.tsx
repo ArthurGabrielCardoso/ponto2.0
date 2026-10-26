@@ -12,6 +12,7 @@ import {
   Sparkles,
   Camera,
   FileSpreadsheet,
+  KeyRound,
 } from "lucide-react"
 
 interface DashboardHeaderProps {
@@ -78,6 +79,14 @@ export function DashboardHeader({ onLogout }: DashboardHeaderProps) {
               <span>Cadastrar</span>
             </Link>
 
+            <Link
+              href="/dashboard/pins"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-transparent hover:border-slate-200 transition-colors"
+            >
+              <KeyRound className="h-4 w-4 text-slate-600" />
+              <span>PINs</span>
+            </Link>
+
             <button
               type="button"
               onClick={onLogout}
@@ -139,6 +148,13 @@ export function DashboardHeader({ onLogout }: DashboardHeaderProps) {
           >
             <UserPlus className="h-4 w-4" />
             <span>Cadastrar Funcionário</span>
+          </Link>
+          <Link
+            href="/dashboard/pins"
+            className="flex items-center gap-2 w-full p-2.5 rounded-md text-slate-700 hover:bg-slate-50 font-semibold text-xs"
+          >
+            <KeyRound className="h-4 w-4" />
+            <span>PINs</span>
           </Link>
           <button
             type="button"
