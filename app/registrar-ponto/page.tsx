@@ -64,7 +64,64 @@ import {
   getUltimaCapturaMs,
   definirBackendManual,
   aquecerModelos,
+  descartarWorker,
+  reiniciarWorker,
+  iniciarVigiaDoWorker,
+  coletarSaudeDoWorker,
 } from "@/lib/face-recognition-client"
+import { logar, iniciarLogTablet, registrarColetor, removerColetor } from "@/lib/log-tablet"
+
+/**
+ * Abre a câmera frontal, do melhor ao pior que o aparelho aceitar. Vive fora do
+ * componente porque é usada duas vezes: no boot e quando a câmera morre e
+ * precisa ser reaberta sem recarregar a página.
+ */
+async function abrirStreamDaCamera(): Promise<MediaStream> {
+  return await navigator.mediaDevices.getUserMedia({
+    video: {
+      width: { ideal: 1920, min: 1280 },
+      height: { ideal: 1080, min: 720 },
+      facingMode: "user",
+      // Teto em 30: 60fps dobraria a composição de vídeo em troca de uma
+      // fluidez que ninguém olha — a câmera aqui é espelho, não filme.
+      frameRate: { ideal: 30, max: 30 },
+    },
+    audio: false,
+  }).catch(async () => {
+    return await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: "user",
+      },
+      audio: false,
+    })
+  }).catch(async () => {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user" },
+      audio: false,
+    })
+  })
+}
+
+/** Resumo da trilha de vídeo para a caixa-preta. */
+function descreverStream(stream: MediaStream | null) {
+  const t = stream?.getVideoTracks?.()[0]
+  if (!t) return { trilha: null }
+  const st = t.getSettings?.() || {}
+  return {
+    estado: t.readyState,
+    mudo: t.muted,
+    habilitada: t.enabled,
+    rotulo: (t.label || "").slice(0, 60),
+    largura: st.width,
+    altura: st.height,
+    fps: st.frameRate,
+  }
+}
+
+/** Quanto tempo o loop pode ficar "processando" antes de ser dado como travado. */
+const LIMITE_LOOP_TRAVADO_MS = 90_000
 
 // Animação temática: emoji por 3.5s → depois Lottie check original
 function SuccessAnimation({ tipo }: { tipo: string }) {
@@ -562,6 +619,13 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const [cameraActive, setCameraActive] = useState(false)
   const [screensaver, setScreensaver] = useState(true)
   const screensaverRef = useRef(true)
+  // Sinais de vida para a caixa-preta e para o detector de loop travado.
+  const diagRef = useRef({
+    ultimaIteracaoLoop: 0,
+    processandoDesde: 0,
+    modelosProntos: false,
+    inicio: Date.now(),
+  })
   const rafRef = useRef<number | null>(null)
   const inactivityTimerRef = useRef<number | null>(null)
   const successTimeoutRef = useRef<number | null>(null)
@@ -908,6 +972,141 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   useEffect(() => {
     let mounted = true
 
+    iniciarLogTablet()
+
+    // ---- Câmera: monitores e reabertura ----
+    //
+    // Antes, se a câmera morresse (trilha encerrada, imagem congelada, falha
+    // na abertura), o app ficava com um vídeo parado e o reconhecimento olhando
+    // para o mesmo quadro para sempre. Agora cada um desses estados é logado e
+    // a câmera é reaberta sem recarregar a página.
+    let ultimoTempoVideo = -1
+    let paradasSeguidas = 0
+    let reabrindoCamera = false
+
+    const reabrirCamera = async (motivo: string) => {
+      if (reabrindoCamera || !mounted) return
+      reabrindoCamera = true
+      const t0 = performance.now()
+      logar("erro", "camera_reabrindo", motivo, descreverStream((videoRef.current?.srcObject as MediaStream | null) ?? null))
+      try {
+        const antigo = videoRef.current?.srcObject as MediaStream | null
+        antigo?.getTracks().forEach((t) => t.stop())
+        const stream = await abrirStreamDaCamera()
+        if (!mounted || !videoRef.current) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        videoRef.current.srcObject = stream
+        anexarMonitoresDaCamera(stream)
+        await videoRef.current.play().catch(() => {})
+        setCameraActive(true)
+        ultimoTempoVideo = -1
+        paradasSeguidas = 0
+        logar("aviso", "camera_reaberta", motivo, { ms: Math.round(performance.now() - t0), ...descreverStream(stream) })
+      } catch (e) {
+        logar("fatal", "camera_reabrir_falhou", (e as Error)?.message, { nome: (e as Error)?.name })
+      } finally {
+        reabrindoCamera = false
+      }
+    }
+
+    function anexarMonitoresDaCamera(stream: MediaStream) {
+      stream.getVideoTracks().forEach((t) => {
+        t.addEventListener("ended", () => {
+          logar("erro", "camera_trilha_terminou", null, descreverStream(stream))
+          void reabrirCamera("trilha da câmera terminou")
+        })
+        t.addEventListener("mute", () => logar("aviso", "camera_trilha_muda", null, descreverStream(stream)))
+        t.addEventListener("unmute", () => logar("info", "camera_trilha_voltou"))
+      })
+    }
+
+    const video = videoRef.current
+    const eventosDoVideo: [string, "aviso" | "erro"][] = [
+      ["error", "erro"],
+      ["stalled", "aviso"],
+      ["waiting", "aviso"],
+      ["emptied", "aviso"],
+      ["abort", "aviso"],
+    ]
+    const ouvintesDoVideo = eventosDoVideo.map(([nome, nivel]) => {
+      const f = () => logar(nivel, `video_${nome}`, null, {
+        readyState: video?.readyState,
+        paused: video?.paused,
+        currentTime: video?.currentTime,
+        erro: video?.error ? { codigo: video.error.code, mensagem: video.error.message } : null,
+      })
+      video?.addEventListener(nome, f)
+      return [nome, f] as const
+    })
+
+    const monitorCamera = window.setInterval(() => {
+      const v = videoRef.current
+      if (!v || !mounted || reabrindoCamera) return
+      const stream = v.srcObject as MediaStream | null
+      if (!stream) {
+        if (Date.now() - diagRef.current.inicio > 20_000) void reabrirCamera("sem stream de câmera")
+        return
+      }
+      const trilha = stream.getVideoTracks()[0]
+      if (!trilha || trilha.readyState !== "live") {
+        void reabrirCamera("trilha da câmera não está viva")
+        return
+      }
+      // Com a aba escondida o vídeo para de propósito; não é congelamento.
+      if (document.visibilityState !== "visible") {
+        ultimoTempoVideo = -1
+        paradasSeguidas = 0
+        return
+      }
+      paradasSeguidas = v.currentTime === ultimoTempoVideo ? paradasSeguidas + 1 : 0
+      ultimoTempoVideo = v.currentTime
+      if (paradasSeguidas === 2) {
+        logar("erro", "camera_congelada", "imagem sem avançar por 30 s", {
+          paused: v.paused,
+          readyState: v.readyState,
+          ...descreverStream(stream),
+        })
+        void v.play().catch(() => {})
+      } else if (paradasSeguidas >= 4) {
+        paradasSeguidas = 0
+        void reabrirCamera("imagem da câmera congelada por 60 s")
+      }
+    }, 15_000)
+
+    // ---- Fontes de estado do batimento (a cada 2 min na caixa-preta) ----
+    registrarColetor("worker", () => coletarSaudeDoWorker())
+    registrarColetor("camera", () => {
+      const v = videoRef.current
+      return {
+        readyState: v?.readyState,
+        paused: v?.paused,
+        currentTime: v ? Math.round(v.currentTime * 10) / 10 : null,
+        largura: v?.videoWidth,
+        altura: v?.videoHeight,
+        paradas_seguidas: paradasSeguidas,
+        ...descreverStream((v?.srcObject as MediaStream | null) ?? null),
+      }
+    })
+    registrarColetor("pagina", () => {
+      const d = diagRef.current
+      const agora = Date.now()
+      return {
+        protecao_de_tela: screensaverRef.current,
+        mostrando_sucesso: showSuccessRef.current,
+        modelos_prontos: d.modelosProntos,
+        loop_ultima_iteracao_ha_ms: d.ultimaIteracaoLoop ? agora - d.ultimaIteracaoLoop : null,
+        processando_ha_ms: d.processandoDesde ? agora - d.processandoDesde : 0,
+        registrando: isRegisteringRef.current,
+        pessoa_reconhecida: !!recognizedPersonRef.current,
+        rosto_na_espera: rostoNaEsperaRef.current,
+        tentativa: telemetria.estadoDaTentativa(),
+        pontos_pendentes: contarPendentes(),
+        carregada_ha_ms: agora - d.inicio,
+      }
+    })
+
     const setup = async () => {
       // 0. Rastreamento de localização em segundo plano.
       // Assim o fix de GPS já está em memória quando alguém bater o ponto, em vez
@@ -945,43 +1144,33 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
        * coisa aqui consome. A imagem na tela é indistinguível; o alívio na GPU
        * não é.
        */
+      const tCamera = performance.now()
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1920, min: 1280 },
-            height: { ideal: 1080, min: 720 },
-            facingMode: "user",
-            // Teto em 30: 60fps dobraria a composição de vídeo em troca de uma
-            // fluidez que ninguém olha — a câmera aqui é espelho, não filme.
-            frameRate: { ideal: 30, max: 30 },
-          },
-          audio: false,
-        }).catch(async () => {
-          return await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              facingMode: "user",
-            },
-            audio: false,
-          })
-        }).catch(async () => {
-          return await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user" },
-            audio: false,
-          })
-        })
+        const stream = await abrirStreamDaCamera()
         if (!mounted) return
         if (videoRef.current) {
           videoRef.current.srcObject = stream
+          anexarMonitoresDaCamera(stream)
           setCameraActive(true)
           console.log("📷 Câmera ativada em alta definição!")
+          logar("info", "camera_ativada", null, {
+            ms: Math.round(performance.now() - tCamera),
+            ...descreverStream(stream),
+          })
         }
       } catch (error) {
         console.error("Erro ao acessar câmera:", error)
+        // O monitor da câmera tenta de novo a cada 15 s.
+        logar("fatal", "camera_falhou", (error as Error)?.message, { nome: (error as Error)?.name })
       }
 
       // 2. Carregar modelos face-api.js (cached pelo browser após 1o load)
+      //
+      // Em laço: se a carga falhar (rede, GPU, worker que não subiu), tenta de
+      // novo em vez de parar em "Erro ao carregar modelos" até alguém recarregar
+      // a página. A partir da 3ª falha, abre direto em CPU.
+      const tBoot = performance.now()
+      for (let tentativaCarga = 1; mounted; tentativaCarga++) {
       try {
         if (mounted) setLoadingStatus("Carregando modelos de reconhecimento...")
         // `?backend=wasm` ou `?backend=cpu` força o motor de cálculo, para
@@ -1011,6 +1200,17 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             getFuncionariosCarregados().map((f) => [f.id, f])
           )
           setModelsReady(true)
+          diagRef.current.modelosProntos = true
+          iniciarVigiaDoWorker()
+          logar("info", "boot_pronto", null, {
+            ms: Math.round(performance.now() - tBoot),
+            funcionarios: count,
+            backend: getBackend(),
+            tentativas: tentativaCarga,
+          })
+          if (count === 0) {
+            logar("aviso", "boot_sem_funcionarios", "nenhum descritor carregado; vai tentar de novo a cada 3,5 s")
+          }
           setLoadingStatus(`Pronto! ${count} funcionário(s) carregado(s)`)
           // Uma olhada pesada AGORA, antes de qualquer pessoa.
           //
@@ -1057,9 +1257,18 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             }, 3500)
           }
         }
+        break
       } catch (error) {
         console.error("Erro ao carregar modelos:", error)
-        if (mounted) setLoadingStatus("Erro ao carregar modelos")
+        logar("fatal", "boot_carga_falhou", (error as Error)?.message, {
+          tentativa: tentativaCarga,
+          ms: Math.round(performance.now() - tBoot),
+        })
+        if (mounted) setLoadingStatus("Erro ao carregar modelos — tentando de novo...")
+        descartarWorker(`falha na carga inicial (tentativa ${tentativaCarga})`)
+        if (tentativaCarga >= 3) definirBackendManual("cpu")
+        await new Promise((r) => setTimeout(r, Math.min(60_000, 5_000 * tentativaCarga)))
+      }
       }
     }
 
@@ -1067,6 +1276,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
 
     return () => {
       mounted = false
+      window.clearInterval(monitorCamera)
+      ouvintesDoVideo.forEach(([nome, f]) => video?.removeEventListener(nome, f))
+      removerColetor("worker")
+      removerColetor("camera")
+      removerColetor("pagina")
       pararRastreamentoLocalizacao()
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream
@@ -1198,8 +1412,33 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
     const loop = async () => {
       rafRef.current = requestAnimationFrame(loop)
 
-      if (showSuccessRef.current) return
-      if (isProcessingRef.current || isRegisteringRef.current) return
+      const diag = diagRef.current
+      diag.ultimaIteracaoLoop = Date.now()
+      if (showSuccessRef.current) {
+        diag.processandoDesde = 0
+        return
+      }
+      if (isProcessingRef.current) {
+        // `isProcessingRef` é a trava que serializa o loop. Se a promessa que a
+        // segura nunca resolver, o loop para de reconhecer para sempre e a tela
+        // segue "viva". Chamada de reconhecimento expira em 30 s, então 90 s
+        // aqui só acontece se algo escapou desses prazos.
+        const agora = Date.now()
+        if (!diag.processandoDesde) {
+          diag.processandoDesde = agora
+        } else if (agora - diag.processandoDesde > LIMITE_LOOP_TRAVADO_MS) {
+          logar("fatal", "loop_travado", `processando há ${Math.round((agora - diag.processandoDesde) / 1000)} s`, {
+            protecao_de_tela: screensaverRef.current,
+            registrando: isRegisteringRef.current,
+          })
+          diag.processandoDesde = 0
+          isProcessingRef.current = false
+          void reiniciarWorker("loop de reconhecimento travado", false)
+        }
+        return
+      }
+      diag.processandoDesde = 0
+      if (isRegisteringRef.current) return
 
       if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
         return
@@ -1270,6 +1509,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
           // Alguém apareceu na frente do tablet
           if (!rostoNaEsperaRef.current) {
             rostoNaEsperaRef.current = true
+            logar("info", "rosto_apareceu")
             aquecerConexaoSupabase()
             // O cronômetro da tentativa começa aqui, no instante em que alguém
             // aparece — não quando é identificado. O tempo até identificar é
@@ -1415,6 +1655,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // Isso não afrouxa nada de segurança: gravar o ponto continua
             // exigindo um passe completo que bateu de verdade, logo abaixo.
             if (result.isUnknown || result.id === "unknown") {
+              logar("aviso", "rosto_nao_reconhecido", null, {
+                distancia: result.distancia,
+                limiar: result.limiar,
+                tinha_identidade: !!recognizedPersonRef.current,
+              })
               lastFaceSeenRef.current = Date.now()
               if (recognizedPersonRef.current) {
                 falhasSeguidasRef.current += 1
@@ -1472,6 +1717,11 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
                 pendingTipoRef.current = null
                 pendingTipoPromiseRef.current = null
                 console.log(`✅ Funcionário identificado: ${result.nome} (${result.similarity.toFixed(0)}%)`)
+                logar("info", "identificado", null, {
+                  funcionario_id: result.id,
+                  distancia: result.distancia,
+                  limiar: result.limiar,
+                })
               }
               telemetria.registrarIdentificacao(result.id)
               definirPessoa(updated)
@@ -1765,6 +2015,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
       // Fecha a medição no mesmo instante em que a pessoa vê a tela pronta.
       // Disparado e esquecido: não segura nada.
       telemetria.registrarTelaSucesso(tipo)
+      logar("info", "ponto_batido", tipo, { funcionario_id: person.id })
       telemetria.encerrarTentativa("ponto_batido", modoTesteRef.current)
 
       // A tela já está na frente da pessoa — grava no Supabase em segundo plano.
@@ -1899,6 +2150,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
   const resetInactivityTimer = () => {
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current)
     inactivityTimerRef.current = window.setTimeout(() => {
+      logar("info", "inatividade_volta_protecao_de_tela")
       telemetria.encerrarTentativa("desistiu", modoTesteRef.current)
       setScreensaver(true)
       setRecognizedPerson(null)
@@ -2096,6 +2348,7 @@ export function TelaRegistrarPonto({ modoTeste: modoTesteInicial = false }: Tela
             // animação vem depois e não tem voto nenhum sobre isso.
             screensaverRef.current = false
             setScreensaver(false)
+            logar("info", "toque")
             telemetria.registrarToque()
             // Único gesto garantido da batida: é aqui, e só aqui, que dá para
             // destravar o áudio do navegador.

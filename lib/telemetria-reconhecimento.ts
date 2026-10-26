@@ -1,6 +1,7 @@
 "use client"
 
 import { supabase } from "@/lib/supabase"
+import { logar } from "@/lib/log-tablet"
 
 /**
  * Telemetria do reconhecimento facial no tablet.
@@ -254,7 +255,18 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
 
   // Tentativa sem nenhum passe completo é ruído — rosto que passou de raspão
   // na frente da câmera. Não vale uma linha.
-  if (m.passesCompletos.length === 0 && desfecho !== "ponto_batido") return
+  //
+  // Mas "sem linha na tabela de diagnóstico" não pode ser "sem rastro": é
+  // exatamente o que acontece quando o reconhecimento está morto. A caixa-preta
+  // guarda a tentativa descartada, com o que deu para medir.
+  if (m.passesCompletos.length === 0 && desfecho !== "ponto_batido") {
+    logar("info", "tentativa_sem_passe", desfecho, {
+      ms: Math.round(performance.now() - m.inicio),
+      tocou: m.tocouEm !== undefined,
+      passes_baratos: m.passesBaratos.length,
+    })
+    return
+  }
 
   const fim = performance.now()
   if (desfecho === "ponto_batido") ultimoPontoEm = fim
@@ -325,6 +337,23 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
       })
   } catch {
     /* idem */
+  }
+}
+
+/**
+ * Retrato da tentativa em curso, para o batimento da caixa-preta. Uma
+ * tentativa aberta há muito tempo sem nenhum passe é o sintoma de "a pessoa
+ * está na frente e nada acontece".
+ */
+export function estadoDaTentativa() {
+  if (!atual) return { aberta: false }
+  return {
+    aberta: true,
+    idade_ms: Math.round(performance.now() - atual.inicio),
+    tocou: atual.tocouEm !== undefined,
+    identificada: atual.identificadoEm !== undefined,
+    passes_completos: atual.passesCompletos.length,
+    falhas_desconhecido: atual.falhasDesconhecido,
   }
 }
 
