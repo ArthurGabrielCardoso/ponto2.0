@@ -210,11 +210,135 @@ async function setupBestBackend(
   console.warn("[face-worker] backend: cpu (LENTO — nem webgl nem wasm disponíveis)")
 }
 
+/**
+ * Manda um evento para a página, que o entrega à caixa-preta (lib/log-tablet).
+ * O worker não tem como falar com o Supabase por conta própria sem duplicar o
+ * cliente; a página é o único canal e já sabe enfileirar e reenviar.
+ */
+function logar(nivel: "info" | "aviso" | "erro" | "fatal", evento: string, mensagem?: unknown, detalhe?: unknown) {
+  try {
+    self.postMessage({
+      tipo: "log",
+      nivel,
+      evento,
+      mensagem: mensagem === undefined ? null : String((mensagem as any)?.message ?? mensagem).slice(0, 500),
+      detalhe: detalhe ?? null,
+    })
+  } catch {
+    /* log nunca derruba o worker */
+  }
+}
+
+/** O contexto WebGL do backend do TFJS, se houver. */
+function contextoWebgl(fa: typeof import("face-api.js")): any {
+  try {
+    return (fa.tf.backend() as any)?.gpgpu?.gl ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Vigia a perda do contexto WebGL. É a falha que derruba o reconhecimento sem
+ * barulho: o worker continua vivo, as chamadas passam a falhar ou a voltar
+ * vazias, e a tela segue "funcionando" sem enxergar ninguém.
+ */
+function vigiarContextoWebgl(fa: typeof import("face-api.js")) {
+  try {
+    if (fa.tf.getBackend() !== "webgl") return
+    const gl = contextoWebgl(fa)
+    const canvas = gl?.canvas
+    if (!canvas?.addEventListener) return
+    canvas.addEventListener("webglcontextlost", (ev: Event) => {
+      ev.preventDefault?.()
+      logar("fatal", "webgl_contexto_perdido", "a GPU derrubou o contexto WebGL do worker")
+    })
+    canvas.addEventListener("webglcontextrestored", () => {
+      logar("aviso", "webgl_contexto_restaurado")
+    })
+  } catch (e) {
+    logar("aviso", "webgl_vigia_falhou", e)
+  }
+}
+
+/**
+ * Sonda de saúde: uma conta minúscula na GPU e um retrato da memória do TFJS.
+ *
+ * A conta prova que o backend ainda calcula (um contexto perdido falha aqui).
+ * A memória denuncia vazamento: `tensores` subindo sem parar entre sondas é
+ * tensor que ninguém liberou, e num tablet de 3 GB isso mata o app em dias.
+ */
+async function handleSaude() {
+  const fa = faceapi
+  if (!fa || !modelsLoaded) return { pronto: false }
+
+  const t0 = performance.now()
+  let sondaOk = true
+  let erro: string | null = null
+  try {
+    const soma = fa.tf.tidy(() => fa.tf.add(fa.tf.ones([8, 8]), fa.tf.ones([8, 8])).sum())
+    const v = (await soma.data())[0]
+    soma.dispose()
+    if (v !== 128) {
+      sondaOk = false
+      erro = `conta errada na GPU: esperava 128, veio ${v}`
+    }
+  } catch (e: any) {
+    sondaOk = false
+    erro = e?.message || String(e)
+  }
+  const sondaMs = Math.round(performance.now() - t0)
+
+  let mem: any = null
+  try {
+    mem = fa.tf.memory()
+  } catch {
+    /* sem memória do TFJS */
+  }
+  const gl = contextoWebgl(fa)
+  let contextoPerdido: boolean | null = null
+  try {
+    contextoPerdido = gl?.isContextLost ? !!gl.isContextLost() : null
+  } catch {
+    /* idem */
+  }
+
+  return {
+    pronto: true,
+    backend: fa.tf.getBackend(),
+    sondaOk,
+    sondaMs,
+    erro,
+    contextoPerdido,
+    tensores: mem?.numTensors ?? null,
+    bufferesDeDados: mem?.numDataBuffers ?? null,
+    bytes: mem?.numBytes ?? null,
+    bytesGpu: mem?.numBytesInGPU ?? null,
+    funcionarios: employeeMap.size,
+  }
+}
+
 async function handleInit(forcarBackend?: "wasm" | "cpu") {
   if (modelsLoaded) return
+  // O primeiro carregamento depois de uma atualização chegou a levar 74 s, e um
+  // número só não diz onde. Cada etapa é cronometrada e vai para a caixa-preta.
+  const t0 = performance.now()
   const fa = await loadFaceApi()
+  const tImportar = performance.now()
 
   await setupBestBackend(fa, forcarBackend)
+  const tBackend = performance.now()
+  vigiarContextoWebgl(fa)
+  try {
+    logar("info", "worker_backend", fa.tf.getBackend(), {
+      forcado: forcarBackend ?? null,
+      webgl_versao: fa.tf.env().getNumber("WEBGL_VERSION"),
+      textura_max: fa.tf.env().getNumber("WEBGL_MAX_TEXTURE_SIZE"),
+      float32_render: fa.tf.env().getBool("WEBGL_RENDER_FLOAT32_CAPABLE"),
+    })
+  } catch {
+    /* só informativo */
+  }
 
   // No worker, caminhos relativos (/models) podem não resolver dependendo
   // do bundler. Usamos URL absoluto pra garantir.
@@ -226,9 +350,19 @@ async function handleInit(forcarBackend?: "wasm" | "cpu") {
     fa.nets.faceRecognitionNet.loadFromUri(modelsBase),
     fa.nets.faceExpressionNet.loadFromUri(modelsBase),
   ])
+  const tPesos = performance.now()
   modelsLoaded = true
   console.log("[face-worker] modelos carregados. Warmup...")
   await aquecerTudo(fa)
+  const tFim = performance.now()
+  logar("info", "worker_init_etapas", null, {
+    importar_face_api_ms: Math.round(tImportar - t0),
+    escolher_backend_ms: Math.round(tBackend - tImportar),
+    baixar_pesos_ms: Math.round(tPesos - tBackend),
+    aquecer_gpu_ms: Math.round(tFim - tPesos),
+    total_ms: Math.round(tFim - t0),
+    backend: fa.tf.getBackend(),
+  })
 }
 
 /**
@@ -491,21 +625,49 @@ function falharMsgEmVoo(motivo: unknown) {
   const msg =
     (motivo as any)?.message || String(motivo || "erro desconhecido")
   console.error("[face-worker] falha fora da cadeia de await:", msg)
+  logar("erro", "worker_falha_fora_da_cadeia", msg, { pilha: String((motivo as any)?.stack || "").slice(0, 800) })
   self.postMessage({ id, ok: false, error: msg })
 }
 
 self.addEventListener("unhandledrejection", (ev: any) => {
   ev.preventDefault?.()
+  // Sem mensagem em voo (ex.: a sonda de saúde, ou um erro tardio do TFJS) o
+  // erro antes sumia sem deixar nada. Agora sempre chega à caixa-preta.
+  if (msgEmVoo === null) {
+    logar("erro", "worker_promessa_rejeitada", ev?.reason?.message ?? ev?.reason, {
+      pilha: String(ev?.reason?.stack || "").slice(0, 800),
+    })
+  }
   falharMsgEmVoo(ev?.reason)
 })
 
 self.addEventListener("error", (ev: any) => {
+  if (msgEmVoo === null) {
+    logar("erro", "worker_js_erro", ev?.error?.message ?? ev?.message, {
+      arquivo: String(ev?.filename || "").slice(0, 160),
+      linha: ev?.lineno,
+    })
+  }
   falharMsgEmVoo(ev?.error || ev?.message)
 })
 
 self.onmessage = async (e: MessageEvent) => {
   const { id, type, payload } = e.data
+
+  // A sonda de saúde não pode mexer em `msgEmVoo`: ela chega enquanto outra
+  // chamada pode estar em andamento, e sobrescrever o id faria uma falha
+  // fora da cadeia ser atribuída à chamada errada.
+  if (type === "saude") {
+    try {
+      self.postMessage({ id, ok: true, result: await handleSaude() })
+    } catch (error: any) {
+      self.postMessage({ id, ok: false, error: error?.message || String(error) })
+    }
+    return
+  }
+
   msgEmVoo = id
+  const inicioMsg = performance.now()
   try {
     let result: any = null
     switch (type) {
@@ -543,6 +705,11 @@ self.onmessage = async (e: MessageEvent) => {
   } catch (error: any) {
     msgEmVoo = null
     console.error("[face-worker] erro:", error)
+    logar("erro", "worker_erro_na_chamada", error?.message || String(error), {
+      chamada: type,
+      ms: Math.round(performance.now() - inicioMsg),
+      pilha: String(error?.stack || "").slice(0, 800),
+    })
     self.postMessage({ id, ok: false, error: error?.message || String(error) })
   }
 }

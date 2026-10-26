@@ -18,6 +18,7 @@ import {
 import { ContadorAlmoco } from "@/components/contador-almoco"
 import { ListaDiasPonto, type DiaDePonto } from "@/components/lista-dias-ponto"
 import type { RegistroPonto, Funcionario } from "@/lib/types"
+import { ehTipoOutro } from "@/lib/tipos-ponto"
 
 export const dynamic = "force-dynamic"
 
@@ -56,8 +57,10 @@ function obterAlmocoEmAndamento(registros: RegistroPonto[], funcionario: Funcion
     .sort((a, b) => a.data_hora.localeCompare(b.data_hora))
 
   const tipo = (r: RegistroPonto) => (r.tipo || "").toLowerCase()
-  const saida = doDia.filter((r) => tipo(r).includes("saída") && tipo(r).includes("almoço")).pop()
-  const retorno = doDia.filter((r) => tipo(r).includes("retorno")).pop()
+  const saida = doDia
+    .filter((r) => !ehTipoOutro(r.tipo) && tipo(r).includes("saída") && tipo(r).includes("almoço"))
+    .pop()
+  const retorno = doDia.filter((r) => !ehTipoOutro(r.tipo) && tipo(r).includes("retorno")).pop()
 
   if (!saida) return null
   if (retorno && new Date(retorno.data_hora) > new Date(saida.data_hora)) return null

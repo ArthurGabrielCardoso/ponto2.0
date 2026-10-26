@@ -1,3 +1,5 @@
+import { ehTipoOutro, direcaoDoOutro, tipoParaEstilo } from "@/lib/tipos-ponto"
+
 export type TipoPeriodoPonto = "Entrada" | "Saída Almoço" | "Retorno Almoço" | "Saída" | "Aviso"
 
 export interface ContextoSaudacao {
@@ -106,7 +108,10 @@ export function obterApelidoCarinhoso(nomeCompleto: string): { nome: string; ape
 
 // Normaliza o tipo de ponto
 export function normalizarTipoPonto(t?: string): TipoPeriodoPonto {
-  const tl = (t || "").toLowerCase().trim()
+  // "Outro - ...": o motivo escrito pela pessoa nunca é lido como tipo. Sem
+  // isto, "Outro - saindo: voltei do almoço" viraria um Retorno Almoço — e
+  // qualquer coisa desconhecida cai em "Entrada" lá embaixo.
+  const tl = tipoParaEstilo(t).toLowerCase().trim()
   if (tl.includes("entrada")) return "Entrada"
   if (tl.includes("saída") && tl.includes("almoço")) return "Saída Almoço"
   if (tl.includes("retorno")) return "Retorno Almoço"
@@ -394,6 +399,19 @@ export function gerarSaudacaoLocal(ctx: ContextoSaudacao): { visual: string; voz
     return {
       visual: textoVisual,
       voz: aplicarNomes(templateVoz, nome, apelido),
+    }
+  }
+
+  // --- 0. OUTRO (saindo ou voltando por um motivo fora do padrão) ---
+  // Frase própria e curta, sem clima nem feriado: a pessoa não está começando
+  // nem encerrando o dia, e "Excelente dia" ali soaria errado.
+  if (ehTipoOutro(ctx.tipoPonto)) {
+    const volta = direcaoDoOutro(ctx.tipoPonto) === "voltando"
+    return {
+      visual: volta ? `Bem-vindo de volta, ${nome}! 👋` : `Até já, ${nome}! 👋`,
+      voz: volta
+        ? `Bem-vindo de volta, ${nome}! Seu ponto foi registrado.`
+        : `Até já, ${nome}! Seu ponto foi registrado.`,
     }
   }
 

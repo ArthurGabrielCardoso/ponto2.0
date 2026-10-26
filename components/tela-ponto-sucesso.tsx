@@ -6,6 +6,7 @@ import { IlustracaoPontoAnimada } from "@/components/ilustracoes-ponto-animadas"
 import { AnimacaoVozIa } from "@/components/animacao-voz-ia"
 import { EmojisFlutuantes } from "@/components/emojis-flutuantes"
 import { QrEspelho } from "@/components/qr-espelho"
+import { tipoParaEstilo } from "@/lib/tipos-ponto"
 
 interface TelaPontoSucessoProps {
   /** Id do funcionário — sem ele o QR do espelho não aparece. */
@@ -89,7 +90,8 @@ export function TelaPontoSucesso({
 
   // Configuração dos 4 Cenários de Glassmorphism com Dourado Puro e Ícones Ampliados
   const getCenario = () => {
-    const t = (tipo || "").toLowerCase().trim()
+    // Para "Outro - ..." o estilo vem da direção, nunca do motivo escrito.
+    const t = tipoParaEstilo(tipo).toLowerCase().trim()
 
     // 1. RETORNO ALMOÇO - Full-Screen Glassmorphism Teal Signature
     if (t.includes("retorno")) {

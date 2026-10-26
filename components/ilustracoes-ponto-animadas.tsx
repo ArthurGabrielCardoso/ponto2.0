@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import { tipoParaEstilo } from "@/lib/tipos-ponto"
 
 interface IlustracaoProps {
   tipo: string
@@ -8,7 +9,7 @@ interface IlustracaoProps {
 }
 
 export function IlustracaoPontoAnimada({ tipo, className = "w-48 h-48 sm:w-64 sm:h-64" }: IlustracaoProps) {
-  const t = (tipo || "").toLowerCase()
+  const t = tipoParaEstilo(tipo).toLowerCase()
 
   // 1. ENTRADA - Sol Radiante Dourado com Raios Rotativos, Nuvens e Estrelas
   if (t.includes("entrada")) {

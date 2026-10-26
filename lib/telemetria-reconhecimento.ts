@@ -1,6 +1,7 @@
 "use client"
 
 import { supabase } from "@/lib/supabase"
+import { logar } from "@/lib/log-tablet"
 
 /**
  * Telemetria do reconhecimento facial no tablet.
@@ -41,6 +42,12 @@ interface Medida {
   capturas: number[]
   msConsultaRegistros?: number
   msSaudacaoIa?: number
+  /**
+   * Quanto a pessoa levou para responder "o que você está registrando?". É
+   * tempo humano, não do tablet: sai das medidas de velocidade abaixo, senão
+   * `ms_confirmar_ate_tela` passaria a medir a pessoa pensando.
+   */
+  msPergunta?: number
 
   /** De onde saiu a voz desta batida: despensa, cache, rede ou nenhuma. */
   origemVoz?: string
@@ -232,6 +239,10 @@ export function registrarConsultaRegistros(ms: number) {
   if (atual) atual.msConsultaRegistros = Math.round(ms)
 }
 
+export function registrarPergunta(ms: number) {
+  if (atual) atual.msPergunta = Math.round(ms)
+}
+
 export function registrarSaudacaoIa(ms: number) {
   if (atual) atual.msSaudacaoIa = Math.round(ms)
 }
@@ -254,12 +265,27 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
 
   // Tentativa sem nenhum passe completo é ruído — rosto que passou de raspão
   // na frente da câmera. Não vale uma linha.
-  if (m.passesCompletos.length === 0 && desfecho !== "ponto_batido") return
+  //
+  // Mas "sem linha na tabela de diagnóstico" não pode ser "sem rastro": é
+  // exatamente o que acontece quando o reconhecimento está morto. A caixa-preta
+  // guarda a tentativa descartada, com o que deu para medir.
+  if (m.passesCompletos.length === 0 && desfecho !== "ponto_batido") {
+    logar("info", "tentativa_sem_passe", desfecho, {
+      ms: Math.round(performance.now() - m.inicio),
+      tocou: m.tocouEm !== undefined,
+      passes_baratos: m.passesBaratos.length,
+    })
+    return
+  }
 
   const fim = performance.now()
   if (desfecho === "ponto_batido") ultimoPontoEm = fim
   const ms = (de?: number, ate?: number) =>
     de !== undefined && ate !== undefined ? Math.round(ate - de) : null
+
+  // Descontado do que mede o tablet; o tempo da pessoa fica na caixa-preta.
+  const semPergunta = (v: number | null) =>
+    v === null ? null : Math.max(0, v - (m.msPergunta ?? 0))
 
   const linha = {
     funcionario_id: m.funcionarioId ?? null,
@@ -271,7 +297,7 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
     modo_teste: modoTeste,
     ms_ate_identificar: ms(m.inicio, m.identificadoEm),
     ms_ate_sorrir: ms(m.identificadoEm, m.sorriuEm),
-    ms_ate_tela_sucesso: ms(m.sorriuEm, m.telaSucessoEm),
+    ms_ate_tela_sucesso: semPergunta(ms(m.sorriuEm, m.telaSucessoEm)),
     // As quatro abaixo abrem as duas de cima. Rosto → toque é a pessoa;
     // toque → identificada é o tablet. Sorriso → confirmado é a rede neural;
     // confirmado → tela é render e navegação. Sem esse corte, otimizar aqui
@@ -279,8 +305,8 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
     ms_ate_tocar: ms(m.inicio, m.tocouEm),
     ms_do_toque_ate_identificar: ms(m.tocouEm, m.identificadoEm),
     ms_sorriso_ate_confirmar: ms(m.sorriuEm, m.confirmadoEm),
-    ms_confirmar_ate_tela: ms(m.confirmadoEm, m.telaSucessoEm),
-    ms_total: Math.round(fim - m.inicio),
+    ms_confirmar_ate_tela: semPergunta(ms(m.confirmadoEm, m.telaSucessoEm)),
+    ms_total: semPergunta(Math.round(fim - m.inicio)) ?? 0,
     ms_captura_p50: p50(m.capturas),
     ms_passe_barato_p50: p50(m.passesBaratos),
     ms_passe_completo_p50: p50(m.passesCompletos),
@@ -325,6 +351,23 @@ export function encerrarTentativa(desfecho: Desfecho, modoTeste = false) {
       })
   } catch {
     /* idem */
+  }
+}
+
+/**
+ * Retrato da tentativa em curso, para o batimento da caixa-preta. Uma
+ * tentativa aberta há muito tempo sem nenhum passe é o sintoma de "a pessoa
+ * está na frente e nada acontece".
+ */
+export function estadoDaTentativa() {
+  if (!atual) return { aberta: false }
+  return {
+    aberta: true,
+    idade_ms: Math.round(performance.now() - atual.inicio),
+    tocou: atual.tocouEm !== undefined,
+    identificada: atual.identificadoEm !== undefined,
+    passes_completos: atual.passesCompletos.length,
+    falhas_desconhecido: atual.falhasDesconhecido,
   }
 }
 

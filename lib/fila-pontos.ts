@@ -130,18 +130,25 @@ export async function sincronizarFila(): Promise<number> {
         marcarTentativa(p.id)
 
         // Uma tentativa anterior pode ter chegado ao banco e a resposta ter se
-        // perdido na volta. Antes de reenviar, procuramos o registro exato
-        // (mesmo funcionário, mesmo instante) para não duplicar a batida.
-        if (p.tentativas > 0) {
-          const jaExiste = await buscarRegistrosHoje(p.funcionarioId)
-            .then((regs) => regs.some((r) => r.data_hora === p.dataHoraIso))
-            .catch(() => false)
+        // perdido na volta (a gravação em segundo plano desiste em 5 s, mas o
+        // pedido segue vivo). Antes de reenviar, procuramos o registro exato —
+        // mesmo funcionário, mesmo tipo, mesmo instante — para não duplicar.
+        //
+        // Dois furos aqui antes: (1) a conferência só rodava a partir da segunda
+        // tentativa, mas `p` é uma cópia lida ANTES de `marcarTentativa`, então
+        // `p.tentativas` valia 0 justamente na primeira sincronização, a que mais
+        // precisa dela; (2) a comparação era entre textos, e o Postgres devolve
+        // "2026-10-26T18:23:33+00:00" onde guardamos "2026-10-26T18:23:33.000Z":
+        // nunca batiam. Agora a conferência é sempre feita, comparando o instante.
+        const instante = new Date(p.dataHoraIso).getTime()
+        const jaExiste = await buscarRegistrosHoje(p.funcionarioId)
+          .then((regs) => regs.some((r) => r.tipo === p.tipo && new Date(r.data_hora).getTime() === instante))
+          .catch(() => false)
 
-          if (jaExiste) {
-            removerDaFila(p.id)
-            gravados++
-            continue
-          }
+        if (jaExiste) {
+          removerDaFila(p.id)
+          gravados++
+          continue
         }
 
         await registrarPonto(
